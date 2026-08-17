@@ -1,0 +1,6 @@
+{
+  "name": "全能资产记账管家",
+  "description": "安全密码登录保护的个人与家庭全资产记账平台，支持借记卡、信用卡、支付宝、余额宝、基金、黄金、京东金融、白条、现金及借贷往来清晰规整，实时统计净资产、可用资金、信用额度与支出明细。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
