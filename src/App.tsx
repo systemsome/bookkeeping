@@ -3,7 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import {
+  auth,
+  mapFirebaseUserToProfile,
+  subscribeToCloudData,
+  saveAccountCloud,
+  deleteAccountCloud,
+  saveTransactionCloud,
+  deleteTransactionCloud,
+  uploadInitialAccountsCloud,
+  uploadInitialTransactionsCloud,
+  updateUserProfileCloud,
+} from './lib/firebase';
 import {
   getCurrentUser,
   setCurrentUserId,
@@ -43,17 +56,15 @@ import { RepaymentModal } from './components/RepaymentModal';
 import { AccountEditorModal } from './components/AccountEditorModal';
 import { BatchReconcileModal } from './components/BatchReconcileModal';
 import { SecuritySettingsModal } from './components/SecuritySettingsModal';
-import {
-  CreditCard,
-  Plus,
-} from 'lucide-react';
-import { formatCurrency } from './lib/formatters';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS } from './lib/constants';
 
 export default function App() {
   // Authentication & Lock state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getCurrentUser());
   const [isLocked, setIsLocked] = useState<boolean>(() => isAppLocked());
   const [privacyMode, setPrivacyMode] = useState<boolean>(() => currentUser?.privacyMode || false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'analytics'>('overview');
@@ -79,6 +90,9 @@ export default function App() {
   const [isBatchReconcileOpen, setIsBatchReconcileOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
 
+  // Reference for unsubscription
+  const unsubscribeCloudRef = useRef<(() => void) | null>(null);
+
   // Load data whenever user changes
   const loadUserData = useCallback((uid: string) => {
     const accs = getAccounts(uid);
@@ -87,12 +101,109 @@ export default function App() {
     setTransactions(txs);
   }, []);
 
+  // Listen to Firebase Auth state
   useEffect(() => {
-    if (currentUser) {
-      loadUserData(currentUser.id);
-      setPrivacyMode(currentUser.privacyMode || false);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const profile = await mapFirebaseUserToProfile(fbUser);
+          setCurrentUserId(profile.id);
+          setCurrentUser(profile);
+          setIsLocked(false);
+          setAppLocked(false);
+        } catch (err) {
+          console.error('Failed to map Firebase user:', err);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+    };
+  }, []);
+
+  // Subscribe to Cloud Firestore when a cloud user is logged in
+  useEffect(() => {
+    if (unsubscribeCloudRef.current) {
+      unsubscribeCloudRef.current();
+      unsubscribeCloudRef.current = null;
     }
-  }, [currentUser, loadUserData]);
+
+    if (!currentUser) {
+      setAccounts([]);
+      setTransactions([]);
+      return;
+    }
+
+    setPrivacyMode(currentUser.privacyMode || false);
+
+    // If demo / local guest account
+    if (currentUser.id.startsWith('demo-')) {
+      loadUserData(currentUser.id);
+      setIsCloudConnected(false);
+      return;
+    }
+
+    // Cloud authenticated user
+    setIsCloudConnected(true);
+    setIsCloudSyncing(true);
+
+    // Initial local cache load for instantaneous UI response
+    const cachedAccs = getAccounts(currentUser.id);
+    const cachedTxs = getTransactions(currentUser.id);
+    if (cachedAccs.length > 0) setAccounts(cachedAccs);
+    if (cachedTxs.length > 0) setTransactions(cachedTxs);
+
+    // Start Realtime Firestore Subscription
+    const unsub = subscribeToCloudData(
+      currentUser.id,
+      async (cloudAccounts, cloudTxs) => {
+        setIsCloudSyncing(false);
+
+        // If cloud is completely empty on fresh sign up, optionally seed initial default set
+        if (cloudAccounts.length === 0 && cloudTxs.length === 0) {
+          const localAccs = getAccounts(currentUser.id);
+          if (localAccs.length > 0) {
+            // Push existing local data to cloud
+            try {
+              await uploadInitialAccountsCloud(currentUser.id, localAccs);
+              await uploadInitialTransactionsCloud(currentUser.id, getTransactions(currentUser.id));
+            } catch (e) {
+              console.warn('Initial push to cloud failed:', e);
+            }
+          } else {
+            // Seed starter demo structure so user is not facing a completely blank screen
+            try {
+              await uploadInitialAccountsCloud(currentUser.id, INITIAL_DEMO_ACCOUNTS);
+              await uploadInitialTransactionsCloud(currentUser.id, INITIAL_DEMO_TRANSACTIONS);
+            } catch (e) {
+              console.warn('Initial seed to cloud failed:', e);
+            }
+          }
+          return;
+        }
+
+        setAccounts(cloudAccounts);
+        setTransactions(cloudTxs);
+        // Keep local storage cache updated for offline resilience
+        saveAccounts(currentUser.id, cloudAccounts);
+        saveTransactions(currentUser.id, cloudTxs);
+      },
+      (err) => {
+        console.error('Cloud data sync error:', err);
+        setIsCloudSyncing(false);
+      }
+    );
+
+    unsubscribeCloudRef.current = unsub;
+
+    return () => {
+      if (unsubscribeCloudRef.current) {
+        unsubscribeCloudRef.current();
+        unsubscribeCloudRef.current = null;
+      }
+    };
+  }, [currentUser?.id, loadUserData]);
 
   // Compute summary metrics
   const summary: FinancialSummary = useMemo(() => {
@@ -142,17 +253,31 @@ export default function App() {
     setAppLocked(true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (unsubscribeCloudRef.current) {
+      unsubscribeCloudRef.current();
+      unsubscribeCloudRef.current = null;
+    }
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Sign out warning:', e);
+    }
     setCurrentUserId(null);
     setCurrentUser(null);
     setIsLocked(false);
     setAppLocked(false);
+    setAccounts([]);
+    setTransactions([]);
   };
 
   const handleTogglePrivacy = (val: boolean) => {
     setPrivacyMode(val);
     if (currentUser) {
       updateCurrentUser({ privacyMode: val });
+      if (!currentUser.id.startsWith('demo-')) {
+        updateUserProfileCloud(currentUser.id, { privacyMode: val });
+      }
     }
   };
 
@@ -189,7 +314,7 @@ export default function App() {
   };
 
   // Transaction submission (create or update)
-  const handleSubmitTransaction = (
+  const handleSubmitTransaction = async (
     txData: Omit<Transaction, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
@@ -208,15 +333,50 @@ export default function App() {
       );
       setAccounts(updatedAccounts);
       setTransactions(updatedTransactions);
+
+      if (!currentUser.id.startsWith('demo-')) {
+        setIsCloudSyncing(true);
+        try {
+          await saveTransactionCloud(currentUser.id, updatedTx);
+          // Sync affected accounts
+          const acc = updatedAccounts.find((a) => a.id === updatedTx.accountId);
+          if (acc) await saveAccountCloud(currentUser.id, acc);
+          if (updatedTx.targetAccountId) {
+            const targetAcc = updatedAccounts.find((a) => a.id === updatedTx.targetAccountId);
+            if (targetAcc) await saveAccountCloud(currentUser.id, targetAcc);
+          }
+        } catch (e) {
+          console.error('Failed to sync transaction to Cloud:', e);
+        } finally {
+          setIsCloudSyncing(false);
+        }
+      }
     } else {
       const { accounts: updatedAccounts, transaction } = addTransaction(currentUser.id, txData);
       setAccounts(updatedAccounts);
       setTransactions((prev) => [transaction, ...prev]);
+
+      if (!currentUser.id.startsWith('demo-')) {
+        setIsCloudSyncing(true);
+        try {
+          await saveTransactionCloud(currentUser.id, transaction);
+          const acc = updatedAccounts.find((a) => a.id === transaction.accountId);
+          if (acc) await saveAccountCloud(currentUser.id, acc);
+          if (transaction.targetAccountId) {
+            const targetAcc = updatedAccounts.find((a) => a.id === transaction.targetAccountId);
+            if (targetAcc) await saveAccountCloud(currentUser.id, targetAcc);
+          }
+        } catch (e) {
+          console.error('Failed to sync new transaction to Cloud:', e);
+        } finally {
+          setIsCloudSyncing(false);
+        }
+      }
     }
   };
 
   // Inline Quick Add Expense from Home Page
-  const handleQuickAddExpense = (
+  const handleQuickAddExpense = async (
     amount: number,
     category: string,
     accountId: string,
@@ -245,10 +405,23 @@ export default function App() {
 
     setAccounts(updatedAccounts);
     setTransactions((prev) => [transaction, ...prev]);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        await saveTransactionCloud(currentUser.id, transaction);
+        const acc = updatedAccounts.find((a) => a.id === transaction.accountId);
+        if (acc) await saveAccountCloud(currentUser.id, acc);
+      } catch (e) {
+        console.error('Cloud quick add expense sync error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Repayment submission
-  const handleSubmitRepayment = (sourceAccountId: string, targetAccountId: string, amount: number) => {
+  const handleSubmitRepayment = async (sourceAccountId: string, targetAccountId: string, amount: number) => {
     if (!currentUser) return;
     const targetAcc = accounts.find((a) => a.id === targetAccountId);
     const { accounts: updatedAccounts, transaction } = addTransaction(currentUser.id, {
@@ -263,17 +436,43 @@ export default function App() {
     });
     setAccounts(updatedAccounts);
     setTransactions((prev) => [transaction, ...prev]);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        await saveTransactionCloud(currentUser.id, transaction);
+        const src = updatedAccounts.find((a) => a.id === sourceAccountId);
+        const tgt = updatedAccounts.find((a) => a.id === targetAccountId);
+        if (src) await saveAccountCloud(currentUser.id, src);
+        if (tgt) await saveAccountCloud(currentUser.id, tgt);
+      } catch (e) {
+        console.error('Repayment cloud sync error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Delete transaction
-  const handleDeleteTx = (txId: string) => {
+  const handleDeleteTx = async (txId: string) => {
     if (!currentUser) return;
     const { transactions: updated } = deleteTransaction(currentUser.id, txId);
     setTransactions(updated);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        await deleteTransactionCloud(currentUser.id, txId);
+      } catch (e) {
+        console.error('Delete tx cloud error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Save Account (Create or Update from Modal)
-  const handleSaveAccount = (accountToSave: FinancialAccount) => {
+  const handleSaveAccount = async (accountToSave: FinancialAccount) => {
     if (!currentUser) return;
     const existingIndex = accounts.findIndex((a) => a.id === accountToSave.id);
     let updated: FinancialAccount[];
@@ -285,43 +484,111 @@ export default function App() {
     }
     saveAccounts(currentUser.id, updated);
     setAccounts(updated);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        await saveAccountCloud(currentUser.id, accountToSave);
+      } catch (e) {
+        console.error('Save account cloud error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Reorder Accounts (Drag & Drop layout customization)
-  const handleReorderAccounts = (newAccounts: FinancialAccount[]) => {
+  const handleReorderAccounts = async (newAccounts: FinancialAccount[]) => {
     if (!currentUser) return;
     saveAccounts(currentUser.id, newAccounts);
     setAccounts(newAccounts);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      try {
+        await uploadInitialAccountsCloud(currentUser.id, newAccounts);
+      } catch (e) {
+        console.error('Reorder accounts sync error:', e);
+      }
+    }
   };
 
   // Direct In-line Account Update
-  const handleDirectUpdateAccount = (accountId: string, updates: Partial<FinancialAccount>) => {
+  const handleDirectUpdateAccount = async (accountId: string, updates: Partial<FinancialAccount>) => {
     if (!currentUser) return;
     const updated = updateAccountBalanceDirectly(currentUser.id, accountId, updates);
     setAccounts(updated);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      const targetAcc = updated.find((a) => a.id === accountId);
+      if (targetAcc) {
+        try {
+          await saveAccountCloud(currentUser.id, targetAcc);
+        } catch (e) {
+          console.error('Direct update account cloud error:', e);
+        }
+      }
+    }
   };
 
   // Save Batch Reconcile
-  const handleSaveBatchAccounts = (updatedAccounts: FinancialAccount[]) => {
+  const handleSaveBatchAccounts = async (updatedAccounts: FinancialAccount[]) => {
     if (!currentUser) return;
     saveAccounts(currentUser.id, updatedAccounts);
     setAccounts(updatedAccounts);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        await uploadInitialAccountsCloud(currentUser.id, updatedAccounts);
+      } catch (e) {
+        console.error('Batch save accounts cloud error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Clear Preset Demo Accounts
-  const handleClearPresetData = () => {
+  const handleClearPresetData = async () => {
     if (!currentUser) return;
     clearAllUserData(currentUser.id);
     setAccounts([]);
     setTransactions([]);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        for (const acc of accounts) {
+          await deleteAccountCloud(currentUser.id, acc.id);
+        }
+        for (const tx of transactions) {
+          await deleteTransactionCloud(currentUser.id, tx.id);
+        }
+      } catch (e) {
+        console.error('Clear cloud data error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Delete Account
-  const handleDeleteAccount = (accountId: string) => {
+  const handleDeleteAccount = async (accountId: string) => {
     if (!currentUser) return;
     const updated = accounts.filter((a) => a.id !== accountId);
     saveAccounts(currentUser.id, updated);
     setAccounts(updated);
+
+    if (!currentUser.id.startsWith('demo-')) {
+      setIsCloudSyncing(true);
+      try {
+        await deleteAccountCloud(currentUser.id, accountId);
+      } catch (e) {
+        console.error('Delete account cloud error:', e);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }
   };
 
   // Update Monthly Budget
@@ -330,6 +597,9 @@ export default function App() {
     const updatedUser = updateCurrentUser({ monthlyBudget: newBudget });
     if (updatedUser) {
       setCurrentUser(updatedUser);
+      if (!currentUser.id.startsWith('demo-')) {
+        updateUserProfileCloud(currentUser.id, { monthlyBudget: newBudget });
+      }
     }
   };
 
@@ -350,8 +620,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col antialiased">
-      {/* Top Navigation */}
+    <div className="min-h-screen bg-slate-100/70 text-slate-800 pb-20 sm:pb-12 antialiased selection:bg-emerald-100 selection:text-emerald-900">
+      {/* Top Navigation Bar */}
       <Navbar
         currentUser={currentUser}
         summary={summary}
@@ -363,175 +633,111 @@ export default function App() {
         onLockApp={handleLock}
         onLogout={handleLogout}
         onOpenSecuritySettings={() => setIsSecurityModalOpen(true)}
+        isCloudSyncing={isCloudSyncing}
+        isCloudConnected={isCloudConnected}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-7">
-        {/* 1. OVERVIEW VIEW - Centered on Expense Tracking & Financial Dashboard */}
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
+        {/* VIEW 1: Overview & Balance Dashboard */}
         {activeTab === 'overview' && (
-          <div className="space-y-7 animate-in fade-in duration-300">
-            {/* Top 4 Core Financial Summary Cards */}
+          <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-300">
+            {/* Top Metric Cards */}
             <OverviewCards
               summary={summary}
               privacyMode={privacyMode}
-              onOpenNewTx={() => handleOpenNewTx('EXPENSE')}
-              onOpenRepayment={() => handleOpenRepayment()}
-              onNavigateToCredit={() => setActiveTab('credit')}
+              onOpenNewTx={handleOpenNewTx}
+              onOpenAddAccount={handleOpenAddAccount}
+              onOpenRepayment={handleOpenRepayment}
+              accountsCount={accounts.length}
             />
 
-            {/* 🌟 Prominently Featured: Expense Command Center (今日支出/本月支出/预算进度/极速记账/最新支出明细) */}
+            {/* Quick Record & Monthly Budget Dashboard */}
             <HomeExpenseDashboard
-              summary={summary}
               transactions={transactions}
               accounts={accounts}
-              currentUser={currentUser}
+              monthlyBudget={currentUser.monthlyBudget || 8000}
+              onUpdateBudget={handleUpdateBudget}
               privacyMode={privacyMode}
               onQuickAddExpense={handleQuickAddExpense}
-              onEditTransaction={handleEditTransaction}
-              onDeleteTransaction={handleDeleteTx}
-              onUpdateBudget={handleUpdateBudget}
-              onOpenFullTxModal={() => handleOpenNewTx('EXPENSE')}
-              onNavigateToTransactions={() => setActiveTab('transactions')}
+              onOpenNewTxModal={handleOpenNewTx}
+              onOpenAddAccountModal={handleOpenAddAccount}
+              onOpenRepayModal={handleOpenRepayment}
+              onViewAllTransactions={() => setActiveTab('transactions')}
+              onViewAllCredit={() => setActiveTab('credit')}
             />
 
-            {/* Quick Credit Overview & Fast Repayment Banner */}
-            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
-                    <CreditCard className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-base sm:text-lg">
-                      信用卡与京东白条额度速览
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      总额度 {formatCurrency(summary.totalCreditLimit, privacyMode)} · 已用待还{' '}
-                      {formatCurrency(summary.totalUsedCredit, privacyMode)} · 剩余可用{' '}
-                      {formatCurrency(summary.totalAvailableCredit, privacyMode)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleOpenRepayment()}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-semibold text-xs shadow-xs active:scale-95 transition-all"
-                  >
-                    立即还款
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('credit')}
-                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium border border-slate-200 transition-colors"
-                  >
-                    查看全部信用卡 ➔
-                  </button>
-                </div>
-              </div>
-
-              {/* Mini Credit Accounts Bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mt-4">
-                {accounts
-                  .filter((a) => a.category === 'CREDIT_CARD' || a.category === 'JD_BAITIAO' || a.category === 'HUABEI')
-                  .slice(0, 3)
-                  .map((acc) => {
-                    const limit = acc.creditLimit || 0;
-                    const used = acc.usedCredit !== undefined ? acc.usedCredit : acc.balance || 0;
-                    const avail = Math.max(0, limit - used);
-                    const util = limit > 0 ? (used / limit) * 100 : 0;
-
-                    return (
-                      <div
-                        key={acc.id}
-                        className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-xs text-slate-800 truncate">
-                            {acc.name}
-                          </span>
-                          {acc.dueDay && (
-                            <span className="text-[11px] text-amber-700 font-mono bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
-                              {acc.dueDay}日还款
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-baseline justify-between mt-2.5">
-                          <span className="text-xs text-rose-600 font-medium">
-                            待还: {formatCurrency(used, privacyMode)}
-                          </span>
-                          <span className="text-xs text-emerald-700 font-medium">
-                            可用: {formatCurrency(avail, privacyMode)}
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-200 rounded-full mt-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              util <= 30 ? 'bg-emerald-500' : util <= 70 ? 'bg-amber-500' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${Math.min(100, util)}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 2. CREDIT & LIABILITIES VIEW */}
-        {activeTab === 'credit' && (
-          <div className="animate-in fade-in duration-300">
+            {/* Credit Cards Summary Preview */}
             <CreditCardsSummary
               accounts={accounts}
-              summary={summary}
               privacyMode={privacyMode}
               onOpenRepayment={handleOpenRepayment}
-              onAddAccount={handleOpenAddAccount}
+              onOpenNewTx={handleOpenNewTx}
+              onOpenAddCard={() => handleOpenAddAccount('CREDIT_CARD')}
               onEditAccount={handleOpenEditAccount}
+              onDirectUpdateAccount={handleDirectUpdateAccount}
+              onReorderAccounts={handleReorderAccounts}
+              onBatchReconcile={() => setIsBatchReconcileOpen(true)}
             />
           </div>
         )}
 
-        {/* 3. ALL ACCOUNTS VIEW - FULL MANUAL ENTRY & EDITING */}
+        {/* VIEW 2: Credit Cards & Lines of Credit Dedicated Workspace */}
+        {activeTab === 'credit' && (
+          <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-300">
+            <CreditCardsSummary
+              accounts={accounts}
+              privacyMode={privacyMode}
+              onOpenRepayment={handleOpenRepayment}
+              onOpenNewTx={handleOpenNewTx}
+              onOpenAddCard={() => handleOpenAddAccount('CREDIT_CARD')}
+              onEditAccount={handleOpenEditAccount}
+              onDirectUpdateAccount={handleDirectUpdateAccount}
+              onReorderAccounts={handleReorderAccounts}
+              onBatchReconcile={() => setIsBatchReconcileOpen(true)}
+            />
+          </div>
+        )}
+
+        {/* VIEW 3: All Assets & Accounts Directory */}
         {activeTab === 'accounts' && (
-          <div className="animate-in fade-in duration-300">
+          <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-300">
             <AccountsList
               accounts={accounts}
               privacyMode={privacyMode}
               onAddAccount={handleOpenAddAccount}
               onEditAccount={handleOpenEditAccount}
               onDeleteAccount={handleDeleteAccount}
-              onReorderAccounts={handleReorderAccounts}
               onDirectUpdateAccount={handleDirectUpdateAccount}
-              onClearPresetData={handleClearPresetData}
-              onOpenBatchReconcile={() => setIsBatchReconcileOpen(true)}
-              onOpenRepayment={(accId, amt) => handleOpenRepayment(accId, amt)}
+              onReorderAccounts={handleReorderAccounts}
               onOpenNewTx={handleOpenNewTx}
+              onOpenRepayment={handleOpenRepayment}
+              onBatchReconcile={() => setIsBatchReconcileOpen(true)}
+              onClearAllPresetData={handleClearPresetData}
             />
           </div>
         )}
 
-        {/* 4. TRANSACTIONS LEDGER VIEW */}
+        {/* VIEW 4: Transactions Ledger */}
         {activeTab === 'transactions' && (
-          <div className="animate-in fade-in duration-300">
+          <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-300">
             <TransactionLedger
               transactions={transactions}
               accounts={accounts}
               privacyMode={privacyMode}
-              onDeleteTransaction={handleDeleteTx}
-              onEditTransaction={handleEditTransaction}
-              onOpenNewTx={() => handleOpenNewTx('EXPENSE')}
+              onOpenNewTx={handleOpenNewTx}
+              onEditTx={handleEditTransaction}
+              onDeleteTx={handleDeleteTx}
             />
           </div>
         )}
 
-        {/* 5. ANALYTICS & CHARTS VIEW */}
+        {/* VIEW 5: Analytics & Visual Charts */}
         {activeTab === 'analytics' && (
-          <div className="animate-in fade-in duration-300">
+          <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-300">
             <AnalyticsView
-              accounts={accounts}
               transactions={transactions}
+              accounts={accounts}
               summary={summary}
               privacyMode={privacyMode}
             />
@@ -539,69 +745,60 @@ export default function App() {
         )}
       </main>
 
-      {/* Fixed Bottom-Right Floating Action Button (Only on 'accounts' and 'credit' tabs) */}
-      {(activeTab === 'accounts' || activeTab === 'credit') && (
-        <button
-          id="btn-fixed-add-account"
-          onClick={() => handleOpenAddAccount(activeTab === 'credit' ? 'CREDIT_CARD' : 'DEBIT_CARD')}
-          className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-40 flex items-center gap-2.5 bg-slate-900/95 hover:bg-slate-900 text-white font-semibold text-sm sm:text-base px-5 py-3.5 sm:px-6 sm:py-4 rounded-full shadow-xl hover:shadow-2xl active:scale-95 transition-all duration-200 border border-slate-700/60 backdrop-blur-md ring-4 ring-slate-900/10 animate-in fade-in slide-in-from-bottom-4"
-          title="添加新资产或信用卡账户"
-        >
-          <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-          </div>
-          <span className="tracking-wide">添加资产</span>
-        </button>
-      )}
+      {/* ================= MODAL DIALOGS ================= */}
 
-      {/* Modals */}
+      {/* Transaction Modal (Record / Edit) */}
       {isTxModalOpen && (
         <TransactionModal
-          accounts={accounts}
-          initialType={txModalDefaultType}
-          initialAccountId={txModalAccountId}
-          initialTransaction={editingTransaction}
-          onClose={() => {
-            setIsTxModalOpen(false);
-            setEditingTransaction(null);
-          }}
+          isOpen={isTxModalOpen}
+          onClose={() => setIsTxModalOpen(false)}
           onSubmit={handleSubmitTransaction}
+          accounts={accounts}
+          defaultType={txModalDefaultType}
+          defaultAccountId={txModalAccountId}
+          editingTransaction={editingTransaction}
         />
       )}
 
+      {/* Repayment Modal */}
       {isRepayModalOpen && (
         <RepaymentModal
-          accounts={accounts}
-          targetAccountId={repayTargetAccountId}
-          suggestedAmount={repaySuggestedAmount}
+          isOpen={isRepayModalOpen}
           onClose={() => setIsRepayModalOpen(false)}
-          onSubmitRepayment={handleSubmitRepayment}
+          onSubmit={handleSubmitRepayment}
+          accounts={accounts}
+          initialTargetAccountId={repayTargetAccountId}
+          suggestedAmount={repaySuggestedAmount}
         />
       )}
 
+      {/* Account Editor Modal (Add/Edit) */}
       {isAccEditorOpen && (
         <AccountEditorModal
-          initialAccount={editingAccount}
-          defaultCategory={defaultAccCategory}
+          isOpen={isAccEditorOpen}
           onClose={() => setIsAccEditorOpen(false)}
           onSave={handleSaveAccount}
-          onDelete={handleDeleteAccount}
+          editingAccount={editingAccount}
+          defaultCategory={defaultAccCategory}
         />
       )}
 
+      {/* Batch Balance Reconcile Modal */}
       {isBatchReconcileOpen && (
         <BatchReconcileModal
-          accounts={accounts}
+          isOpen={isBatchReconcileOpen}
           onClose={() => setIsBatchReconcileOpen(false)}
-          onSaveBatch={handleSaveBatchAccounts}
+          onSave={handleSaveBatchAccounts}
+          accounts={accounts}
         />
       )}
 
+      {/* Security & Cloud Sync Settings Modal */}
       {isSecurityModalOpen && currentUser && (
         <SecuritySettingsModal
           currentUser={currentUser}
           onClose={() => setIsSecurityModalOpen(false)}
-          onUserUpdated={(updated) => setCurrentUser(updated)}
+          onUserUpdated={(u) => setCurrentUser(u)}
           onRefreshData={() => loadUserData(currentUser.id)}
         />
       )}

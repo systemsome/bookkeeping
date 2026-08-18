@@ -139,14 +139,6 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
 
             {/* Right: Contactless Icon + Transparent Card Network Badge */}
             <div className="flex items-center gap-2 shrink-0">
-              {/* Drag Handle in Card Top Bar */}
-              <div
-                {...dragHandleProps}
-                className="cursor-grab active:cursor-grabbing p-1 rounded-lg bg-black/20 hover:bg-black/40 backdrop-blur-md text-white/80 hover:text-white transition-all shadow-2xs border border-white/10"
-                title="⠿ 按住可拖拽排版此卡片"
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </div>
               {isBankCard && <ContactlessIcon className="text-white/80" />}
               <CardNetworkBadge network={cardNetwork} size={compact ? 'sm' : 'md'} />
             </div>

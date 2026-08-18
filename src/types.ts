@@ -98,6 +98,7 @@ export interface Transaction {
 export interface UserProfile {
   id: string;
   username: string;
+  email?: string;
   displayName: string;
   avatar?: string;
   passwordHash: string; // Simple hash simulation

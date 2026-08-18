@@ -14,6 +14,9 @@ import {
   ChevronDown,
   Sparkles,
   SlidersHorizontal,
+  Cloud,
+  CloudCheck,
+  RefreshCw,
 } from 'lucide-react';
 import { UserProfile, FinancialSummary } from '../types';
 import { formatCurrency } from '../lib/formatters';
@@ -29,6 +32,8 @@ interface NavbarProps {
   onLockApp: () => void;
   onLogout: () => void;
   onOpenSecuritySettings: () => void;
+  isCloudSyncing?: boolean;
+  isCloudConnected?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +47,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLockApp,
   onLogout,
   onOpenSecuritySettings,
+  isCloudSyncing = false,
+  isCloudConnected = true,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -59,10 +66,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
                   资产记账管家
                 </span>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                  <ShieldCheck className="w-3 h-3 mr-1" />
-                  加密保护
-                </span>
+                {currentUser?.id?.startsWith('demo-') ? (
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200/60">
+                    <Sparkles className="w-3 h-3 mr-1 text-amber-500" />
+                    体验号模式
+                  </span>
+                ) : (
+                  <span
+                    className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                      isCloudSyncing
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                    }`}
+                    title="数据已开启 Firebase 跨设备实时云同步"
+                  >
+                    {isCloudSyncing ? (
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin text-blue-600" />
+                    ) : (
+                      <Cloud className="w-3 h-3 mr-1 text-emerald-600" />
+                    )}
+                    <span>{isCloudSyncing ? '云端同步中...' : '实时云同步已就绪'}</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
                 全资产类别规整 · 信用卡额度与账单监控
