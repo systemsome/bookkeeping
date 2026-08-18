@@ -152,7 +152,10 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
   const totalAvailableCredit = Math.max(0, totalCreditLimit - totalUsedCredit);
   const creditUtilizationRate = totalCreditLimit > 0 ? (totalUsedCredit / totalCreditLimit) * 100 : 0;
   const totalLiabilities = totalUsedCredit + totalPayableDebts;
-  const netWorth = liquidAssets + investmentAssets + receivables - totalLiabilities;
+  
+  // 核心计算：净资产 = 现有流动资产 + 投资理财资产 + 借出待收款
+  // （信用卡借贷欠款与借入资金不计入净资产中，而是单独设立专区展示）
+  const netWorth = liquidAssets + investmentAssets + receivables;
 
   // Calculate current month's expenses and income
   const now = new Date();

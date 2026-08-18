@@ -8,31 +8,18 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
+  FolderSync,
   Cloud,
-  RefreshCw,
 } from 'lucide-react';
 import { UserProfile } from '../types';
-import {
-  updateCurrentUser,
-  getAccounts,
-  getTransactions,
-  saveAccounts,
-  saveTransactions,
-  resetToDemoData,
-} from '../lib/storage';
-import {
-  uploadInitialAccountsCloud,
-  uploadInitialTransactionsCloud,
-  fetchCloudAccountsOnce,
-  fetchCloudTransactionsOnce,
-  updateUserProfileCloud,
-} from '../lib/firebase';
+import { updateCurrentUser, getAccounts, getTransactions, saveAccounts, saveTransactions, resetToDemoData } from '../lib/storage';
 
 interface SecuritySettingsModalProps {
   currentUser: UserProfile;
   onClose: () => void;
   onUserUpdated: (user: UserProfile) => void;
   onRefreshData: () => void;
+  onOpenSyncModal?: () => void;
 }
 
 export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
@@ -40,6 +27,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   onClose,
   onUserUpdated,
   onRefreshData,
+  onOpenSyncModal,
 }) => {
   const [displayName, setDisplayName] = useState(currentUser.displayName);
   const [oldPassword, setOldPassword] = useState('');
@@ -48,9 +36,8 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   const [autoLockMinutes, setAutoLockMinutes] = useState(currentUser.autoLockMinutes || 15);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [syncing, setSyncing] = useState(false);
 
-  const handleUpdateSecurity = async (e: React.FormEvent) => {
+  const handleUpdateSecurity = (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg('');
     setErrorMsg('');
@@ -80,71 +67,10 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
     });
 
     if (updated) {
-      // Sync user profile updates to Firestore if logged in with cloud account
-      if (!currentUser.id.startsWith('demo-')) {
-        try {
-          await updateUserProfileCloud(currentUser.id, {
-            displayName: displayName.trim() || currentUser.username,
-            pinCode: newPin,
-            autoLockMinutes,
-          });
-        } catch (err) {
-          console.warn('Failed to sync updated profile to Cloud', err);
-        }
-      }
-
       onUserUpdated(updated);
-      setSuccessMsg('安全设置与 PIN 码更新成功！');
+      setSuccessMsg('安全设置与密码更新成功！');
       setOldPassword('');
       setNewPassword('');
-    }
-  };
-
-  // Manual trigger: Push local accounts and transactions to Cloud Firestore
-  const handlePushToCloud = async () => {
-    if (currentUser.id.startsWith('demo-')) {
-      setErrorMsg('体验号模式为离线暂存，请使用注册账号登录即可开启多设备实时云端同步');
-      return;
-    }
-    setSyncing(true);
-    setSuccessMsg('');
-    setErrorMsg('');
-    try {
-      const localAccs = getAccounts(currentUser.id);
-      const localTxs = getTransactions(currentUser.id);
-      await uploadInitialAccountsCloud(currentUser.id, localAccs);
-      await uploadInitialTransactionsCloud(currentUser.id, localTxs);
-      setSuccessMsg(`云端同步成功！已将 ${localAccs.length} 个账户和 ${localTxs.length} 笔流水同步至云端。`);
-      onRefreshData();
-    } catch (err: any) {
-      console.error('Cloud sync error:', err);
-      setErrorMsg(`同步至云端失败: ${err.message || '网络连接异常'}`);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  // Manual trigger: Pull latest data from Cloud Firestore
-  const handlePullFromCloud = async () => {
-    if (currentUser.id.startsWith('demo-')) {
-      setErrorMsg('体验号模式为离线暂存，注册专属账号后即可跨设备随时拉取数据');
-      return;
-    }
-    setSyncing(true);
-    setSuccessMsg('');
-    setErrorMsg('');
-    try {
-      const cloudAccs = await fetchCloudAccountsOnce(currentUser.id);
-      const cloudTxs = await fetchCloudTransactionsOnce(currentUser.id);
-      saveAccounts(currentUser.id, cloudAccs);
-      saveTransactions(currentUser.id, cloudTxs);
-      setSuccessMsg(`从云端拉取成功！已同步 ${cloudAccs.length} 个账户与 ${cloudTxs.length} 笔流水。`);
-      onRefreshData();
-    } catch (err: any) {
-      console.error('Cloud pull error:', err);
-      setErrorMsg(`拉取云端数据失败: ${err.message || '网络连接异常'}`);
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -175,25 +101,19 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   };
 
   // Import JSON backup
-  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
         if (json.accounts && Array.isArray(json.accounts)) {
           saveAccounts(currentUser.id, json.accounts);
-          if (!currentUser.id.startsWith('demo-')) {
-            await uploadInitialAccountsCloud(currentUser.id, json.accounts);
-          }
         }
         if (json.transactions && Array.isArray(json.transactions)) {
           saveTransactions(currentUser.id, json.transactions);
-          if (!currentUser.id.startsWith('demo-')) {
-            await uploadInitialTransactionsCloud(currentUser.id, json.transactions);
-          }
         }
         onRefreshData();
         setSuccessMsg('数据备份导入并恢复成功！');
@@ -205,19 +125,13 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   };
 
   // Reset to Demo Data
-  const handleResetData = async () => {
+  const handleResetData = () => {
     if (
       confirm(
         '确定要重置当前账本数据为默认的丰富示例数据吗？（包含各类银行借记卡、信用卡、理财、黄金、白条等）'
       )
     ) {
       resetToDemoData(currentUser.id);
-      const accs = getAccounts(currentUser.id);
-      const txs = getTransactions(currentUser.id);
-      if (!currentUser.id.startsWith('demo-')) {
-        await uploadInitialAccountsCloud(currentUser.id, accs);
-        await uploadInitialTransactionsCloud(currentUser.id, txs);
-      }
       onRefreshData();
       setSuccessMsg('已成功重置为标准示例资产账本！');
     }
@@ -233,10 +147,10 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">
-                安全保护与云端数据同步
+                安全保护与数据管理
               </h2>
               <p className="text-xs text-slate-500">
-                管理登录密码、PIN码、自动锁屏与 Firebase 实时跨设备同步
+                修改登录密码、PIN码、自动锁屏与数据离线备份导出
               </p>
             </div>
           </div>
@@ -248,49 +162,15 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Cloud Sync Status Banner */}
-        <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50/90 to-teal-50/90 border border-emerald-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
-              <Cloud className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <span>云端数据库连接状态</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              </div>
-              <div className="text-[11px] text-slate-600 mt-0.5">
-                {currentUser.id.startsWith('demo-')
-                  ? '当前为本地体验号，注册或登录云账号即可跨设备永久留存数据'
-                  : `已接入 Firebase 专属云端存储 (UID: ${currentUser.id.slice(0, 10)}...)`}
-              </div>
-            </div>
-          </div>
-
-          {!currentUser.id.startsWith('demo-') && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={handlePushToCloud}
-                disabled={syncing}
-                className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 disabled:opacity-50 whitespace-nowrap"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                <span>立即同步到云端</span>
-              </button>
-            </div>
-          )}
-        </div>
-
         {successMsg && (
-          <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+          <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
 
         {errorMsg && (
-          <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs flex items-center gap-2">
+          <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -300,47 +180,46 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
           {/* User Profile Info */}
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
-              账本名称 / 称谓
+              账本名称 / 昵称
             </label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:bg-white"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
             />
           </div>
 
-          {/* Auto Lock & PIN */}
+          {/* PIN and Auto-lock */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">
-                无操作自动锁屏 (分钟)
-              </label>
-              <select
-                value={autoLockMinutes}
-                onChange={(e) => setAutoLockMinutes(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:bg-white"
-              >
-                <option value={0}>从不自动锁定</option>
-                <option value={5}>5 分钟</option>
-                <option value={15}>15 分钟 (推荐)</option>
-                <option value={30}>30 分钟</option>
-                <option value={60}>1 小时</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                6位快捷锁屏 PIN 码
+                6 位锁屏 PIN 码
               </label>
               <input
                 type="password"
                 maxLength={6}
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-                placeholder="6位纯数字"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:bg-white font-mono"
+                placeholder="6位数字"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white font-mono"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                无操作自动锁屏时间
+              </label>
+              <select
+                value={autoLockMinutes}
+                onChange={(e) => setAutoLockMinutes(Number(e.target.value))}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              >
+                <option value={5}>5 分钟后自动锁屏</option>
+                <option value={15}>15 分钟后自动锁屏</option>
+                <option value={30}>30 分钟后自动锁屏</option>
+                <option value={0}>从不自动锁屏 (仅手动)</option>
+              </select>
             </div>
           </div>
 
@@ -348,7 +227,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
           <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
             <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
-              修改安全密码 (留空则保持原密码)
+              修改登录密码 (留空则不修改)
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <input
@@ -377,11 +256,27 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
         </form>
 
         {/* Data Backup & Restore */}
-        <div className="mt-5 pt-4 border-t border-slate-100">
-          <h3 className="text-xs font-semibold text-slate-700 mb-2.5 flex items-center gap-1.5">
-            <Download className="w-3.5 h-3.5 text-blue-600" />
-            离线数据备份、恢复与重置
-          </h3>
+        <div className="mt-6 pt-5 border-t border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+              <span>数据备份与多端同步</span>
+            </h3>
+
+            {onOpenSyncModal && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenSyncModal();
+                }}
+                className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1"
+              >
+                <FolderSync className="w-3.5 h-3.5" />
+                <span>进入云同步与备份中心</span>
+              </button>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <button

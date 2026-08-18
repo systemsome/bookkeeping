@@ -114,9 +114,9 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
           <div className="absolute -bottom-16 -right-16 w-56 h-56 rounded-full bg-black/20 blur-2xl pointer-events-none" />
 
           {/* ================= 1. CARD TOP ROW: Brand Logo + Bank Name + Card Network (VISA/万事达/银联/AMEX/JCB) ================= */}
-          <div className="relative z-10 flex items-start justify-between gap-2">
+          <div className="relative z-10 flex items-center justify-between gap-2">
             {/* Left: Brand Logo + Name + Tier */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               <BrandLogo
                 type={brand.logoType}
                 size={compact ? 'sm' : 'md'}
@@ -137,10 +137,18 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
               </div>
             </div>
 
-            {/* Right: Contactless Icon + Transparent Card Network Badge */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Right: Contactless Icon + Transparent Card Network Badge + Far-Right Uniform Drag Handle */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
               {isBankCard && <ContactlessIcon className="text-white/80" />}
               <CardNetworkBadge network={cardNetwork} size={compact ? 'sm' : 'md'} />
+              {/* Drag Handle firmly fixed at the absolute top-right position */}
+              <div
+                {...dragHandleProps}
+                className="cursor-grab active:cursor-grabbing p-1 sm:p-1.5 rounded-lg bg-black/25 hover:bg-black/45 backdrop-blur-md text-white/80 hover:text-white transition-all shadow-2xs border border-white/10 shrink-0"
+                title="⠿ 按住可拖拽排版此卡片"
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </div>
             </div>
           </div>
 

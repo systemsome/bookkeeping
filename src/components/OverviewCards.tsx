@@ -30,11 +30,11 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-      {/* 1. 净资产卡片 (Net Worth) */}
+      {/* 1. 净资产卡片 (Net Worth - 自有实有净资产) */}
       <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm hover:shadow transition-all">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            净资产总估值
+            净资产
           </span>
           <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
             <Coins className="w-5 h-5" />
@@ -47,18 +47,26 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
             <span className="text-emerald-700 font-medium">
-              资产 {formatCurrency(summary.liquidAssets + summary.investmentAssets + summary.receivables, privacyMode)}
+              流动 {formatCurrency(summary.liquidAssets, privacyMode)}
             </span>
-            <span>-</span>
-            <span className="text-rose-600 font-medium">
-              负债 {formatCurrency(summary.totalLiabilities, privacyMode)}
+            <span>+</span>
+            <span className="text-blue-700 font-medium">
+              理财 {formatCurrency(summary.investmentAssets, privacyMode)}
             </span>
+            {summary.receivables > 0 && (
+              <>
+                <span>+</span>
+                <span className="text-cyan-700 font-medium">
+                  待收 {formatCurrency(summary.receivables, privacyMode)}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <span>待收债权: {formatCurrency(summary.receivables, privacyMode)}</span>
-          <span className="text-emerald-600 font-medium">实时核算</span>
+          <span className="text-emerald-600 font-medium">100% 自有实有资金</span>
+          <span className="text-slate-400">不含借贷负债</span>
         </div>
       </div>
 
@@ -78,7 +86,7 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({
             {formatCurrency(summary.liquidAssets, privacyMode)}
           </div>
           <p className="text-xs text-slate-500 mt-2.5">
-            借记卡 + 支付宝余额 + 随身现金
+            借记卡 + 微信支付宝余额 + 随身现金
           </p>
         </div>
 
@@ -88,15 +96,15 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({
         </div>
       </div>
 
-      {/* 3. 信用卡与白条信贷总额度 & 可用额度 (Credit & Liabilities) */}
+      {/* 3. 信用卡与借贷 (Credit & Loan Debts - 单独独立设立展示) */}
       <div
         onClick={onNavigateToCredit}
-        className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm hover:shadow hover:border-slate-300 transition-all cursor-pointer group"
+        className="relative overflow-hidden rounded-2xl bg-white border border-rose-200/80 p-5 shadow-sm hover:shadow hover:border-rose-300 transition-all cursor-pointer group"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              信用卡可用额度
+            <span className="text-xs font-semibold text-rose-700 uppercase tracking-wider">
+              信用卡与借贷
             </span>
           </div>
           <div className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 group-hover:scale-105 transition-transform">
@@ -106,15 +114,15 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({
 
         <div className="mt-3">
           <div className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight">
-            {formatCurrency(summary.totalAvailableCredit, privacyMode)}
+            {formatCurrency(summary.totalLiabilities, privacyMode)}
           </div>
 
           <div className="mt-2.5 flex items-center justify-between text-xs text-slate-500">
             <span>
-              总额度: {formatCurrency(summary.totalCreditLimit, privacyMode)}
+              总授信: {formatCurrency(summary.totalCreditLimit, privacyMode)}
             </span>
-            <span className="text-rose-600 font-semibold">
-              已用: {formatCurrency(summary.totalUsedCredit, privacyMode)}
+            <span className="text-emerald-700 font-semibold">
+              剩余可用: {formatCurrency(summary.totalAvailableCredit, privacyMode)}
             </span>
           </div>
 
@@ -135,20 +143,13 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({
           </div>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+        <div className="mt-4 pt-3 border-t border-rose-100/70 flex items-center justify-between text-xs">
           <span className="text-slate-500">
-            额度使用率: {summary.creditUtilizationRate.toFixed(1)}%
+            信贷占用率: {summary.creditUtilizationRate.toFixed(1)}%
           </span>
-          <span
-            className={`font-semibold ${
-              isHealthyCredit
-                ? 'text-emerald-700'
-                : isWarningCredit
-                ? 'text-amber-700'
-                : 'text-rose-600'
-            }`}
-          >
-            {isHealthyCredit ? '健康区间' : isWarningCredit ? '适度占用' : '额度紧张'}
+          <span className="text-rose-600 font-semibold flex items-center gap-0.5">
+            <span>单独借贷核算</span>
+            <span>➔</span>
           </span>
         </div>
       </div>

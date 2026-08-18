@@ -14,9 +14,7 @@ import {
   ChevronDown,
   Sparkles,
   SlidersHorizontal,
-  Cloud,
-  CloudCheck,
-  RefreshCw,
+  FolderSync,
 } from 'lucide-react';
 import { UserProfile, FinancialSummary } from '../types';
 import { formatCurrency } from '../lib/formatters';
@@ -32,8 +30,7 @@ interface NavbarProps {
   onLockApp: () => void;
   onLogout: () => void;
   onOpenSecuritySettings: () => void;
-  isCloudSyncing?: boolean;
-  isCloudConnected?: boolean;
+  onOpenSyncModal: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,8 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLockApp,
   onLogout,
   onOpenSecuritySettings,
-  isCloudSyncing = false,
-  isCloudConnected = true,
+  onOpenSyncModal,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -66,28 +62,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
                   资产记账管家
                 </span>
-                {currentUser?.id?.startsWith('demo-') ? (
-                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200/60">
-                    <Sparkles className="w-3 h-3 mr-1 text-amber-500" />
-                    体验号模式
-                  </span>
-                ) : (
-                  <span
-                    className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                      isCloudSyncing
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                    }`}
-                    title="数据已开启 Firebase 跨设备实时云同步"
-                  >
-                    {isCloudSyncing ? (
-                      <RefreshCw className="w-3 h-3 mr-1 animate-spin text-blue-600" />
-                    ) : (
-                      <Cloud className="w-3 h-3 mr-1 text-emerald-600" />
-                    )}
-                    <span>{isCloudSyncing ? '云端同步中...' : '实时云同步已就绪'}</span>
-                  </span>
-                )}
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                  <ShieldCheck className="w-3 h-3 mr-1" />
+                  加密保护
+                </span>
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
                 全资产类别规整 · 信用卡额度与账单监控
@@ -175,6 +153,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
+            {/* Cloud Sync & Backup CTA */}
+            <button
+              id="btn-cloud-sync"
+              onClick={onOpenSyncModal}
+              title="多端云同步与数据备份 (Cloudflare D1 / WebDAV / JSON)"
+              className="p-2 rounded-xl text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 transition-colors flex items-center gap-1.5 text-xs font-medium"
+            >
+              <FolderSync className="w-4 h-4 text-emerald-600" />
+              <span className="hidden lg:inline text-slate-700">云同步与备份</span>
+            </button>
+
             {/* Quick Record CTA Button */}
             <button
               id="btn-quick-record"
@@ -227,6 +216,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                         @{currentUser?.username}
                       </p>
                     </div>
+
+                    <button
+                      id="menu-item-sync"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onOpenSyncModal();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-xs font-medium"
+                    >
+                      <FolderSync className="w-4 h-4 text-blue-600" />
+                      <span>多端同步与数据备份</span>
+                    </button>
 
                     <button
                       id="menu-item-security"

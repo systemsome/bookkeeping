@@ -91,7 +91,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* Header & Quick stats */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
@@ -101,14 +101,6 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             清晰记录每一笔消费支出、工资收入、账户划转、信用卡还款与借款往来
           </p>
         </div>
-
-        <button
-          id="btn-ledger-add-tx"
-          onClick={onOpenNewTx}
-          className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all self-start sm:self-auto"
-        >
-          <span>+ 记一笔新流水</span>
-        </button>
       </div>
 
       {/* Filter Controls Bar */}
@@ -219,7 +211,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             <ReceiptText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
             <p className="text-base font-semibold text-slate-700">暂无符合条件的流水明细</p>
             <p className="text-xs text-slate-400 mt-1">
-              点击上方「记一笔新流水」或添加预设流水开始记录
+              点击右下角「记一笔」或添加预设流水开始记录
             </p>
           </div>
         ) : (

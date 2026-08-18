@@ -1,0 +1,14 @@
+name = "finance-manager"
+compatibility_date = "2024-04-01"
+pages_build_output_dir = "dist"
+
+# Cloudflare D1 数据库绑定 (绑定名为 DB)
+[[d1_databases]]
+binding = "DB"
+database_name = "finance_db"
+database_id = "your-d1-database-id-here"
+
+# (可选) Cloudflare KV 命名空间绑定
+# [[kv_namespaces]]
+# binding = "FINANCE_KV"
+# id = "your-kv-namespace-id-here"

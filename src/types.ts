@@ -98,7 +98,6 @@ export interface Transaction {
 export interface UserProfile {
   id: string;
   username: string;
-  email?: string;
   displayName: string;
   avatar?: string;
   passwordHash: string; // Simple hash simulation
@@ -110,21 +109,49 @@ export interface UserProfile {
 }
 
 export interface FinancialSummary {
-  netWorth: number; // 净资产
+  netWorth: number; // 净资产 (流动资产 + 投资理财 + 借出应收，不含信用卡借贷)
   liquidAssets: number; // 现有可用流动资金 (借记卡 + 支付宝 + 现金)
   investmentAssets: number; // 投资总资产 (余额宝 + 基金 + 黄金 + 京东金融)
   receivables: number; // 借出待收金额
   
   totalCreditLimit: number; // 信用卡与白条信贷总额度
-  totalUsedCredit: number; // 已用信贷 / 当前负债 (信用卡欠款 + 白条欠款)
+  totalUsedCredit: number; // 信用卡与白条已用借贷欠款
   totalAvailableCredit: number; // 剩余可用信贷额度
   creditUtilizationRate: number; // 信贷利用率百分比 (0-100%)
   
   totalPayableDebts: number; // 借入待还金额
-  totalLiabilities: number; // 全部负债 = 信用卡已用 + 白条已用 + 借入待还
+  totalLiabilities: number; // 全部借贷负债 = 信用卡已用 + 白条已用 + 借入待还
   
   todayExpense: number; // 今日总支出
   monthExpense: number; // 本月总支出
   monthIncome: number; // 本月总收入
   monthSavings: number; // 本月结余
+}
+
+export interface WebDavConfig {
+  enabled: boolean;
+  serverUrl: string; // WebDAV 服务器地址，如 https://dav.jianguoyun.com/dav/
+  username: string; // 用户名 / 邮箱
+  password: string; // 密码 / 授权应用专用密码
+  remotePath: string; // 备份文件存放路径，如 /my_finance_backup.json
+  autoSyncOnSave: boolean; // 记账或更新资产时自动静默同步
+  lastSyncTime?: string; // 最近一次同步成功时间
+}
+
+export interface CloudflareSyncConfig {
+  enabled: boolean;
+  apiUrl?: string; // 部署在 Cloudflare 上的 API 地址，默认同源 /api/sync
+  autoSync: boolean; // 是否开启实时自动双向同步
+  lastSyncTime?: string; // 最近一次云端同步时间
+  status?: 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
+}
+
+export interface BackupPackage {
+  version: string;
+  exportedAt: string;
+  app: string;
+  user: UserProfile;
+  accounts: FinancialAccount[];
+  transactions: Transaction[];
+  webDavConfig?: Partial<WebDavConfig>;
 }
