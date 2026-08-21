@@ -21,6 +21,13 @@ const localSyncStore = new Map<string, any>();
 // Load existing data from file if available
 function loadPersistedSyncStore() {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      } catch (e) {
+        console.warn('[Storage] Warning: Cannot create DATA_DIR:', e);
+      }
+    }
     if (fs.existsSync(SYNC_FILE_PATH)) {
       const raw = fs.readFileSync(SYNC_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(raw);
@@ -32,14 +39,18 @@ function loadPersistedSyncStore() {
       }
     }
   } catch (err) {
-    console.error('[Storage] Error loading persisted sync store:', err);
+    console.warn('[Storage] Warning loading persisted sync store (will use in-memory fallback):', err);
   }
 }
 
 function savePersistedSyncStore() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+      try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      } catch (e) {
+        // ignore mkdir error
+      }
     }
     const obj: Record<string, any> = {};
     localSyncStore.forEach((val, key) => {
@@ -47,7 +58,7 @@ function savePersistedSyncStore() {
     });
     fs.writeFileSync(SYNC_FILE_PATH, JSON.stringify(obj, null, 2), 'utf-8');
   } catch (err) {
-    console.error('[Storage] Error saving persisted sync store:', err);
+    console.warn('[Storage] Warning saving persisted sync store to disk (data preserved in-memory):', err);
   }
 }
 

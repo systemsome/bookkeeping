@@ -24,20 +24,20 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATA_DIR=/app/data
 
-# Copy compiled frontend and standalone backend
+# Copy package files and install clean production dependencies
+COPY package*.json ./
+RUN npm install --omit=dev && npm cache clean --force
+
+# Copy compiled frontend and bundled backend
 COPY --from=builder /app/dist ./dist
 
-# Create persistent data directory
-RUN mkdir -p /app/data
+# Create persistent data directory with permissive permissions
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 # Mountable volume for permanent data storage on NAS
 VOLUME ["/app/data"]
 
 EXPOSE 3000
-
-# Health check using lightweight wget built into alpine
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
 
 # Start server
 CMD ["node", "dist/server.cjs"]
