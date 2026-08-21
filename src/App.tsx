@@ -20,6 +20,7 @@ import {
   isAppLocked,
   setAppLocked,
   updateCurrentUser,
+  fetchLatestDataFromServer,
 } from './lib/storage';
 import {
   UserProfile,
@@ -91,12 +92,20 @@ export default function App() {
     }, 4000);
   }, []);
 
-  // Load data whenever user changes
+  // Load data whenever user changes (with background server sync)
   const loadUserData = useCallback((uid: string) => {
     const accs = getAccounts(uid);
     const txs = getTransactions(uid);
     setAccounts(accs);
     setTransactions(txs);
+
+    // Background fetch from server / NAS to catch multi-device updates seamlessly
+    fetchLatestDataFromServer(uid).then((res) => {
+      if (res.success) {
+        if (res.accounts) setAccounts(res.accounts);
+        if (res.transactions) setTransactions(res.transactions);
+      }
+    }).catch(() => {});
   }, []);
 
   // Restore/Merge data from Cloudflare / WebDAV / JSON Backup
@@ -156,12 +165,24 @@ export default function App() {
   }, [currentUser, isLocked]);
 
   // Handlers
-  const handleLoginSuccess = (user: UserProfile) => {
+  const handleLoginSuccess = (
+    user: UserProfile,
+    onlineAccounts?: FinancialAccount[],
+    onlineTransactions?: Transaction[]
+  ) => {
     setCurrentUserId(user.id);
     setCurrentUser(user);
     setIsLocked(false);
     setAppLocked(false);
-    loadUserData(user.id);
+
+    if (onlineAccounts !== undefined && onlineTransactions !== undefined) {
+      setAccounts(onlineAccounts);
+      setTransactions(onlineTransactions);
+      saveAccounts(user.id, onlineAccounts);
+      saveTransactions(user.id, onlineTransactions);
+    } else {
+      loadUserData(user.id);
+    }
   };
 
   const handleUnlock = () => {

@@ -31,7 +31,11 @@ export const getStoredUsers = (): UserProfile[] => {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(initialUsers));
       return initialUsers;
     }
-    return JSON.parse(raw);
+    const users: UserProfile[] = JSON.parse(raw);
+    if (!users.some((u) => u.username === 'demo')) {
+      users.push(DEFAULT_DEMO_USER);
+    }
+    return users;
   } catch {
     return [DEFAULT_DEMO_USER];
   }
@@ -60,12 +64,31 @@ export const getCurrentUser = (): UserProfile | null => {
   return users.find((u) => u.id === uid) || null;
 };
 
+// Debounce timer for auto-syncing with server
+let syncTimeout: any = null;
+export const triggerAutoServerSync = (userId: string) => {
+  if (!userId) return;
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    const accounts = getAccounts(userId);
+    const transactions = getTransactions(userId);
+    const user = getCurrentUser();
+    syncDataToServer(userId, accounts, transactions, user || undefined).catch(() => {});
+  }, 1000);
+};
+
 export const updateCurrentUser = (updates: Partial<UserProfile>): UserProfile | null => {
   const user = getCurrentUser();
   if (!user) return null;
   const updated: UserProfile = { ...user, ...updates };
   const users = getStoredUsers().map((u) => (u.id === user.id ? updated : u));
   saveUsers(users);
+
+  // Sync update to server
+  updateUserOnline(user.id, updates).catch((e) => {
+    console.warn('Online user update failed (will use local):', e);
+  });
+
   return updated;
 };
 
@@ -87,6 +110,7 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
 
 export const saveAccounts = (userId: string, accounts: FinancialAccount[]) => {
   localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(accounts));
+  triggerAutoServerSync(userId);
 };
 
 export const getTransactions = (userId: string): Transaction[] => {
@@ -107,7 +131,226 @@ export const getTransactions = (userId: string): Transaction[] => {
 
 export const saveTransactions = (userId: string, transactions: Transaction[]) => {
   localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(transactions));
+  triggerAutoServerSync(userId);
 };
+
+/**
+ * Server Authentication: Register User
+ */
+export const registerUserOnline = async (
+  username: string,
+  displayName: string,
+  password: string,
+  pinCode: string
+): Promise<{ success: boolean; user?: UserProfile; accounts?: FinancialAccount[]; transactions?: Transaction[]; error?: string }> => {
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.trim(),
+        displayName: displayName.trim() || username.trim(),
+        password,
+        pinCode: pinCode && pinCode.length === 6 ? pinCode : '123456',
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || '注册失败，请重试' };
+    }
+
+    const newUser: UserProfile = data.user;
+    const users = getStoredUsers();
+    const existingIndex = users.findIndex((u) => u.username.toLowerCase() === newUser.username.toLowerCase());
+    if (existingIndex >= 0) {
+      users[existingIndex] = newUser;
+    } else {
+      users.push(newUser);
+    }
+    saveUsers(users);
+    saveAccounts(newUser.id, data.accounts || []);
+    saveTransactions(newUser.id, data.transactions || []);
+    setCurrentUserId(newUser.id);
+
+    return {
+      success: true,
+      user: newUser,
+      accounts: data.accounts || [],
+      transactions: data.transactions || [],
+    };
+  } catch (err: any) {
+    console.warn('[Auth] Server unavailable, falling back to local registration:', err);
+    // Offline local fallback
+    const users = getStoredUsers();
+    if (users.some((u) => u.username.toLowerCase() === username.trim().toLowerCase())) {
+      return { success: false, error: '该账号已在本地存在，请直接登录' };
+    }
+
+    const newUser: UserProfile = {
+      id: 'user-' + Date.now(),
+      username: username.trim(),
+      displayName: displayName.trim() || username.trim(),
+      passwordHash: password,
+      pinCode: pinCode && pinCode.length === 6 ? pinCode : '123456',
+      autoLockMinutes: 15,
+      privacyMode: false,
+      lastLoginTime: new Date().toISOString(),
+    };
+
+    saveUsers([...users, newUser]);
+    saveAccounts(newUser.id, []);
+    saveTransactions(newUser.id, []);
+    setCurrentUserId(newUser.id);
+
+    return { success: true, user: newUser, accounts: [], transactions: [] };
+  }
+};
+
+/**
+ * Server Authentication: Login User (Cross-Device Enabled)
+ */
+export const loginUserOnline = async (
+  username: string,
+  password: string
+): Promise<{ success: boolean; user?: UserProfile; accounts?: FinancialAccount[]; transactions?: Transaction[]; error?: string }> => {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.trim(),
+        password,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || '账号或密码不正确' };
+    }
+
+    const user: UserProfile = data.user;
+    const users = getStoredUsers();
+    const existingIndex = users.findIndex((u) => u.username.toLowerCase() === user.username.toLowerCase() || u.id === user.id);
+    if (existingIndex >= 0) {
+      users[existingIndex] = user;
+    } else {
+      users.push(user);
+    }
+    saveUsers(users);
+
+    const accounts: FinancialAccount[] = data.accounts || [];
+    const transactions: Transaction[] = data.transactions || [];
+
+    // Cache to localStorage
+    localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${user.id}`, JSON.stringify(accounts));
+    localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${user.id}`, JSON.stringify(transactions));
+    setCurrentUserId(user.id);
+
+    return {
+      success: true,
+      user,
+      accounts,
+      transactions,
+    };
+  } catch (err: any) {
+    console.warn('[Auth] Server unavailable, falling back to local verification:', err);
+    // Fallback to local storage if offline
+    const users = getStoredUsers();
+    const foundUser = users.find((u) => u.username.toLowerCase() === username.trim().toLowerCase());
+    if (!foundUser || (foundUser.passwordHash !== password && foundUser.pinCode !== password)) {
+      return { success: false, error: '账号或密码不正确，请重新输入' };
+    }
+    setCurrentUserId(foundUser.id);
+    const accs = getAccounts(foundUser.id);
+    const txs = getTransactions(foundUser.id);
+    return { success: true, user: foundUser, accounts: accs, transactions: txs };
+  }
+};
+
+/**
+ * Server Authentication: Update User
+ */
+export const updateUserOnline = async (userId: string, updates: Partial<UserProfile>): Promise<boolean> => {
+  try {
+    const res = await fetch('/api/auth/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, updates }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Sync Local Data with Server / NAS
+ */
+export const syncDataToServer = async (
+  userId: string,
+  accounts: FinancialAccount[],
+  transactions: Transaction[],
+  user?: UserProfile
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        user: user || getCurrentUser(),
+        accounts,
+        transactions,
+      }),
+    });
+    const data = await res.json();
+    return { success: res.ok && data.success, message: data.message };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+};
+
+/**
+ * Fetch latest data from Server / NAS
+ */
+export const fetchLatestDataFromServer = async (
+  userId: string
+): Promise<{ success: boolean; accounts?: FinancialAccount[]; transactions?: Transaction[]; user?: UserProfile }> => {
+  try {
+    const res = await fetch(`/api/sync?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) return { success: false };
+    const data = await res.json();
+    if (data && data.success) {
+      if (Array.isArray(data.accounts)) {
+        localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(data.accounts));
+      }
+      if (Array.isArray(data.transactions)) {
+        localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(data.transactions));
+      }
+      if (data.user) {
+        const users = getStoredUsers();
+        const idx = users.findIndex((u) => u.id === userId || u.username.toLowerCase() === data.user.username?.toLowerCase());
+        if (idx >= 0) {
+          users[idx] = { ...users[idx], ...data.user };
+        } else {
+          users.push(data.user);
+        }
+        saveUsers(users);
+      }
+      return {
+        success: true,
+        accounts: data.accounts,
+        transactions: data.transactions,
+        user: data.user,
+      };
+    }
+    return { success: false };
+  } catch {
+    return { success: false };
+  }
+};
+
 
 export const calculateSummary = (accounts: FinancialAccount[], transactions: Transaction[]): FinancialSummary => {
   let liquidAssets = 0;

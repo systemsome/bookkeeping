@@ -9,12 +9,14 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Loader2,
+  Server,
 } from 'lucide-react';
-import { UserProfile } from '../types';
-import { getStoredUsers, saveUsers } from '../lib/storage';
+import { UserProfile, FinancialAccount, Transaction } from '../types';
+import { getStoredUsers, saveUsers, loginUserOnline, registerUserOnline } from '../lib/storage';
 
 interface AuthModalProps {
-  onLoginSuccess: (user: UserProfile) => void;
+  onLoginSuccess: (user: UserProfile, accounts?: FinancialAccount[], transactions?: Transaction[]) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
@@ -26,27 +28,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
   const [pinCode, setPinCode] = useState('123456');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleDemoLogin = () => {
-    const users = getStoredUsers();
-    let demoUser = users.find((u) => u.username === 'demo');
-    if (!demoUser) {
-      demoUser = {
-        id: 'demo-user-888',
-        username: 'demo',
-        displayName: '财务管理官 (体验号)',
-        passwordHash: 'demo123456',
-        pinCode: '123456',
-        autoLockMinutes: 15,
-        privacyMode: false,
-        lastLoginTime: new Date().toISOString(),
-      };
-      saveUsers([...users, demoUser]);
+  const handleDemoLogin = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    const res = await loginUserOnline('demo', 'demo123456');
+    setIsLoading(false);
+    if (res.success && res.user) {
+      onLoginSuccess(res.user, res.accounts, res.transactions);
+    } else {
+      // Fallback
+      const users = getStoredUsers();
+      let demoUser = users.find((u) => u.username === 'demo');
+      if (!demoUser) {
+        demoUser = {
+          id: 'demo-user-888',
+          username: 'demo',
+          displayName: '财务管理官 (体验号)',
+          passwordHash: 'demo123456',
+          pinCode: '123456',
+          autoLockMinutes: 15,
+          privacyMode: false,
+          lastLoginTime: new Date().toISOString(),
+        };
+        saveUsers([...users, demoUser]);
+      }
+      onLoginSuccess(demoUser);
     }
-    onLoginSuccess(demoUser);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -60,8 +72,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    const users = getStoredUsers();
-
     if (isRegisterMode) {
       if (password.length < 6) {
         setErrorMsg('密码长度不能少于 6 位');
@@ -71,38 +81,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
         setErrorMsg('两次输入的密码不一致');
         return;
       }
-      if (users.some((u) => u.username.toLowerCase() === username.trim().toLowerCase())) {
-        setErrorMsg('该账号已存在，请直接登录或换一个账号名');
-        return;
-      }
 
-      const newUser: UserProfile = {
-        id: 'user-' + Date.now(),
-        username: username.trim(),
-        displayName: displayName.trim() || username.trim(),
-        passwordHash: password,
-        pinCode: pinCode && pinCode.length === 6 ? pinCode : '123456',
-        autoLockMinutes: 15,
-        privacyMode: false,
-        lastLoginTime: new Date().toISOString(),
-      };
-
-      saveUsers([...users, newUser]);
-      onLoginSuccess(newUser);
-    } else {
-      // Login mode
-      const foundUser = users.find(
-        (u) => u.username.toLowerCase() === username.trim().toLowerCase()
+      setIsLoading(true);
+      const res = await registerUserOnline(
+        username.trim(),
+        displayName.trim() || username.trim(),
+        password,
+        pinCode && pinCode.length === 6 ? pinCode : '123456'
       );
+      setIsLoading(false);
 
-      if (!foundUser || foundUser.passwordHash !== password) {
-        setErrorMsg('账号或密码不正确，请重新输入');
+      if (!res.success || !res.user) {
+        setErrorMsg(res.error || '注册失败，请稍后重试');
         return;
       }
 
-      onLoginSuccess(foundUser);
+      onLoginSuccess(res.user, res.accounts, res.transactions);
+    } else {
+      // Login mode with online verification across any device
+      setIsLoading(true);
+      const res = await loginUserOnline(username.trim(), password);
+      setIsLoading(false);
+
+      if (!res.success || !res.user) {
+        setErrorMsg(res.error || '账号或密码不正确，请重新输入');
+        return;
+      }
+
+      onLoginSuccess(res.user, res.accounts, res.transactions);
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
@@ -257,15 +266,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
           <button
             id="btn-auth-submit"
             type="submit"
-            className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] mt-2"
+            disabled={isLoading}
+            className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:bg-slate-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] mt-2 cursor-pointer disabled:cursor-not-allowed"
           >
-            <span>{isRegisterMode ? '立即注册并进入' : '安全密码登录'}</span>
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{isRegisterMode ? '正在创建安全账本...' : '正在验证登录...'}</span>
+              </>
+            ) : (
+              <>
+                <span>{isRegisterMode ? '立即注册并进入' : '安全密码登录'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 
+        {/* Server storage status indicator */}
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+          <Server className="w-3.5 h-3.5 text-emerald-500" />
+          <span>多端数据由 NAS / 服务端 100% 私有化存储与加密同步</span>
+        </div>
+
         {/* Toggle between Login and Register */}
-        <div className="mt-5 text-center">
+        <div className="mt-4 text-center">
           <button
             id="btn-toggle-auth-mode"
             type="button"
@@ -273,7 +298,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
               setIsRegisterMode(!isRegisterMode);
               setErrorMsg('');
             }}
-            className="text-xs text-slate-500 hover:text-slate-900 transition-colors font-medium"
+            className="text-xs text-slate-500 hover:text-slate-900 transition-colors font-medium cursor-pointer"
           >
             {isRegisterMode
               ? '已有账户？点击切换至 账号密码登录'
