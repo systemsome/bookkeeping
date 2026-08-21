@@ -2,24 +2,18 @@ version: '3.8'
 
 services:
   finance-manager:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: finance-manager:latest
+    # 直接拉取预构建镜像（替换为您的 github 用户名和小写仓库名，或您的 DockerHub 镜像）
+    image: ghcr.io/${DOCKER_IMAGE_NAME:-xiaoxiaomu86/finance-manager}:latest
     container_name: finance-manager
     restart: unless-stopped
     ports:
-      # 本地主机端口:容器内端口（可将 3000 修改为您 NAS 未占用的任意端口，例如 8088:3000）
+      # 主机端口:容器端口（如 NAS 的 3000 已被占用，可改为 8088:3000）
       - "3000:3000"
     volumes:
-      # 持久化存储目录映射：将 NAS 本地目录挂载到容器内部，容器更新升级数据绝不丢失
+      # 持久化数据存储目录（映射在 NAS 本地 ./data）
       - ./data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
       - DATA_DIR=/app/data
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) process.exit(1)})\";"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+

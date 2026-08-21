@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for build)
+# Install dependencies for building
 RUN npm install
 
 # Copy source code
@@ -24,12 +24,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATA_DIR=/app/data
 
-# Copy built artifacts and package manifest
-COPY package*.json ./
+# Copy compiled frontend and standalone backend
 COPY --from=builder /app/dist ./dist
-
-# Install only production dependencies (express, etc.)
-RUN npm install --omit=dev && npm cache clean --force
 
 # Create persistent data directory
 RUN mkdir -p /app/data
@@ -38,6 +34,10 @@ RUN mkdir -p /app/data
 VOLUME ["/app/data"]
 
 EXPOSE 3000
+
+# Health check using lightweight wget built into alpine
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
 
 # Start server
 CMD ["node", "dist/server.cjs"]

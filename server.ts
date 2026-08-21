@@ -1,23 +1,18 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Data directory for persistent storage (especially in Docker / NAS mounts)
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const SYNC_FILE_PATH = path.join(DATA_DIR, 'sync_store.json');
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  try {
+try {
+  if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-  } catch (e) {
-    console.error('Failed to create data directory:', e);
   }
+} catch (e) {
+  console.warn('[Storage] Notice: Cannot pre-create data directory:', e);
 }
 
 // In-memory / file-backed sync store
@@ -43,6 +38,9 @@ function loadPersistedSyncStore() {
 
 function savePersistedSyncStore() {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     const obj: Record<string, any> = {};
     localSyncStore.forEach((val, key) => {
       obj[key] = val;
@@ -58,7 +56,7 @@ loadPersistedSyncStore();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '15mb' }));
 
@@ -119,16 +117,28 @@ async function startServer() {
 
   // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true, host: '0.0.0.0', port: 3000 },
+      server: { middlewareMode: true, host: '0.0.0.0', port: PORT },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    // Locate frontend dist directory
+    let distPath = path.join(process.cwd(), 'dist');
+    if (!fs.existsSync(path.join(distPath, 'index.html'))) {
+      if (fs.existsSync(path.join(__dirname, 'index.html'))) {
+        distPath = __dirname;
+      }
+    }
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Application UI is not built. Please run npm run build.');
+      }
     });
   }
 
