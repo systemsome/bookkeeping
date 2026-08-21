@@ -14,6 +14,7 @@ import {
   Dices,
   RotateCcw,
   RefreshCw,
+  RotateCw,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
@@ -26,7 +27,14 @@ import {
   getRandomCardBackground,
   LUXURY_PALETTES,
   LuxuryPalette,
+  getDefaultPresetForCategory,
+  getBrandsForCategory,
 } from '../lib/brandHelper';
+import {
+  fetchLiveGoldRate,
+  getCachedGoldRate,
+  GoldMarketRate,
+} from '../lib/goldRates';
 import { AccountCardFace } from './AccountCardFace';
 import { BrandLogo, CardNetworkBadge } from './BrandLogo';
 
@@ -91,26 +99,99 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   );
 
   const [autoGenMsg, setAutoGenMsg] = useState<string>('');
+  const [brandFilterTab, setBrandFilterTab] = useState<'RECOMMENDED' | 'BANKS' | 'DIGITAL' | 'CREDIT' | 'ALL'>('RECOMMENDED');
+  const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
+  const [isFetchingGold, setIsFetchingGold] = useState<boolean>(false);
 
-  // Auto set defaults when switching category for new account
+  // Auto fetch latest gold market price
   useEffect(() => {
-    if (!isEdit) {
-      const defaultBrand = BANK_BRANDS.find((b) => b.category === category) || BANK_BRANDS[0];
-      if (!name) {
-        setName(defaultBrand.name);
+    let isMounted = true;
+    fetchLiveGoldRate().then((rate) => {
+      if (isMounted) {
+        setLiveGoldRate(rate);
+        // If creating new gold account and gold price is default or unset, pre-fill with live rate
+        if (!isEdit && category === 'GOLD' && (!goldUnitPrice || goldUnitPrice === '600')) {
+          setGoldUnitPrice(rate.priceRmbGram.toString());
+        }
       }
-      if (!bankName && (category === 'DEBIT_CARD' || category === 'CREDIT_CARD')) {
-        setBankName(defaultBrand.shortName);
-      }
-      if (!cardTier) {
-        setCardTier(defaultBrand.defaultTier);
-      }
-      if (!cardSkin) {
-        setCardSkin(defaultBrand.cardSkin);
-      }
-      setCardNetwork(defaultBrand.cardNetwork);
-    }
+    });
+    return () => {
+      isMounted = false;
+    };
   }, [category, isEdit]);
+
+  const handleRefreshGoldRate = async () => {
+    setIsFetchingGold(true);
+    try {
+      const rate = await fetchLiveGoldRate(true);
+      setLiveGoldRate(rate);
+      setGoldUnitPrice(rate.priceRmbGram.toString());
+      setAutoGenMsg(`⚡ 已获取今日最新国内 Au9999 金价 ¥${rate.priceRmbGram}/克并自动填入`);
+      setTimeout(() => setAutoGenMsg(''), 4000);
+    } finally {
+      setIsFetchingGold(false);
+    }
+  };
+
+  // Handle category switching with complete intelligent auto-matching
+  const handleCategoryChange = (newCategory: AccountCategory) => {
+    setCategory(newCategory);
+    setBrandFilterTab('RECOMMENDED'); // Reset filter to recommended for new category
+
+    const preset = getDefaultPresetForCategory(newCategory);
+    setName(preset.name);
+    setBankName(preset.bankName);
+    setCardTier(preset.cardTier);
+    setCardSkin(preset.cardSkin);
+    setCardNetwork(preset.cardNetwork);
+    setColor(preset.primaryColor);
+    setCardBgColor('');
+
+    if (preset.creditLimit !== undefined) {
+      setCreditLimit(preset.creditLimit);
+    }
+    if (preset.usedCredit !== undefined) {
+      setUsedCredit(preset.usedCredit);
+    }
+    if (preset.billDay !== undefined) {
+      setBillDay(preset.billDay);
+    }
+    if (preset.dueDay !== undefined) {
+      setDueDay(preset.dueDay);
+    }
+    if (preset.goldGrams !== undefined) {
+      setGoldGrams(preset.goldGrams);
+    }
+    if (newCategory === 'GOLD') {
+      const livePrice = liveGoldRate?.priceRmbGram || 688.6;
+      setGoldUnitPrice(livePrice.toString());
+    } else if (preset.goldUnitPrice !== undefined) {
+      setGoldUnitPrice(preset.goldUnitPrice);
+    }
+    if (preset.counterparty !== undefined) {
+      setCounterparty(preset.counterparty);
+    }
+    if (preset.balance !== undefined) {
+      setBalance(preset.balance);
+    }
+
+    const catLabel = ACCOUNT_CATEGORY_CONFIG[newCategory]?.label || newCategory;
+    setAutoGenMsg(`✨ 已根据「${catLabel}」自动匹配「${preset.name}」官方卡面、LOGO与属性`);
+    setTimeout(() => setAutoGenMsg(''), 4000);
+  };
+
+  // Auto set defaults on initial creation
+  useEffect(() => {
+    if (!isEdit && !name) {
+      const preset = getDefaultPresetForCategory(category);
+      setName(preset.name);
+      setBankName(preset.bankName);
+      setCardTier(preset.cardTier);
+      setCardSkin(preset.cardSkin);
+      setCardNetwork(preset.cardNetwork);
+      setColor(preset.primaryColor);
+    }
+  }, [isEdit]);
 
   // Automatic Background Color Generation
   const handleAutoGenerateBackground = () => {
@@ -141,9 +222,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     setTimeout(() => setAutoGenMsg(''), 3500);
   };
 
-  // Apply a brand preset directly
+  // Apply a brand preset directly with context awareness
   const handleSelectBrandPreset = (brand: BankBrandInfo) => {
-    const isSpecialCategory = [
+    const isDedicatedCategoryBrand = [
       'HUABEI',
       'JD_BAITIAO',
       'YUEBAO',
@@ -154,41 +235,60 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       'PAYABLE',
       'ALIPAY',
       'JD_FINANCE',
-    ].includes(brand.category);
+    ].includes(brand.id);
 
-    if (isSpecialCategory) {
-      setCategory(brand.category);
-      setName(brand.name);
-      setBankName(brand.shortName);
-      setCardTier(brand.defaultTier);
-      setCardSkin(brand.cardSkin);
-      setCardNetwork(brand.cardNetwork);
-      setColor(brand.primaryColor);
-      setCardBgColor('');
+    if (isDedicatedCategoryBrand) {
+      handleCategoryChange(brand.category);
       return;
     }
 
-    // Bank entity selected (e.g. 招商银行, 工商银行, 建设银行...)
+    // Bank entity selected (e.g. 招商银行, 工商银行, 建设银行, 农业银行, 交通银行, 宁波银行...)
     if (category === 'CREDIT_CARD') {
-      // Retain credit card mode and bind bank info & official styling
       setBankName(brand.shortName);
-      setName(`${brand.shortName}信用卡`);
+      setName(`${brand.shortName}经典白金信用卡`);
       setCardTier('标准白金信用卡');
       setCardSkin(brand.cardSkin);
       setCardNetwork('UNIONPAY');
       setColor(brand.primaryColor);
       setCardBgColor('');
-    } else {
-      // Standard debit card / bank account
-      setCategory('DEBIT_CARD');
-      setName(brand.name);
-      setBankName(brand.shortName);
-      setCardTier(brand.defaultTier);
-      setCardSkin(brand.cardSkin);
-      setCardNetwork(brand.cardNetwork);
-      setColor(brand.primaryColor);
-      setCardBgColor('');
+      setAutoGenMsg(`✨ 已匹配「${brand.shortName}」官方信用卡卡面与品牌配色`);
+      setTimeout(() => setAutoGenMsg(''), 3500);
+      return;
     }
+
+    if (category === 'GOLD') {
+      setBankName(brand.shortName);
+      setName(`${brand.shortName}贵金属积存账户`);
+      setCardTier('9999足金积存账户');
+      setCardSkin('gold-metallic');
+      setColor(brand.primaryColor);
+      setAutoGenMsg(`✨ 已匹配「${brand.shortName}」贵金属积存官方卡面`);
+      setTimeout(() => setAutoGenMsg(''), 3500);
+      return;
+    }
+
+    if (category === 'FUND') {
+      setBankName(brand.shortName);
+      setName(`${brand.shortName}公募基金理财组合`);
+      setCardTier('公募ETF/混合基金组合');
+      setCardSkin(brand.cardSkin);
+      setColor(brand.primaryColor);
+      setAutoGenMsg(`✨ 已匹配「${brand.shortName}」公募基金理财卡面`);
+      setTimeout(() => setAutoGenMsg(''), 3500);
+      return;
+    }
+
+    // Default to debit card / general account
+    setCategory('DEBIT_CARD');
+    setName(brand.name);
+    setBankName(brand.shortName);
+    setCardTier(brand.defaultTier);
+    setCardSkin(brand.cardSkin);
+    setCardNetwork(brand.cardNetwork);
+    setColor(brand.primaryColor);
+    setCardBgColor('');
+    setAutoGenMsg(`✨ 已应用「${brand.name}」官方借记卡卡面与LOGO`);
+    setTimeout(() => setAutoGenMsg(''), 3500);
   };
 
   const isCredit = category === 'CREDIT_CARD' || category === 'JD_BAITIAO' || category === 'HUABEI';
@@ -288,28 +388,111 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
           </button>
         </div>
 
-        {/* Brand Presets Quick Bar */}
-        <div className="mt-4 pb-3 border-b border-slate-100">
-          <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-blue-600" />
-            <span>一键选择开户银行 / 机构品牌 (自动匹配官方LOGO与卡面底色)</span>
-          </label>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
-            {BANK_BRANDS.map((b) => (
+        {/* Notification Banner when auto-matched or customized */}
+        {autoGenMsg && (
+          <div className="mt-3 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 animate-pulse" />
+              <span>{autoGenMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAutoGenMsg('')}
+              className="text-emerald-700 hover:text-emerald-900 ml-2"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Brand Presets Quick Bar - Dynamically Filtered & Category-Aware */}
+        <div className="mt-3.5 pb-3.5 border-b border-slate-100 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-blue-600" />
+              <span>一键选择开户银行 / 机构品牌 (已为您联动「{ACCOUNT_CATEGORY_CONFIG[category]?.label || '当前资产大类'}」)</span>
+            </label>
+
+            {/* Brand Filter Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
               <button
-                key={b.id}
                 type="button"
-                onClick={() => handleSelectBrandPreset(b)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
-                  bankName === b.shortName || name.includes(b.shortName)
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs scale-102'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                onClick={() => setBrandFilterTab('RECOMMENDED')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors ${
+                  brandFilterTab === 'RECOMMENDED'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                <BrandLogo type={b.logoType} size="sm" />
-                <span>{b.shortName}</span>
+                🌟 分类精选
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setBrandFilterTab('BANKS')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors ${
+                  brandFilterTab === 'BANKS'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                🏦 商业银行
+              </button>
+              <button
+                type="button"
+                onClick={() => setBrandFilterTab('DIGITAL')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors ${
+                  brandFilterTab === 'DIGITAL'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                📱 移动支付
+              </button>
+              <button
+                type="button"
+                onClick={() => setBrandFilterTab('CREDIT')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors ${
+                  brandFilterTab === 'CREDIT'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                💳 消费信贷
+              </button>
+              <button
+                type="button"
+                onClick={() => setBrandFilterTab('ALL')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors ${
+                  brandFilterTab === 'ALL'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                📋 全部品牌
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            {getBrandsForCategory(category, brandFilterTab).map((b) => {
+              const isSelected = bankName === b.shortName || name.includes(b.shortName);
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => handleSelectBrandPreset(b)}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
+                    isSelected
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm scale-102 ring-2 ring-blue-500/30'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                  title={`点击快速套用「${b.name}」官方卡面、LOGO与品牌底色`}
+                >
+                  <BrandLogo type={b.logoType} size="sm" />
+                  <span>{b.shortName}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -320,13 +503,16 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
             {/* Category Selector */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  资产大类
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    资产大类
+                  </label>
+                  <span className="text-[10px] text-blue-600 font-medium">⚡ 切换自动联动官方属性</span>
+                </div>
                 <select
                   id="acc-select-category"
                   value={category}
-                  onChange={(e) => setCategory(e.target.value as AccountCategory)}
+                  onChange={(e) => handleCategoryChange(e.target.value as AccountCategory)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:border-slate-400 focus:bg-white"
                 >
                   {Object.entries(ACCOUNT_CATEGORY_CONFIG).map(([key, val]) => (
@@ -511,36 +697,86 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 </div>
               </div>
             ) : isGold ? (
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200/60 space-y-3">
-                <span className="text-xs font-bold text-amber-800">
-                  黄金理财持仓克重与实时金价
-                </span>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/90 via-orange-50/60 to-yellow-50/80 border border-amber-200 space-y-3.5 shadow-xs">
+                {/* Live Market Rate Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-amber-200/80">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 rounded-lg bg-amber-500 text-white">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </span>
+                    <div>
+                      <span className="text-xs font-bold text-amber-900 block">
+                        上海黄金交易所 Au9999 现货基准
+                      </span>
+                      <span className="text-[11px] text-amber-700/90 font-mono">
+                        实时金价: ¥{liveGoldRate.priceRmbGram}/g · 汇率: 1 USD = {liveGoldRate.usdCnyRate} CNY
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setGoldUnitPrice(liveGoldRate.priceRmbGram.toString())}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors flex items-center gap-1"
+                      title="将当前输入框的金价自动填充为今日最新现货金价"
+                    >
+                      <span>⚡ 填入今日最新价 (¥{liveGoldRate.priceRmbGram})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRefreshGoldRate}
+                      disabled={isFetchingGold}
+                      className="p-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs transition-colors disabled:opacity-50"
+                      title="刷新最新行情"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${isFetchingGold ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">持仓克重 (克)</label>
+                    <label className="block text-xs text-amber-900 font-semibold mb-1">
+                      持仓克重 (克 / g)
+                    </label>
                     <input
                       type="number"
-                      step="0.1"
+                      step="0.01"
                       required
                       value={goldGrams}
                       onChange={(e) => setGoldGrams(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none font-semibold"
+                      placeholder="例如: 50"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-amber-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">当前金价 (元/克)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs text-amber-900 font-semibold">
+                        当前金价 (元/克)
+                      </label>
+                      <span className="text-[10px] text-amber-700 font-medium">
+                        国际折算: ${liveGoldRate.priceUsdOz}/oz
+                      </span>
+                    </div>
                     <input
                       type="number"
-                      step="1"
+                      step="0.01"
                       required
                       value={goldUnitPrice}
                       onChange={(e) => setGoldUnitPrice(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none font-semibold"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-amber-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
                     />
                   </div>
                 </div>
-                <div className="text-xs text-amber-800 font-medium">
-                  实时折算总估值: ¥{calcBalance.toFixed(2)}
+
+                <div className="p-3 rounded-xl bg-amber-100/60 border border-amber-200/80 flex items-center justify-between">
+                  <span className="text-xs text-amber-900 font-medium">
+                    折算黄金资产总市值 (克重 × 金价):
+                  </span>
+                  <div className="text-base sm:text-lg font-extrabold text-amber-900 font-mono">
+                    ¥{calcBalance.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
                 </div>
               </div>
             ) : isLendOrBorrow ? (

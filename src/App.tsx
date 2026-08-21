@@ -46,6 +46,7 @@ import { BatchReconcileModal } from './components/BatchReconcileModal';
 import { SecuritySettingsModal } from './components/SecuritySettingsModal';
 import { SyncBackupModal } from './components/SyncBackupModal';
 import { mergeAccounts, mergeTransactions } from './lib/backup';
+import { updateAccountsWithGoldPrice } from './lib/goldRates';
 import {
   CreditCard,
   Plus,
@@ -377,6 +378,21 @@ export default function App() {
     setAccounts(updated);
   };
 
+  // Synchronize all gold accounts with latest market price
+  const handleSyncGoldAccountsValuation = (newPrice: number) => {
+    if (!currentUser) return;
+    const result = updateAccountsWithGoldPrice(accounts, newPrice);
+    if (result.updatedCount > 0) {
+      saveAccounts(currentUser.id, result.updatedAccounts);
+      setAccounts(result.updatedAccounts);
+      showToast(
+        `✨ 已按实时金价 ¥${newPrice}/克 同步更新 ${result.updatedCount} 个黄金账户，市值折合 ¥${result.totalGoldValuation.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`
+      );
+    } else {
+      showToast('未检测到黄金理财账户，您可在「账户卡包」中添加「黄金理财」账户');
+    }
+  };
+
   // Update Monthly Budget
   const handleUpdateBudget = (newBudget: number) => {
     if (!currentUser) return;
@@ -596,6 +612,7 @@ export default function App() {
               transactions={transactions}
               summary={summary}
               privacyMode={privacyMode}
+              onSyncGoldAccountsValuation={handleSyncGoldAccountsValuation}
             />
           </div>
         )}

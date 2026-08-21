@@ -33,6 +33,7 @@ import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
 import { AccountCardFace } from './AccountCardFace';
 import { formatCurrency } from '../lib/formatters';
 import { getRandomCardBackground } from '../lib/brandHelper';
+import { fetchLiveGoldRate, getCachedGoldRate, GoldMarketRate } from '../lib/goldRates';
 
 interface AccountsListProps {
   accounts: FinancialAccount[];
@@ -78,6 +79,12 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [quickGoldGrams, setQuickGoldGrams] = useState<string>('');
   const [quickGoldPrice, setQuickGoldPrice] = useState<string>('');
   const [quickNotes, setQuickNotes] = useState<string>('');
+  const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
+
+  // Fetch live gold rate for quick reconcile
+  React.useEffect(() => {
+    fetchLiveGoldRate().then((rate) => setLiveGoldRate(rate));
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -817,30 +824,53 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 </div>
               </div>
             ) : reconcilingAccount.category === 'GOLD' ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    持有克重 (g)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={quickGoldGrams}
-                    onChange={(e) => setQuickGoldGrams(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm"
-                  />
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-amber-900 block">上海金 Au9999 现货行情:</span>
+                    <span className="text-amber-700 font-mono">¥{liveGoldRate.priceRmbGram}/g · 汇率: 1 USD = {liveGoldRate.usdCnyRate} CNY</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setQuickGoldPrice(liveGoldRate.priceRmbGram.toString())}
+                    className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-xs transition-colors text-[11px]"
+                  >
+                    ⚡ 填入今日价 (¥{liveGoldRate.priceRmbGram})
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    金价单价 (¥/g)
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={quickGoldPrice}
-                    onChange={(e) => setQuickGoldPrice(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm"
-                  />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      持有克重 (g)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={quickGoldGrams}
+                      onChange={(e) => setQuickGoldGrams(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      金价单价 (¥/g)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={quickGoldPrice}
+                      onChange={(e) => setQuickGoldPrice(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm font-semibold text-amber-700"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-xs text-amber-800 font-medium flex items-center justify-between px-1">
+                  <span>折算总估值:</span>
+                  <span className="font-bold font-mono text-sm text-amber-900">
+                    ¥{((parseFloat(quickGoldGrams) || 0) * (parseFloat(quickGoldPrice) || 0)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
             ) : (

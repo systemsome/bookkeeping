@@ -81,7 +81,10 @@ export interface IncomeCategory {
 export interface Transaction {
   id: string;
   type: TransactionType;
-  amount: number;
+  amount: number; // 记账基准金额 (折合人民币 CNY)
+  originalAmount?: number; // 外币原币金额 (如 100 USD)
+  currency?: string; // 币种代码 (如 'USD', 'EUR', 'JPY', 'HKD', 默认 'CNY')
+  exchangeRate?: number; // 记账汇率 (1 外币 = X 人民币)
   date: string; // YYYY-MM-DD
   time?: string; // HH:mm
   accountId: string; // 扣款/入账/支出账户

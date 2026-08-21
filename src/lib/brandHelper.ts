@@ -408,7 +408,362 @@ export const BANK_BRANDS: BankBrandInfo[] = [
     logoType: 'payable',
     defaultTier: '个人借款债务',
   },
+  {
+    id: 'CEB',
+    name: '中国光大银行',
+    shortName: '光大银行',
+    englishName: 'CHINA EVERBRIGHT BANK',
+    category: 'DEBIT_CARD',
+    primaryColor: '#7e22ce',
+    secondaryColor: '#581c87',
+    gradientClass: 'from-[#7e22ce] via-[#6b21a8] to-[#3b0764]',
+    cardSkin: 'purple-aurora',
+    cardNetwork: 'UNIONPAY',
+    logoType: 'ceb',
+    defaultTier: '阳光借记卡',
+  },
+  {
+    id: 'CIB',
+    name: '兴业银行',
+    shortName: '兴业银行',
+    englishName: 'INDUSTRIAL BANK',
+    category: 'DEBIT_CARD',
+    primaryColor: '#1d4ed8',
+    secondaryColor: '#1e3a8a',
+    gradientClass: 'from-[#1d4ed8] via-[#1e40af] to-[#0f172a]',
+    cardSkin: 'ccb-blue',
+    cardNetwork: 'UNIONPAY',
+    logoType: 'cib',
+    defaultTier: '自然人生借记卡',
+  },
+  {
+    id: 'CGB',
+    name: '广发银行',
+    shortName: '广发银行',
+    englishName: 'CHINA GUANGFA BANK',
+    category: 'DEBIT_CARD',
+    primaryColor: '#dc2626',
+    secondaryColor: '#991b1b',
+    gradientClass: 'from-[#dc2626] via-[#b91c1c] to-[#450a0a]',
+    cardSkin: 'icbc-red',
+    cardNetwork: 'UNIONPAY',
+    logoType: 'cgb',
+    defaultTier: '臻尚借记卡',
+  },
+  {
+    id: 'HXB',
+    name: '华夏银行',
+    shortName: '华夏银行',
+    englishName: 'HUA XIA BANK',
+    category: 'DEBIT_CARD',
+    primaryColor: '#b91c1c',
+    secondaryColor: '#7f1d1d',
+    gradientClass: 'from-[#b91c1c] via-[#991b1b] to-[#450a0a]',
+    cardSkin: 'boc-red',
+    cardNetwork: 'UNIONPAY',
+    logoType: 'hxb',
+    defaultTier: '华夏借记卡',
+  },
+  {
+    id: 'APPLEPAY',
+    name: 'Apple Pay 苹果支付',
+    shortName: 'Apple Pay',
+    englishName: 'APPLE PAY WALLET',
+    category: 'ALIPAY',
+    primaryColor: '#0f172a',
+    secondaryColor: '#020617',
+    gradientClass: 'from-[#1e293b] via-[#0f172a] to-[#020617]',
+    cardSkin: 'platinum-dark',
+    cardNetwork: 'NONE',
+    logoType: 'applepay',
+    defaultTier: 'Apple Wallet 快捷支付',
+  },
 ];
+
+export interface CategoryPreset {
+  category: AccountCategory;
+  name: string;
+  bankName: string;
+  cardTier: string;
+  cardSkin: string;
+  cardNetwork: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE';
+  primaryColor: string;
+  logoType: string;
+  balance?: string;
+  creditLimit?: string;
+  usedCredit?: string;
+  billDay?: string;
+  dueDay?: string;
+  goldGrams?: string;
+  goldUnitPrice?: string;
+  counterparty?: string;
+  dueDate?: string;
+  notes?: string;
+}
+
+/**
+ * Get standard recommended preset for an asset category
+ */
+export function getDefaultPresetForCategory(category: AccountCategory): CategoryPreset {
+  switch (category) {
+    case 'CREDIT_CARD':
+      return {
+        category: 'CREDIT_CARD',
+        name: '招商银行经典白金信用卡',
+        bankName: '招商银行',
+        cardTier: '经典白金信用卡',
+        cardSkin: 'classic-cmb',
+        cardNetwork: 'UNIONPAY',
+        primaryColor: '#e11d48',
+        logoType: 'cmb',
+        creditLimit: '20000',
+        usedCredit: '0',
+        billDay: '5',
+        dueDay: '25',
+      };
+    case 'DEBIT_CARD':
+      return {
+        category: 'DEBIT_CARD',
+        name: '招商银行一卡通',
+        bankName: '招商银行',
+        cardTier: '金葵花一卡通',
+        cardSkin: 'classic-cmb',
+        cardNetwork: 'UNIONPAY',
+        primaryColor: '#e11d48',
+        logoType: 'cmb',
+        balance: '0',
+      };
+    case 'ALIPAY':
+      return {
+        category: 'ALIPAY',
+        name: '支付宝余额账户',
+        bankName: '支付宝',
+        cardTier: '个人实名认证账户',
+        cardSkin: 'alipay-blue',
+        cardNetwork: 'NONE',
+        primaryColor: '#1677ff',
+        logoType: 'alipay',
+        balance: '0',
+      };
+    case 'HUABEI':
+      return {
+        category: 'HUABEI',
+        name: '蚂蚁花呗',
+        bankName: '蚂蚁花呗',
+        cardTier: '花呗消费信贷额度',
+        cardSkin: 'huabei-blue',
+        cardNetwork: 'NONE',
+        primaryColor: '#0083ff',
+        logoType: 'huabei',
+        creditLimit: '10000',
+        usedCredit: '0',
+        billDay: '1',
+        dueDay: '10',
+      };
+    case 'JD_BAITIAO':
+      return {
+        category: 'JD_BAITIAO',
+        name: '京东白条',
+        bankName: '京东白条',
+        cardTier: '先享后付白条额度',
+        cardSkin: 'baitiao-pink',
+        cardNetwork: 'NONE',
+        primaryColor: '#ec4899',
+        logoType: 'baitiao',
+        creditLimit: '8000',
+        usedCredit: '0',
+        billDay: '8',
+        dueDay: '28',
+      };
+    case 'JD_FINANCE':
+      return {
+        category: 'JD_FINANCE',
+        name: '京东小金库',
+        bankName: '京东金融',
+        cardTier: '京东小金库尊享',
+        cardSkin: 'jd-red',
+        cardNetwork: 'NONE',
+        primaryColor: '#ef4444',
+        logoType: 'jd',
+        balance: '0',
+      };
+    case 'YUEBAO':
+      return {
+        category: 'YUEBAO',
+        name: '余额宝货币基金',
+        bankName: '余额宝',
+        cardTier: '货币基金理财账户',
+        cardSkin: 'gold-metallic',
+        cardNetwork: 'NONE',
+        primaryColor: '#f97316',
+        logoType: 'yuebao',
+        balance: '0',
+      };
+    case 'GOLD':
+      return {
+        category: 'GOLD',
+        name: '黄金积存金 (9999足金)',
+        bankName: '黄金积存',
+        cardTier: '9999足金积存账户',
+        cardSkin: 'gold-metallic',
+        cardNetwork: 'NONE',
+        primaryColor: '#d97706',
+        logoType: 'gold',
+        goldGrams: '50',
+        goldUnitPrice: '600',
+      };
+    case 'FUND':
+      return {
+        category: 'FUND',
+        name: '公募基金理财组合',
+        bankName: '公募基金',
+        cardTier: '公募ETF/混合基金组合',
+        cardSkin: 'purple-aurora',
+        cardNetwork: 'NONE',
+        primaryColor: '#8b5cf6',
+        logoType: 'fund',
+        balance: '0',
+      };
+    case 'CASH':
+      return {
+        category: 'CASH',
+        name: '随身现金与应急备用金',
+        bankName: '随身现金',
+        cardTier: '纸币现金 / 备用钱包',
+        cardSkin: 'emerald-cash',
+        cardNetwork: 'NONE',
+        primaryColor: '#059669',
+        logoType: 'cash',
+        balance: '0',
+      };
+    case 'RECEIVABLE':
+      return {
+        category: 'RECEIVABLE',
+        name: '借出款项 (债权待收)',
+        bankName: '借出待收',
+        cardTier: '借款人债权契约',
+        cardSkin: 'midnight-navy',
+        cardNetwork: 'NONE',
+        primaryColor: '#0891b2',
+        logoType: 'receivable',
+        balance: '0',
+        counterparty: '张三',
+      };
+    case 'PAYABLE':
+      return {
+        category: 'PAYABLE',
+        name: '借入借款 (债务待还)',
+        bankName: '借入待还',
+        cardTier: '个人借款债务',
+        cardSkin: 'purple-aurora',
+        cardNetwork: 'NONE',
+        primaryColor: '#9333ea',
+        logoType: 'payable',
+        balance: '0',
+        counterparty: '李四',
+      };
+    default:
+      return {
+        category: 'DEBIT_CARD',
+        name: '银行卡账户',
+        bankName: '招商银行',
+        cardTier: '标准一卡通',
+        cardSkin: 'classic-cmb',
+        cardNetwork: 'UNIONPAY',
+        primaryColor: '#e11d48',
+        logoType: 'cmb',
+        balance: '0',
+      };
+  }
+}
+
+/**
+ * Filter brands smartly based on Category and Tab selection
+ */
+export function getBrandsForCategory(
+  category: AccountCategory,
+  activeTab: 'RECOMMENDED' | 'BANKS' | 'DIGITAL' | 'CREDIT' | 'ALL' = 'RECOMMENDED'
+): BankBrandInfo[] {
+  if (activeTab === 'BANKS') {
+    return BANK_BRANDS.filter(
+      (b) => b.category === 'DEBIT_CARD' || ['CMB', 'ICBC', 'CCB', 'ABC', 'BOC', 'BOCOM', 'CITIC', 'PINGAN', 'SPDB', 'PSBC', 'CMBC', 'CEB', 'CIB', 'CGB', 'HXB', 'NBCB', 'BOB', 'BOS', 'MYBANK', 'WEBANK', 'AIBANK'].includes(b.id)
+    );
+  }
+
+  if (activeTab === 'DIGITAL') {
+    return BANK_BRANDS.filter(
+      (b) => ['ALIPAY', 'WECHAT', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+    );
+  }
+
+  if (activeTab === 'CREDIT') {
+    return BANK_BRANDS.filter(
+      (b) => ['HUABEI', 'JD_BAITIAO', 'CMB', 'ICBC', 'CCB', 'CITIC', 'PINGAN', 'SPDB', 'PAYABLE', 'RECEIVABLE'].includes(b.id)
+    );
+  }
+
+  if (activeTab === 'ALL') {
+    return BANK_BRANDS;
+  }
+
+  // RECOMMENDED Mode: Dynamically select brands tailored strictly for this category
+  switch (category) {
+    case 'DEBIT_CARD':
+    case 'CREDIT_CARD':
+      return BANK_BRANDS.filter(
+        (b) => ['CMB', 'ICBC', 'CCB', 'ABC', 'BOC', 'BOCOM', 'CITIC', 'PINGAN', 'SPDB', 'PSBC', 'CMBC', 'CEB', 'CIB', 'CGB', 'HXB', 'NBCB', 'BOB', 'BOS', 'MYBANK', 'WEBANK', 'AIBANK'].includes(b.id)
+      );
+
+    case 'ALIPAY':
+      return BANK_BRANDS.filter(
+        (b) => ['ALIPAY', 'WECHAT', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+      );
+
+    case 'HUABEI':
+      return BANK_BRANDS.filter(
+        (b) => ['HUABEI', 'ALIPAY', 'JD_BAITIAO', 'CMB', 'ICBC'].includes(b.id)
+      );
+
+    case 'JD_BAITIAO':
+    case 'JD_FINANCE':
+      return BANK_BRANDS.filter(
+        (b) => ['JD_BAITIAO', 'JD_FINANCE', 'ALIPAY', 'WECHAT'].includes(b.id)
+      );
+
+    case 'YUEBAO':
+      return BANK_BRANDS.filter(
+        (b) => ['YUEBAO', 'ALIPAY', 'WECHAT', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+      );
+
+    case 'GOLD':
+      return BANK_BRANDS.filter(
+        (b) => ['GOLD', 'ICBC', 'CMB', 'CCB', 'ABC', 'ALIPAY'].includes(b.id)
+      );
+
+    case 'FUND':
+      return BANK_BRANDS.filter(
+        (b) => ['FUND', 'CMB', 'ALIPAY', 'WECHAT', 'ICBC', 'CCB', 'PINGAN'].includes(b.id)
+      );
+
+    case 'CASH':
+      return BANK_BRANDS.filter(
+        (b) => ['CASH', 'ICBC', 'BOC', 'CCB', 'ABC'].includes(b.id)
+      );
+
+    case 'RECEIVABLE':
+      return BANK_BRANDS.filter(
+        (b) => ['RECEIVABLE', 'ALIPAY', 'WECHAT', 'CMB', 'ICBC'].includes(b.id)
+      );
+
+    case 'PAYABLE':
+      return BANK_BRANDS.filter(
+        (b) => ['PAYABLE', 'HUABEI', 'JD_BAITIAO', 'CMB', 'ICBC', 'CCB'].includes(b.id)
+      );
+
+    default:
+      return BANK_BRANDS;
+  }
+}
 
 /**
  * CURATED LUXURY CARD GRADIENT RECIPES

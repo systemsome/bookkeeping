@@ -19,6 +19,7 @@ import {
 import { Transaction, FinancialAccount, FinancialSummary, UserProfile } from '../types';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency } from '../lib/formatters';
+import { getCurrencyInfo } from '../lib/forexRates';
 
 interface HomeExpenseDashboardProps {
   summary: FinancialSummary;
@@ -514,6 +515,8 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
           <div className="divide-y divide-slate-100 mt-1">
             {recentExpenses.map((tx) => {
               const acc = accounts.find((a) => a.id === tx.accountId);
+              const isForeign = tx.currency && tx.currency !== 'CNY';
+              const curInfo = isForeign ? getCurrencyInfo(tx.currency!) : null;
 
               return (
                 <div
@@ -526,13 +529,19 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
                       支
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-xs sm:text-sm text-slate-900 truncate">
                           {tx.description || tx.category}
                         </span>
                         <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[11px] text-slate-600 font-medium">
                           {tx.category}
                         </span>
+                        {isForeign && curInfo && (
+                          <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-200/60 flex items-center gap-1">
+                            <span>{curInfo.flag}</span>
+                            <span>{curInfo.code} {curInfo.symbol}{tx.originalAmount || tx.amount}</span>
+                          </span>
+                        )}
                         {tx.tag && (
                           <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200/50">
                             {tx.tag}
@@ -546,10 +555,17 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
                   </div>
 
                   {/* Right Amount & Actions */}
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className="font-bold text-sm sm:text-base text-rose-600">
-                      -{formatCurrency(tx.amount, privacyMode)}
-                    </span>
+                  <div className="flex items-center gap-3 flex-shrink-0 text-right">
+                    <div>
+                      <span className="font-bold text-sm sm:text-base text-rose-600 block font-mono">
+                        -{formatCurrency(tx.amount, privacyMode)}
+                      </span>
+                      {isForeign && curInfo && (
+                        <span className="text-[10px] text-blue-700 font-mono">
+                          原币 -{curInfo.symbol}{tx.originalAmount || tx.amount}
+                        </span>
+                      )}
+                    </div>
 
                     {/* Edit & Delete Action Buttons */}
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
