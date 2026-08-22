@@ -122,7 +122,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
             <Wallet className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            全能资产记账管家
+            资产管家
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-xs">
             {isRegisterMode

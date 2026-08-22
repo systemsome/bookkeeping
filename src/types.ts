@@ -113,8 +113,9 @@ export interface UserProfile {
 
 export interface FinancialSummary {
   netWorth: number; // 净资产 (流动资产 + 投资理财 + 借出应收，不含信用卡借贷)
-  liquidAssets: number; // 现有可用流动资金 (借记卡 + 支付宝 + 现金)
-  investmentAssets: number; // 投资总资产 (余额宝 + 基金 + 黄金 + 京东金融)
+  liquidAssets: number; // 基础流动资金 (借记卡 + 支付宝 + 现金)
+  investmentAssets: number; // 投资理财总额 (余额宝 + 基金 + 黄金 + 京东金融)
+  totalAvailableFunds: number; // 现有可用流动资金合计 (包含理财投资合计 = 流动资金 + 理财投资)
   receivables: number; // 借出待收金额
   
   totalCreditLimit: number; // 信用卡与白条信贷总额度

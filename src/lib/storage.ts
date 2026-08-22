@@ -19,7 +19,7 @@ const DEFAULT_DEMO_USER: UserProfile = {
   passwordHash: 'demo123456', // In a real app this is salted hash
   pinCode: '123456', // 6-digit default PIN for unlock
   autoLockMinutes: 15,
-  privacyMode: false,
+  privacyMode: true, // 默认隐藏敏感金额
   lastLoginTime: new Date().toISOString(),
 };
 
@@ -396,6 +396,9 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
   const creditUtilizationRate = totalCreditLimit > 0 ? (totalUsedCredit / totalCreditLimit) * 100 : 0;
   const totalLiabilities = totalUsedCredit + totalPayableDebts;
   
+  // 核心计算：可用流动资金合计 = 基础流动资产 + 理财投资合计
+  const totalAvailableFunds = liquidAssets + investmentAssets;
+
   // 核心计算：净资产 = 现有流动资产 + 投资理财资产 + 借出待收款
   // （信用卡借贷欠款与借入资金不计入净资产中，而是单独设立专区展示）
   const netWorth = liquidAssets + investmentAssets + receivables;
@@ -430,6 +433,7 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
     netWorth,
     liquidAssets,
     investmentAssets,
+    totalAvailableFunds,
     receivables,
     totalCreditLimit,
     totalUsedCredit,

@@ -10,10 +10,19 @@ import {
   Pencil,
   Globe2,
   ArrowRightLeft,
+  UploadCloud,
+  Download,
+  FileSpreadsheet,
+  PlusCircle,
+  Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import { Transaction, FinancialAccount } from '../types';
 import { formatCurrency } from '../lib/formatters';
 import { getCurrencyInfo } from '../lib/forexRates';
+import { TransactionImportModal } from './TransactionImportModal';
+import { TransactionExportModal } from './TransactionExportModal';
+import { downloadTransactionTemplate } from '../lib/transactionImportExport';
 
 interface TransactionLedgerProps {
   transactions: Transaction[];
@@ -22,6 +31,11 @@ interface TransactionLedgerProps {
   onDeleteTransaction: (txId: string) => void;
   onEditTransaction: (tx: Transaction) => void;
   onOpenNewTx: () => void;
+  onImportTransactions: (
+    importedList: Transaction[],
+    syncAccountBalances: boolean
+  ) => void;
+  onShowToast: (msg: string) => void;
 }
 
 export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
@@ -31,12 +45,18 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   onDeleteTransaction,
   onEditTransaction,
   onOpenNewTx,
+  onImportTransactions,
+  onShowToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
   const [selectedCurrency, setSelectedCurrency] = useState<string>('ALL');
+
+  // Modals for Upload & Export
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Account map for quick lookup
   const accountMap = React.useMemo(() => {
@@ -113,20 +133,60 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* Header */}
+      {/* Header with Title & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-            记账流水与明细规整
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            清晰记录每一笔消费支出、工资收入、外币交易折算、账户划转、信用卡还款与借款往来
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              记账流水与明细
+            </h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+              共 {transactions.length} 笔明细
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            清晰记录每一笔消费支出、工资收入、外币交易折算、账户划转、信用卡还款与借款往来，支持上传导入与导出
           </p>
+        </div>
+
+        {/* Upload & Export Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Upload / Import Button */}
+          <button
+            id="btn-ledger-upload"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
+            title="上传导入微信/支付宝账单、银行流水或标准表格"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>上传导入</span>
+          </button>
+
+          {/* Export Button */}
+          <button
+            id="btn-ledger-export"
+            onClick={() => setIsExportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+            title="导出为 Excel 工作表 (.xlsx)、CSV 或 JSON 数据"
+          >
+            <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span>导出流水</span>
+          </button>
+
+          {/* Add Record Button */}
+          <button
+            id="btn-ledger-add"
+            onClick={onOpenNewTx}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
+          >
+            <PlusCircle className="w-4 h-4 text-emerald-400" />
+            <span>记一笔</span>
+          </button>
         </div>
       </div>
 
       {/* Filter Controls Bar */}
-      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-3">
+      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Search */}
           <div className="relative lg:col-span-1">
@@ -137,7 +197,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="搜索分类、备注、币种..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white dark:focus:bg-slate-800"
             />
           </div>
 
@@ -147,7 +207,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               id="ledger-filter-type"
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
             >
               <option value="ALL">全部交易类型</option>
               <option value="EXPENSE">支出消费</option>
@@ -167,7 +227,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               id="ledger-filter-account"
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
             >
               <option value="ALL">全部关联账户</option>
               {accounts.map((a) => (
@@ -184,7 +244,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               id="ledger-filter-currency"
               value={selectedCurrency}
               onChange={(e) => setSelectedCurrency(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
             >
               <option value="ALL">全部币种交易</option>
               <option value="FOREIGN_ONLY">🌐 仅外币折算交易</option>
@@ -208,7 +268,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               id="ledger-filter-month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
             >
               <option value="ALL">全部历史月份</option>
               {months.map((m) => (
@@ -220,55 +280,85 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         </div>
 
-        {/* Filter Summary Tags */}
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        {/* Filter Summary Tags & Quick Actions */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
             <span>
-              共筛选出 <strong className="text-slate-800">{filteredTransactions.length}</strong> 条记录
+              共筛选出 <strong className="text-slate-800 dark:text-white">{filteredTransactions.length}</strong> 条记录
             </span>
-            <span className="text-rose-600 font-medium">
+            <span className="text-rose-600 dark:text-rose-400 font-medium">
               总支出: {formatCurrency(filteredExpense, privacyMode)}
             </span>
-            <span className="text-emerald-700 font-medium">
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">
               总收入: {formatCurrency(filteredIncome, privacyMode)}
             </span>
             {foreignCount > 0 && (
-              <span className="text-blue-700 font-medium bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 flex items-center gap-1">
+              <span className="text-blue-700 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-900/60 flex items-center gap-1">
                 <Globe2 className="w-3 h-3" />
                 包含 {foreignCount} 笔外币交易
               </span>
             )}
           </div>
 
-          {(searchTerm || selectedType !== 'ALL' || selectedAccountId !== 'ALL' || selectedMonth !== 'ALL' || selectedCurrency !== 'ALL') && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedType('ALL');
-                setSelectedAccountId('ALL');
-                setSelectedMonth('ALL');
-                setSelectedCurrency('ALL');
-              }}
-              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+              onClick={() => downloadTransactionTemplate('csv')}
+              className="text-xs text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 flex items-center gap-1 transition-colors"
+              title="下载标准 CSV 导入模板"
             >
-              清空筛选条件
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>下载标准导入模板</span>
             </button>
-          )}
+
+            {(searchTerm || selectedType !== 'ALL' || selectedAccountId !== 'ALL' || selectedMonth !== 'ALL' || selectedCurrency !== 'ALL') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedType('ALL');
+                  setSelectedAccountId('ALL');
+                  setSelectedMonth('ALL');
+                  setSelectedCurrency('ALL');
+                }}
+                className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium"
+              >
+                清空筛选条件
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Transactions List */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
         {filteredTransactions.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
-            <ReceiptText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-            <p className="text-base font-semibold text-slate-700">暂无符合条件的流水明细</p>
-            <p className="text-xs text-slate-400 mt-1">
-              点击右下角「记一笔」或添加流水开始记录，支持录入外币并按实时汇率折算
+            <ReceiptText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+            <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
+              暂无符合条件的记账流水明细
             </p>
+            <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+              您可以直接点击「上传导入」批量导入微信/支付宝/银行账单表格，或点击「记一笔」随时记录
+            </p>
+
+            <div className="flex items-center justify-center gap-3 mt-5">
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-xs transition-all"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>上传导入账单</span>
+              </button>
+              <button
+                onClick={() => downloadTransactionTemplate('xlsx')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                <span>下载 Excel 模板</span>
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredTransactions.map((tx) => {
               const acc = accountMap.get(tx.accountId);
               const targetAcc = tx.targetAccountId ? accountMap.get(tx.targetAccountId) : null;
@@ -283,21 +373,21 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               return (
                 <div
                   key={tx.id}
-                  className="p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50/70 transition-colors group"
+                  className="p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors group"
                 >
                   {/* Left info & Icon */}
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div
                       className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
                         isExpense
-                          ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                          ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/60'
                           : isIncome
-                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/60'
                           : isRepayment
-                          ? 'bg-purple-50 text-purple-600 border border-purple-100'
+                          ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/60'
                           : isTransfer
-                          ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                          : 'bg-cyan-50 text-cyan-600 border border-cyan-100'
+                          ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/60'
+                          : 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-100 dark:border-cyan-900/60'
                       }`}
                     >
                       {isExpense ? (
@@ -315,14 +405,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-slate-900 text-sm sm:text-base truncate">
+                        <span className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base truncate">
                           {tx.description || tx.category}
                         </span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/60">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
                           {tx.category}
                         </span>
                         {isForeign && curInfo && (
-                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 flex items-center gap-1 shadow-2xs">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60 flex items-center gap-1 shadow-2xs">
                             <span>{curInfo.flag}</span>
                             <span>{curInfo.code}</span>
                             <span className="font-mono font-normal">
@@ -331,29 +421,34 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                           </span>
                         )}
                         {tx.tag && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-50 text-slate-500 border border-slate-200/50">
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700">
                             #{tx.tag}
                           </span>
                         )}
                       </div>
 
                       {/* Account Route & Date */}
-                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 flex-wrap">
+                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 dark:text-slate-500 flex-wrap">
                         <span>{tx.date}</span>
                         {tx.time && <span>{tx.time}</span>}
                         <span>·</span>
-                        <span className="text-slate-600 font-medium">
+                        <span className="text-slate-600 dark:text-slate-300 font-medium">
                           {acc?.name || '未知账户'}
                         </span>
                         {targetAcc && (
                           <>
                             <span>➔</span>
-                            <span className="text-slate-600 font-medium">{targetAcc.name}</span>
+                            <span className="text-slate-600 dark:text-slate-300 font-medium">{targetAcc.name}</span>
                           </>
                         )}
+                        {tx.merchant && tx.merchant !== tx.description && (
+                          <span className="text-slate-500 dark:text-slate-400">
+                            (商户: {tx.merchant})
+                          </span>
+                        )}
                         {tx.counterparty && (
-                          <span className="text-amber-700">
-                            (对手人: {tx.counterparty})
+                          <span className="text-amber-700 dark:text-amber-400">
+                            (对手: {tx.counterparty})
                           </span>
                         )}
                       </div>
@@ -367,14 +462,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                       <div
                         className={`text-base sm:text-lg font-bold font-mono ${
                           isExpense
-                            ? 'text-rose-600'
+                            ? 'text-rose-600 dark:text-rose-400'
                             : isIncome
-                            ? 'text-emerald-700'
+                            ? 'text-emerald-700 dark:text-emerald-400'
                             : isRepayment
-                            ? 'text-purple-600'
+                            ? 'text-purple-600 dark:text-purple-400'
                             : isTransfer
-                            ? 'text-blue-600'
-                            : 'text-cyan-600'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-cyan-600 dark:text-cyan-400'
                         }`}
                       >
                         {isExpense
@@ -386,7 +481,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
                       {/* Foreign Amount & Subtitle */}
                       {isForeign && curInfo ? (
-                        <div className="text-[11px] text-blue-700 font-mono font-medium flex items-center justify-end gap-1">
+                        <div className="text-[11px] text-blue-700 dark:text-blue-300 font-mono font-medium flex items-center justify-end gap-1">
                           <span>原币:</span>
                           <span>
                             {isExpense ? '-' : isIncome ? '+' : ''}
@@ -411,7 +506,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => onEditTransaction(tx)}
-                        className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all"
+                        className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
                         title="编辑此笔流水"
                       >
                         <Pencil className="w-4 h-4" />
@@ -422,7 +517,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                             onDeleteTransaction(tx.id);
                           }
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all"
                         title="删除此笔流水"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -435,7 +530,31 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Upload / Import Modal */}
+      {isImportModalOpen && (
+        <TransactionImportModal
+          accounts={accounts}
+          existingTransactions={transactions}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportConfirm={(importedList, syncBalances) => {
+            onImportTransactions(importedList, syncBalances);
+          }}
+          onShowToast={onShowToast}
+        />
+      )}
+
+      {/* Export Modal */}
+      {isExportModalOpen && (
+        <TransactionExportModal
+          allTransactions={transactions}
+          filteredTransactions={filteredTransactions}
+          accounts={accounts}
+          privacyMode={privacyMode}
+          onClose={() => setIsExportModalOpen(false)}
+          onShowToast={onShowToast}
+        />
+      )}
     </div>
   );
 };
-
