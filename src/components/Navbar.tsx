@@ -19,6 +19,8 @@ import {
   Moon,
   Monitor,
   Check,
+  Github,
+  ExternalLink,
 } from 'lucide-react';
 import { UserProfile, FinancialSummary } from '../types';
 import { formatCurrency } from '../lib/formatters';
@@ -248,6 +250,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
+            {/* GitHub Repository Link Button (右上角 GitHub 仓库入口) */}
+            <a
+              id="btn-github-repo"
+              href="https://github.com/systemsome/bookkeeping"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="GitHub 源码仓库 (systemsome/bookkeeping)"
+              aria-label="GitHub 源码仓库"
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center group"
+            >
+              <Github className="w-4 h-4 transition-transform group-hover:scale-110" />
+            </a>
+
             {/* Quick Record CTA Button (Pure Icon Format: 顶部记一笔直接采用图标格式不再添加文字) */}
             <button
               id="btn-quick-record"
@@ -337,6 +352,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                       <span>锁定屏幕 (PIN码)</span>
                     </button>
+
+                    <a
+                      id="menu-item-github"
+                      href="https://github.com/systemsome/bookkeeping"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowUserMenu(false)}
+                      className="w-full flex items-center justify-between px-3.5 py-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-xs font-medium"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Github className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+                        <span>GitHub 开源仓库</span>
+                      </div>
+                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </a>
 
                     <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
 

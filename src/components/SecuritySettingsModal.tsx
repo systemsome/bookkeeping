@@ -10,6 +10,8 @@ import {
   AlertTriangle,
   FolderSync,
   Cloud,
+  Github,
+  ExternalLink,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { updateCurrentUser, getAccounts, getTransactions, saveAccounts, saveTransactions, resetToDemoData } from '../lib/storage';
@@ -305,6 +307,20 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
               <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
               <span>重置示例数据</span>
             </button>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+            <span>资产管家 · 安全开源记账</span>
+            <a
+              href="https://github.com/systemsome/bookkeeping"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-medium transition-colors"
+            >
+              <Github className="w-3.5 h-3.5" />
+              <span>GitHub 项目地址</span>
+              <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+            </a>
           </div>
         </div>
       </div>
