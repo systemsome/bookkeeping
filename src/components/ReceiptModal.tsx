@@ -239,17 +239,30 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     second: '2-digit',
   });
 
-  // 1. Download as PNG Image
+  // 1. Download as PNG Image (With exact 1:1 layout, font, background and dimensions preservation)
   const handleDownloadImage = async () => {
     if (!receiptRef.current) return;
     try {
       setIsGeneratingImg(true);
       if (soundEnabled) playPOSSound('tear');
 
-      const dataUrl = await toPng(receiptRef.current, {
+      const el = receiptRef.current;
+
+      const bgColor = {
+        classic: '#ffffff',
+        cafe: '#fbf7ee',
+        cyber: '#020617',
+        muji: '#fafafa',
+      }[theme];
+
+      const dataUrl = await toPng(el, {
         cacheBust: true,
-        pixelRatio: 2.5,
-        backgroundColor: theme === 'cyber' ? '#0f172a' : '#ffffff',
+        pixelRatio: 3,
+        backgroundColor: bgColor,
+        style: {
+          transform: 'none',
+          margin: '0',
+        },
       });
 
       const link = document.createElement('a');
@@ -257,7 +270,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       link.href = dataUrl;
       link.click();
 
-      showNotification('✅ 账单小票已保存为高清图片！');
+      showNotification('✅ 账单小票已保存为高清长图！');
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
     } catch (err) {
       console.error('Failed to export receipt image:', err);
@@ -267,17 +280,30 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }
   };
 
-  // 2. Copy Image to Clipboard
+  // 2. Copy Image to Clipboard (With exact layout matching)
   const handleCopyImage = async () => {
     if (!receiptRef.current) return;
     try {
       setIsGeneratingImg(true);
       if (soundEnabled) playPOSSound('tear');
 
-      const blob = await toBlob(receiptRef.current, {
+      const el = receiptRef.current;
+
+      const bgColor = {
+        classic: '#ffffff',
+        cafe: '#fbf7ee',
+        cyber: '#020617',
+        muji: '#fafafa',
+      }[theme];
+
+      const blob = await toBlob(el, {
         cacheBust: true,
-        pixelRatio: 2.5,
-        backgroundColor: theme === 'cyber' ? '#0f172a' : '#ffffff',
+        pixelRatio: 3,
+        backgroundColor: bgColor,
+        style: {
+          transform: 'none',
+          margin: '0',
+        },
       });
 
       if (blob && navigator.clipboard && window.ClipboardItem) {
@@ -323,7 +349,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
     lines.push(divider);
     lines.push(`消费总笔数: ${itemCount} 笔`);
-    lines.push(`实付总支出: ¥${totalExpense.toFixed(2)}`);
+    lines.push(`总支出: ¥${totalExpense.toFixed(2)}`);
     if (totalIncome > 0) {
       lines.push(`同期总入账: +¥${totalIncome.toFixed(2)}`);
       lines.push(`收支净结余: ¥${netBalance.toFixed(2)}`);
@@ -879,10 +905,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 : 'translate-y-2 opacity-100 scale-y-100'
             }`}
           >
-            {/* The Actual Receipt Document Node to Capture (无黑白点阵，纯净逼真热敏纸质感) */}
+            {/* The Actual Receipt Document Node to Capture (固定宽度与强制防折行保护，确保导出长图与展示 100% 绝对一致) */}
             <div
               ref={receiptRef}
-              className={`relative mt-2 p-6 sm:p-7 rounded-sm ${themeStyles.bg} ${themeStyles.text} ${themeStyles.font} ${themeStyles.paperShadow} transition-colors select-none`}
+              className={`relative mt-2 p-6 sm:p-7 rounded-sm ${themeStyles.bg} ${themeStyles.text} ${themeStyles.font} ${themeStyles.paperShadow} transition-colors select-none w-[360px] sm:w-[380px] mx-auto box-border`}
             >
               {/* Top Sawtooth / Zigzag Edge */}
               <div
@@ -898,47 +924,47 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <div className="inline-flex items-center justify-center p-2 rounded-full border-2 border-current mb-1">
                   <Store className="w-5 h-5" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
+                <h2 className="text-lg sm:text-xl font-extrabold tracking-tight whitespace-nowrap">
                   {storeName}
                 </h2>
-                <div className="text-[11px] opacity-75 font-medium tracking-wide">
+                <div className="text-[11px] opacity-75 font-medium tracking-wide whitespace-nowrap">
                   *** {storeSubtitle} ***
                 </div>
-                <div className="text-[10px] opacity-70">用心记录每一笔开销 · 让生活更有质感</div>
+                <div className="text-[10px] opacity-70 whitespace-nowrap">用心记录每一笔开销 · 让生活更有质感</div>
               </div>
 
               {/* Meta Details */}
-              <div className="py-3 text-[11px] space-y-1 border-b border-dashed border-slate-400/40 font-mono">
-                <div className="flex justify-between">
-                  <span className="opacity-75">流水单号:</span>
-                  <span className="font-bold">{receiptNo}</span>
+              <div className="py-3 text-[11px] space-y-1.5 border-b border-dashed border-slate-400/40 font-mono">
+                <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                  <span className="opacity-75 shrink-0 whitespace-nowrap">流水单号:</span>
+                  <span className="font-bold shrink-0 whitespace-nowrap">{receiptNo}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="opacity-75">打印时间:</span>
-                  <span>
+                <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                  <span className="opacity-75 shrink-0 whitespace-nowrap">打印时间:</span>
+                  <span className="shrink-0 whitespace-nowrap">
                     {todayStr} {printTimeStr}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="opacity-75">收银终端:</span>
-                  <span>01号收银台</span>
+                <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                  <span className="opacity-75 shrink-0 whitespace-nowrap">收银终端:</span>
+                  <span className="shrink-0 whitespace-nowrap">01号收银台</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="opacity-75">记账员:</span>
-                  <span className="font-bold">本人 (生活账管家)</span>
+                <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                  <span className="opacity-75 shrink-0 whitespace-nowrap">记账员:</span>
+                  <span className="font-bold shrink-0 whitespace-nowrap">本人 (生活账管家)</span>
                 </div>
               </div>
 
               {/* Goods / Transactions List */}
               <div className="py-3">
-                <div className="flex justify-between text-[11px] font-bold pb-2 border-b border-slate-400/50 tracking-wider">
-                  <span className="w-2/5">品类明细</span>
-                  <span className="w-1/4 text-center">支付方式</span>
-                  <span className="w-1/3 text-right">金额</span>
+                <div className="flex items-center justify-between text-[11px] font-bold pb-2 border-b border-slate-400/50 tracking-wider whitespace-nowrap">
+                  <span className="w-2/5 shrink-0">品类明细</span>
+                  <span className="w-1/4 text-center shrink-0">支付方式</span>
+                  <span className="w-1/3 text-right shrink-0">金额</span>
                 </div>
 
                 {targetTransactions.length === 0 ? (
-                  <div className="py-6 text-center text-xs opacity-60">
+                  <div className="py-6 text-center text-xs opacity-60 whitespace-nowrap">
                     当前范围暂无记账明细
                   </div>
                 ) : (
@@ -947,10 +973,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                       const acc = accountMap.get(tx.accountId);
                       const isExp = tx.type === 'EXPENSE';
                       return (
-                        <div key={tx.id} className="py-2 flex items-center justify-between gap-1">
-                          <div className="w-2/5 min-w-0">
+                        <div key={tx.id} className="py-2 flex items-center justify-between gap-1 whitespace-nowrap">
+                          <div className="w-2/5 min-w-0 pr-1">
                             <div className="font-bold truncate flex items-center gap-1">
-                              <span className="text-[10px] opacity-60 font-mono">{idx + 1}.</span>
+                              <span className="text-[10px] opacity-60 font-mono shrink-0">{idx + 1}.</span>
                               <span className="truncate">{tx.category}</span>
                             </div>
                             {tx.description && (
@@ -961,11 +987,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                             <div className="text-[9px] opacity-50 font-mono">{tx.date}</div>
                           </div>
 
-                          <div className="w-1/4 text-center text-[10px] opacity-80 truncate">
+                          <div className="w-1/4 text-center text-[10px] opacity-80 truncate px-1 shrink-0">
                             {acc?.name || '默认卡'}
                           </div>
 
-                          <div className="w-1/3 text-right font-mono font-bold whitespace-nowrap">
+                          <div className="w-1/3 text-right font-mono font-bold whitespace-nowrap shrink-0">
                             <span className={isExp ? '' : 'text-emerald-600 dark:text-emerald-400'}>
                               {isExp ? '-' : '+'}¥{tx.amount.toFixed(2)}
                             </span>
@@ -982,39 +1008,39 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 )}
 
                 {targetTransactions.length > 15 && (
-                  <div className="pt-2 text-center text-[10px] opacity-60 border-t border-dashed border-slate-300/40">
+                  <div className="pt-2 text-center text-[10px] opacity-60 border-t border-dashed border-slate-300/40 whitespace-nowrap">
                     ... 还有 {targetTransactions.length - 15} 笔消费明细已合并计入 ...
                   </div>
                 )}
               </div>
 
               {/* Subtotal & Summary Calculation */}
-              <div className="pt-3 border-t-2 border-slate-800 dark:border-slate-300 space-y-1.5 text-xs font-mono">
-                <div className="flex justify-between">
-                  <span className="opacity-75">消费总笔数:</span>
-                  <span className="font-bold">{itemCount} 笔</span>
+              <div className="pt-3 border-t-2 border-slate-800 dark:border-slate-300 space-y-2 text-xs font-mono">
+                <div className="flex items-center justify-between whitespace-nowrap">
+                  <span className="opacity-75 shrink-0 whitespace-nowrap">消费总笔数:</span>
+                  <span className="font-bold shrink-0 whitespace-nowrap font-mono">{itemCount} 笔</span>
                 </div>
-                <div className="flex justify-between text-sm sm:text-base font-extrabold pt-1">
-                  <span>实付总支出:</span>
-                  <span>¥{totalExpense.toFixed(2)}</span>
+                <div className="flex items-center justify-between text-base font-extrabold pt-1 whitespace-nowrap">
+                  <span className="shrink-0 whitespace-nowrap">总支出:</span>
+                  <span className="shrink-0 whitespace-nowrap font-mono tracking-tight">¥{totalExpense.toFixed(2)}</span>
                 </div>
                 {totalIncome > 0 && (
                   <>
-                    <div className="flex justify-between opacity-85">
-                      <span>同期总入账:</span>
-                      <span className="text-emerald-600 font-bold">+¥{totalIncome.toFixed(2)}</span>
+                    <div className="flex items-center justify-between opacity-85 whitespace-nowrap">
+                      <span className="shrink-0 whitespace-nowrap">同期总入账:</span>
+                      <span className="text-emerald-600 font-bold shrink-0 whitespace-nowrap font-mono">+¥{totalIncome.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between opacity-85">
-                      <span>收支净结余:</span>
-                      <span className="font-bold">
+                    <div className="flex items-center justify-between opacity-85 whitespace-nowrap">
+                      <span className="shrink-0 whitespace-nowrap">收支净结余:</span>
+                      <span className="font-bold shrink-0 whitespace-nowrap font-mono">
                         {netBalance >= 0 ? '+' : '-'}¥{Math.abs(netBalance).toFixed(2)}
                       </span>
                     </div>
                   </>
                 )}
-                <div className="flex justify-between opacity-75 text-[11px] pt-1">
-                  <span>付款状态:</span>
-                  <span className="font-bold tracking-wider">支付成功 (已核销入账)</span>
+                <div className="flex items-center justify-between opacity-75 text-[11px] pt-1 whitespace-nowrap">
+                  <span className="shrink-0 whitespace-nowrap">付款状态:</span>
+                  <span className="font-bold tracking-wider shrink-0 whitespace-nowrap">支付成功 (已核销入账)</span>
                 </div>
               </div>
 
@@ -1037,14 +1063,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     />
                   ))}
                 </div>
-                <div className="text-[10px] font-mono tracking-widest opacity-70">
+                <div className="text-[10px] font-mono tracking-widest opacity-70 whitespace-nowrap">
                   * 6 9 2 8 8 2 0 1 9 4 8 2 6 *
                 </div>
 
-                <div className="text-[11px] font-bold tracking-wider pt-1">
+                <div className="text-[11px] font-bold tracking-wider pt-1 whitespace-nowrap">
                   ★ 感谢惠顾 · 欢迎再次记账 ★
                 </div>
-                <div className="text-[9px] opacity-60">
+                <div className="text-[9px] opacity-60 whitespace-nowrap">
                   个人极简资产管理系统
                 </div>
               </div>
@@ -1058,47 +1084,58 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 }}
               />
 
-              {/* Custom Stamped Seal (自定义印章与落戳动效) */}
+              {/* Custom Stamped Seal (自定义印章与落戳动效：尺寸舒展、严格防折行防重叠) */}
               {showStamp && (
-                <div className="absolute right-4 bottom-24 sm:right-6 sm:bottom-28 pointer-events-none transform -rotate-12 animate-in zoom-in-150 duration-200">
+                <div className="absolute right-3 bottom-20 sm:right-5 sm:bottom-24 pointer-events-none transform -rotate-12 select-none">
                   {stampShape === 'circle' && (
                     <div
-                      className={`w-24 h-24 rounded-full border-4 border-dashed ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1 text-center font-bold tracking-tight shadow-sm opacity-90`}
-                      style={{
-                        maskImage: 'radial-gradient(circle, black 75%, transparent 100%)',
-                      }}
+                      className={`w-28 h-28 rounded-full border-4 border-dashed ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1.5 text-center font-bold tracking-tight shadow-sm opacity-90 box-border`}
                     >
-                      <div className="text-[8px] font-bold tracking-wider opacity-90">
+                      <div className="text-[8px] font-bold tracking-wider opacity-90 whitespace-nowrap shrink-0 leading-tight">
                         {stampTopText}
                       </div>
-                      <div className="text-sm sm:text-base font-extrabold tracking-widest my-0.5">
+                      <div className="text-base font-extrabold tracking-wider my-0.5 whitespace-nowrap shrink-0 leading-tight">
                         {stampMainText}
                       </div>
-                      <div className="text-[9px] font-bold">{stampBottomText}</div>
-                      <div className="text-[8px] font-mono opacity-80">{todayStr}</div>
+                      <div className="text-[9px] font-bold whitespace-nowrap shrink-0 leading-tight">
+                        {stampBottomText}
+                      </div>
+                      <div className="text-[8px] font-mono opacity-80 whitespace-nowrap shrink-0 leading-tight mt-0.5">
+                        {todayStr}
+                      </div>
                     </div>
                   )}
 
                   {stampShape === 'rect' && (
                     <div
-                      className={`w-24 h-20 rounded-xl border-4 border-double ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1 text-center font-bold tracking-tight shadow-sm opacity-90`}
+                      className={`w-28 h-22 rounded-xl border-4 border-double ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1.5 text-center font-bold tracking-tight shadow-sm opacity-90 box-border`}
                     >
-                      <div className="text-[8px] font-bold tracking-wider">{stampTopText}</div>
-                      <div className="text-sm font-extrabold tracking-widest my-0.5 border-t border-b border-current px-2">
+                      <div className="text-[8px] font-bold tracking-wider whitespace-nowrap shrink-0 leading-tight">
+                        {stampTopText}
+                      </div>
+                      <div className="text-sm font-extrabold tracking-widest my-0.5 border-t border-b border-current px-2 whitespace-nowrap shrink-0 leading-tight">
                         {stampMainText}
                       </div>
-                      <div className="text-[8px] font-mono">{stampBottomText} · {todayStr}</div>
+                      <div className="text-[8px] font-mono whitespace-nowrap shrink-0 leading-tight">
+                        {stampBottomText} · {todayStr}
+                      </div>
                     </div>
                   )}
 
                   {stampShape === 'badge' && (
                     <div
-                      className={`w-24 h-24 rounded-2xl rotate-45 border-4 border-dashed ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1 text-center font-bold shadow-sm opacity-90`}
+                      className={`w-28 h-28 rounded-2xl rotate-45 border-4 border-dashed ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1.5 text-center font-bold shadow-sm opacity-90 box-border`}
                     >
                       <div className="-rotate-45 flex flex-col items-center justify-center">
-                        <div className="text-[8px] font-bold">{stampTopText}</div>
-                        <div className="text-sm font-extrabold tracking-wider">{stampMainText}</div>
-                        <div className="text-[8px]">{stampBottomText}</div>
+                        <div className="text-[8px] font-bold whitespace-nowrap shrink-0 leading-tight">
+                          {stampTopText}
+                        </div>
+                        <div className="text-sm font-extrabold tracking-wider whitespace-nowrap shrink-0 leading-tight my-0.5">
+                          {stampMainText}
+                        </div>
+                        <div className="text-[8px] whitespace-nowrap shrink-0 leading-tight">
+                          {stampBottomText}
+                        </div>
                       </div>
                     </div>
                   )}
