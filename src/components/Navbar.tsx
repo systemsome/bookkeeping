@@ -131,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <ListOrdered className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              记账流水与明细
+              记账本
             </button>
             <button
               id="nav-tab-analytics"
@@ -398,7 +398,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            流水明细
+            记账本
           </button>
           <button
             onClick={() => setActiveTab('analytics')}

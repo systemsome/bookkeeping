@@ -64,3 +64,21 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
+/* POS Printer Cutter Laser Blade Slide */
+@keyframes cutterSlide {
+  0% {
+    left: -20%;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    left: 120%;
+    opacity: 0;
+  }
+}
+

@@ -58,7 +58,7 @@ import {
   Plus,
   CheckCircle2,
 } from 'lucide-react';
-import { formatCurrency } from './lib/formatters';
+import { formatCurrency, sortTransactions } from './lib/formatters';
 
 export default function App() {
   // Authentication & Lock state
@@ -102,6 +102,7 @@ export default function App() {
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [txModalDefaultType, setTxModalDefaultType] = useState<TransactionType>('EXPENSE');
   const [txModalAccountId, setTxModalAccountId] = useState<string | undefined>(undefined);
+  const [txModalDefaultDate, setTxModalDefaultDate] = useState<string | undefined>(undefined);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const [isRepayModalOpen, setIsRepayModalOpen] = useState(false);
@@ -241,10 +242,15 @@ export default function App() {
     }
   };
 
-  const handleOpenNewTx = (type: string = 'EXPENSE', accountId?: string) => {
+  const handleOpenNewTx = (
+    type: string = 'EXPENSE',
+    accountId?: string,
+    defaultDate?: string
+  ) => {
     setEditingTransaction(null);
     setTxModalDefaultType(type as TransactionType);
     setTxModalAccountId(accountId);
+    setTxModalDefaultDate(defaultDate);
     setIsTxModalOpen(true);
   };
 
@@ -252,6 +258,7 @@ export default function App() {
     setEditingTransaction(tx);
     setTxModalDefaultType(tx.type);
     setTxModalAccountId(tx.accountId);
+    setTxModalDefaultDate(tx.date);
     setIsTxModalOpen(true);
   };
 
@@ -292,11 +299,11 @@ export default function App() {
         updatedTx
       );
       setAccounts(updatedAccounts);
-      setTransactions(updatedTransactions);
+      setTransactions(sortTransactions(updatedTransactions));
     } else {
       const { accounts: updatedAccounts, transaction } = addTransaction(currentUser.id, txData);
       setAccounts(updatedAccounts);
-      setTransactions((prev) => [transaction, ...prev]);
+      setTransactions((prev) => sortTransactions([transaction, ...prev]));
     }
   };
 
@@ -329,7 +336,7 @@ export default function App() {
     });
 
     setAccounts(updatedAccounts);
-    setTransactions((prev) => [transaction, ...prev]);
+    setTransactions((prev) => sortTransactions([transaction, ...prev]));
   };
 
   // Repayment submission
@@ -347,14 +354,14 @@ export default function App() {
       description: `还款至 ${targetAcc?.name || '信用卡/信贷'} (恢复可用额度)`,
     });
     setAccounts(updatedAccounts);
-    setTransactions((prev) => [transaction, ...prev]);
+    setTransactions((prev) => sortTransactions([transaction, ...prev]));
   };
 
   // Delete transaction
   const handleDeleteTx = (txId: string) => {
     if (!currentUser) return;
     const { transactions: updated } = deleteTransaction(currentUser.id, txId);
-    setTransactions(updated);
+    setTransactions(sortTransactions(updated));
   };
 
   // Batch Import Transactions from Upload (CSV / Excel / Alipay / WeChat / JSON)
@@ -428,7 +435,7 @@ export default function App() {
       setAccounts(updatedAccounts);
     }
 
-    const mergedTransactions = mergeTransactions(transactions, importedList);
+    const mergedTransactions = sortTransactions(mergeTransactions(transactions, importedList));
     saveTransactions(currentUser.id, mergedTransactions);
     setTransactions(mergedTransactions);
   };
@@ -708,7 +715,7 @@ export default function App() {
               privacyMode={false}
               onDeleteTransaction={handleDeleteTx}
               onEditTransaction={handleEditTransaction}
-              onOpenNewTx={() => handleOpenNewTx('EXPENSE')}
+              onOpenNewTx={(type, accId, date) => handleOpenNewTx(type || 'EXPENSE', accId, date)}
               onImportTransactions={handleImportTransactions}
               onShowToast={showToast}
             />
@@ -744,7 +751,7 @@ export default function App() {
         </button>
       )}
 
-      {/* Fixed Bottom-Center Floating Action Button for Transactions (记账明细 - 统一位置到页面下方居中) */}
+      {/* Fixed Bottom-Center Floating Action Button for Transactions (记账本 - 统一位置到页面下方居中) */}
       {activeTab === 'transactions' && (
         <button
           id="btn-fixed-add-tx"
@@ -766,9 +773,11 @@ export default function App() {
           initialType={txModalDefaultType}
           initialAccountId={txModalAccountId}
           initialTransaction={editingTransaction}
+          initialDate={txModalDefaultDate}
           onClose={() => {
             setIsTxModalOpen(false);
             setEditingTransaction(null);
+            setTxModalDefaultDate(undefined);
           }}
           onSubmit={handleSubmitTransaction}
         />

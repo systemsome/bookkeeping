@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Wallet,
   CreditCard,
@@ -27,6 +27,7 @@ import {
   Layers,
   ArrowDownWideNarrow,
   Calendar,
+  Search,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
@@ -63,6 +64,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   onOpenNewTx,
 }) => {
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState<boolean>(false);
+  const [filterSearchQuery, setFilterSearchQuery] = useState<string>('');
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'CARD' | 'TABLE'>('CARD');
 
   // Drag & Drop Layout State
@@ -70,6 +74,17 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [draggedAccountId, setDraggedAccountId] = useState<string | null>(null);
   const [dragOverAccountId, setDragOverAccountId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+        setIsFilterDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Quick Reconcile Modal State
   const [reconcilingAccount, setReconcilingAccount] = useState<FinancialAccount | null>(null);
@@ -255,33 +270,66 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     setReconcilingAccount(null);
   };
 
-  const groups = [
-    { id: 'ALL', label: '全部账户', count: accounts.length },
+  const groupDefinitions = [
+    {
+      id: 'ALL',
+      label: '全部账户',
+      subLabel: '包含储蓄卡、信用卡、理财、现金等所有卡片',
+      icon: Layers,
+      color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700',
+      count: accounts.length,
+    },
     {
       id: 'LIQUID',
-      label: '流动资金 (储蓄卡/支付宝/现金)',
+      label: '流动资金',
+      subLabel: '储蓄借记卡 / 微信支付 / 支付宝 / 现金',
+      icon: Wallet,
+      color: 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/60',
       count: accounts.filter((a) => ['DEBIT_CARD', 'ALIPAY', 'CASH'].includes(a.category)).length,
     },
     {
       id: 'INVESTMENT',
-      label: '理财投资 (余额宝/基金/黄金/京东)',
+      label: '理财投资',
+      subLabel: '余额宝 / 公募基金 / 黄金积存 / 京东金融',
+      icon: TrendingUp,
+      color: 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/60',
       count: accounts.filter((a) =>
         ['YUEBAO', 'FUND', 'GOLD', 'JD_FINANCE'].includes(a.category)
       ).length,
     },
     {
       id: 'CREDIT',
-      label: '信用负债 (信用卡/白条/花呗/借入)',
+      label: '信用负债',
+      subLabel: '银行信用卡 / 京东白条 / 蚂蚁花呗 / 借入款项',
+      icon: CreditCard,
+      color: 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60',
       count: accounts.filter((a) =>
         ['CREDIT_CARD', 'JD_BAITIAO', 'HUABEI', 'PAYABLE'].includes(a.category)
       ).length,
     },
     {
       id: 'DEBT_RECEIVABLE',
-      label: '借出债权 (借出待收回)',
+      label: '借出债权',
+      subLabel: '借给亲友、同事借出待收回 / 应收款项',
+      icon: HandCoins,
+      color: 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900/60',
       count: accounts.filter((a) => a.category === 'RECEIVABLE').length,
     },
   ];
+
+  const currentGroupInfo =
+    groupDefinitions.find((g) => g.id === filterGroup) || groupDefinitions[0];
+  const CurrentGroupIcon = currentGroupInfo.icon;
+
+  const filteredGroupList = useMemo(() => {
+    if (!filterSearchQuery.trim()) return groupDefinitions;
+    const q = filterSearchQuery.toLowerCase();
+    return groupDefinitions.filter(
+      (g) =>
+        g.label.toLowerCase().includes(q) ||
+        g.subLabel.toLowerCase().includes(q)
+    );
+  }, [filterSearchQuery, accounts]);
 
   const filteredAccounts = accounts.filter((acc) => {
     if (filterGroup === 'ALL') return true;
@@ -444,31 +492,131 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       )}
 
-      {/* Filter Tabs */}
+      {/* Account Category Filter Dropdown (点击选择切换 - 与记账币种功能一致) */}
       {accounts.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {groups.map((g) => (
-            <button
-              key={g.id}
-              onClick={() => setFilterGroup(g.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all border ${
-                filterGroup === g.id
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                  : 'bg-white text-slate-600 hover:text-slate-900 border-slate-200/80 hover:bg-slate-50'
-              }`}
-            >
-              <span>{g.label}</span>
-              <span
-                className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[11px] font-mono ${
-                  filterGroup === g.id
-                    ? 'bg-slate-800 text-slate-200'
-                    : 'bg-slate-100 text-slate-600'
+        <div ref={filterDropdownRef} className="relative z-20">
+          <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                  全部账户 (点击选择切换)
+                </span>
+                <span className="text-[11px] text-slate-400 dark:text-slate-400 truncate block">
+                  {filterGroup === 'ALL'
+                    ? `当前查看: 全部账户 · 共 ${accounts.length} 张卡片`
+                    : `当前查看: ${currentGroupInfo.label} (${currentGroupInfo.subLabel}) · 共 ${currentGroupInfo.count} 张卡片`}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Clickable Pill triggering Dropdown */}
+              <button
+                type="button"
+                id="btn-trigger-account-group-dropdown"
+                onClick={() => setIsFilterDropdownOpen((prev) => !prev)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 border shadow-2xs transition-all ${
+                  isFilterDropdownOpen
+                    ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-700 dark:border-slate-600'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-slate-400'
                 }`}
               >
-                {g.count}
-              </span>
-            </button>
-          ))}
+                <CurrentGroupIcon className="w-3.5 h-3.5" />
+                <span className="font-semibold">{currentGroupInfo.label}</span>
+                <span className="text-[11px] opacity-80 font-mono">({currentGroupInfo.count}张)</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${isFilterDropdownOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Click-to-Show Group Dropdown Popover */}
+          {isFilterDropdownOpen && (
+            <div className="absolute left-0 right-0 top-full mt-2 z-30 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-3 animate-in fade-in zoom-in-95 duration-150">
+              {/* Search Bar inside popover */}
+              <div className="relative mb-2.5">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={filterSearchQuery}
+                  onChange={(e) => setFilterSearchQuery(e.target.value)}
+                  placeholder="搜索分类名称 (如 全部、流动、理财、信用卡、借记卡)..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                  autoFocus
+                />
+              </div>
+
+              {/* Category Options Grid */}
+              <div className="max-h-60 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-0.5">
+                {filteredGroupList.map((g) => {
+                  const isSelected = filterGroup === g.id;
+                  const IconComp = g.icon;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        setFilterGroup(g.id);
+                        setIsFilterDropdownOpen(false);
+                        setFilterSearchQuery('');
+                      }}
+                      className={`p-2.5 rounded-xl text-left border flex items-center justify-between transition-all ${
+                        isSelected
+                          ? 'bg-slate-900 dark:bg-slate-700 text-white border-slate-900 dark:border-slate-600 shadow-2xs'
+                          : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200/70 dark:border-slate-700/60 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <div className="min-w-0 flex items-center gap-2">
+                        <div className={`p-1.5 rounded-lg shrink-0 ${isSelected ? 'bg-white/20 text-white' : g.color}`}>
+                          <IconComp className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs truncate flex items-center gap-1.5">
+                            <span>{g.label}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                                isSelected
+                                  ? 'bg-white/20 text-slate-100'
+                                  : 'bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                              }`}
+                            >
+                              {g.count} 张
+                            </span>
+                          </div>
+                          <div
+                            className={`text-[10px] truncate mt-0.5 ${
+                              isSelected ? 'text-slate-300' : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                          >
+                            {g.subLabel}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 ml-2">
+                        {isSelected && <Check className="w-4 h-4 text-emerald-400" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Dropdown Footer */}
+              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-[11px] text-slate-400 px-1">
+                <span>支持快速切换资产大类与卡面视图</span>
+                <button
+                  type="button"
+                  onClick={() => setIsFilterDropdownOpen(false)}
+                  className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

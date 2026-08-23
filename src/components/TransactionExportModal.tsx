@@ -82,7 +82,7 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg">
-                导出记账流水与明细
+                导出记账本数据
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 支持导出 Excel 表格、CSV 及 JSON 备份

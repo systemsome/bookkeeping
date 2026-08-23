@@ -1,5 +1,6 @@
 import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory } from '../types';
 import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS } from './constants';
+import { sortTransactions } from './formatters';
 
 const STORAGE_KEYS = {
   USERS: 'asset_manager_users_v1',
@@ -118,19 +119,22 @@ export const getTransactions = (userId: string): Transaction[] => {
     const raw = localStorage.getItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`);
     if (!raw) {
       if (userId === DEFAULT_DEMO_USER.id) {
-        localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(INITIAL_DEMO_TRANSACTIONS));
-        return INITIAL_DEMO_TRANSACTIONS;
+        const sortedDemo = sortTransactions(INITIAL_DEMO_TRANSACTIONS);
+        localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sortedDemo));
+        return sortedDemo;
       }
       return [];
     }
-    return JSON.parse(raw);
+    const parsed: Transaction[] = JSON.parse(raw);
+    return sortTransactions(parsed);
   } catch {
     return [];
   }
 };
 
 export const saveTransactions = (userId: string, transactions: Transaction[]) => {
-  localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(transactions));
+  const sorted = sortTransactions(transactions);
+  localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sorted));
   triggerAutoServerSync(userId);
 };
 
@@ -462,7 +466,7 @@ export const addTransaction = (
   };
 
   const updatedAccounts = applyTransactionToAccounts(accounts, newTx, false);
-  const updatedTransactions = [newTx, ...transactions];
+  const updatedTransactions = sortTransactions([newTx, ...transactions]);
 
   saveAccounts(userId, updatedAccounts);
   saveTransactions(userId, updatedTransactions);
@@ -486,7 +490,9 @@ export const updateTransaction = (
   // Apply new transaction effects
   updatedAccounts = applyTransactionToAccounts(updatedAccounts, updatedTx, false);
 
-  const updatedTransactions = transactions.map((t) => (t.id === updatedTx.id ? updatedTx : t));
+  const updatedTransactions = sortTransactions(
+    transactions.map((t) => (t.id === updatedTx.id ? updatedTx : t))
+  );
 
   saveAccounts(userId, updatedAccounts);
   saveTransactions(userId, updatedTransactions);

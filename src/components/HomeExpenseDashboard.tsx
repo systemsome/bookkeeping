@@ -20,6 +20,7 @@ import { Transaction, FinancialAccount, FinancialSummary, UserProfile } from '..
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency } from '../lib/formatters';
 import { getCurrencyInfo } from '../lib/forexRates';
+import { CategoryIcon } from './CategoryIcon';
 
 interface HomeExpenseDashboardProps {
   summary: FinancialSummary;
@@ -502,7 +503,7 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
             onClick={onNavigateToTransactions}
             className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 transition-colors"
           >
-            <span>全部支出流水</span>
+            <span>查看记账本全部明细</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -525,8 +526,8 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
                 >
                   {/* Left info */}
                   <div className="flex items-center gap-3 min-w-0 pr-2">
-                    <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-xs flex-shrink-0 border border-rose-100">
-                      支
+                    <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xs flex-shrink-0 border border-rose-100">
+                      <CategoryIcon nameOrIcon={tx.category} className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
