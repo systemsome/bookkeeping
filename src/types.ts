@@ -12,7 +12,13 @@ export type AccountCategory =
   | 'RECEIVABLE'      // 借出款项 (待收回)
   | 'PAYABLE';        // 借入款项 (待偿还)
 
-export type AssetGroup = 'LIQUID' | 'INVESTMENT' | 'CREDIT' | 'DEBT_RECEIVABLE';
+export type AssetGroup =
+  | 'DEBIT_CARD'      // 借记卡
+  | 'CREDIT_CARD'     // 信用卡
+  | 'DIGITAL_WALLET'  // 数字钱包
+  | 'FUND'            // 理财基金
+  | 'CASH'            // 现金
+  | 'LEND_BORROW';    // 借贷
 
 export interface FinancialAccount {
   id: string;

@@ -1,11 +1,11 @@
-import { AccountCategory, ExpenseCategory, IncomeCategory, FinancialAccount, Transaction } from '../types';
+import { AccountCategory, ExpenseCategory, IncomeCategory, FinancialAccount, Transaction, AssetGroup } from '../types';
 
 export const ACCOUNT_CATEGORY_CONFIG: Record<
   AccountCategory,
   {
     label: string;
     description: string;
-    group: 'LIQUID' | 'INVESTMENT' | 'CREDIT' | 'DEBT_RECEIVABLE';
+    group: AssetGroup;
     groupLabel: string;
     defaultColor: string;
     badgeBg: string;
@@ -15,8 +15,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   DEBIT_CARD: {
     label: '银行借记卡',
     description: '各大银行储蓄卡、活期存款',
-    group: 'LIQUID',
-    groupLabel: '流动资产',
+    group: 'DEBIT_CARD',
+    groupLabel: '借记卡',
     defaultColor: '#2563eb', // blue
     badgeBg: 'bg-blue-500/10',
     badgeText: 'text-blue-400 border-blue-500/20',
@@ -24,8 +24,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   CREDIT_CARD: {
     label: '借贷信用卡',
     description: '银行信用卡（总额度/已用/可用）',
-    group: 'CREDIT',
-    groupLabel: '信用负债',
+    group: 'CREDIT_CARD',
+    groupLabel: '信用卡',
     defaultColor: '#f43f5e', // rose
     badgeBg: 'bg-rose-500/10',
     badgeText: 'text-rose-400 border-rose-500/20',
@@ -33,8 +33,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   ALIPAY: {
     label: '支付宝余额',
     description: '支付宝账户可用零钱',
-    group: 'LIQUID',
-    groupLabel: '流动资产',
+    group: 'DIGITAL_WALLET',
+    groupLabel: '数字钱包',
     defaultColor: '#1677ff', // official alipay blue
     badgeBg: 'bg-blue-500/10',
     badgeText: 'text-blue-500 border-blue-500/20',
@@ -42,8 +42,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   YUEBAO: {
     label: '余额宝',
     description: '支付宝零钱理财/货币基金',
-    group: 'INVESTMENT',
-    groupLabel: '理财投资',
+    group: 'FUND',
+    groupLabel: '理财基金',
     defaultColor: '#f97316', // orange
     badgeBg: 'bg-orange-500/10',
     badgeText: 'text-orange-400 border-orange-500/20',
@@ -51,8 +51,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   FUND: {
     label: '基金理财',
     description: '公募基金、股票ETF、理财产品',
-    group: 'INVESTMENT',
-    groupLabel: '理财投资',
+    group: 'FUND',
+    groupLabel: '理财基金',
     defaultColor: '#8b5cf6', // purple
     badgeBg: 'bg-purple-500/10',
     badgeText: 'text-purple-400 border-purple-500/20',
@@ -60,8 +60,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   GOLD: {
     label: '黄金理财',
     description: '积存金、实物黄金、纸黄金',
-    group: 'INVESTMENT',
-    groupLabel: '理财投资',
+    group: 'FUND',
+    groupLabel: '理财基金',
     defaultColor: '#eab308', // gold
     badgeBg: 'bg-amber-500/10',
     badgeText: 'text-amber-400 border-amber-500/20',
@@ -69,8 +69,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   JD_FINANCE: {
     label: '京东金融',
     description: '京东小金库、京东理财',
-    group: 'INVESTMENT',
-    groupLabel: '理财投资',
+    group: 'FUND',
+    groupLabel: '理财基金',
     defaultColor: '#ef4444', // red
     badgeBg: 'bg-red-500/10',
     badgeText: 'text-red-400 border-red-500/20',
@@ -78,8 +78,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   JD_BAITIAO: {
     label: '京东白条',
     description: '京东先用后付信贷额度',
-    group: 'CREDIT',
-    groupLabel: '信用负债',
+    group: 'CREDIT_CARD',
+    groupLabel: '信用卡',
     defaultColor: '#ec4899', // pink
     badgeBg: 'bg-pink-500/10',
     badgeText: 'text-pink-400 border-pink-500/20',
@@ -87,8 +87,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   HUABEI: {
     label: '蚂蚁花呗',
     description: '支付宝蚂蚁花呗消费信用额度 (先享后付)',
-    group: 'CREDIT',
-    groupLabel: '信用负债',
+    group: 'CREDIT_CARD',
+    groupLabel: '信用卡',
     defaultColor: '#0083ff', // huabei vibrant blue
     badgeBg: 'bg-sky-500/10',
     badgeText: 'text-sky-400 border-sky-500/20',
@@ -96,8 +96,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   CASH: {
     label: '现金备用金',
     description: '纸币现金、钱包备用金',
-    group: 'LIQUID',
-    groupLabel: '流动资产',
+    group: 'CASH',
+    groupLabel: '现金',
     defaultColor: '#10b981', // emerald
     badgeBg: 'bg-emerald-500/10',
     badgeText: 'text-emerald-400 border-emerald-500/20',
@@ -105,8 +105,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   RECEIVABLE: {
     label: '借出款项 (待收回)',
     description: '借给他人暂未收回的债权',
-    group: 'DEBT_RECEIVABLE',
-    groupLabel: '债权借出',
+    group: 'LEND_BORROW',
+    groupLabel: '借贷',
     defaultColor: '#06b6d4', // cyan
     badgeBg: 'bg-cyan-500/10',
     badgeText: 'text-cyan-400 border-cyan-500/20',
@@ -114,8 +114,8 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
   PAYABLE: {
     label: '借入款项 (待偿还)',
     description: '向他人借入暂未归还的借款',
-    group: 'CREDIT',
-    groupLabel: '信用负债',
+    group: 'LEND_BORROW',
+    groupLabel: '借贷',
     defaultColor: '#a855f7', // violet
     badgeBg: 'bg-violet-500/10',
     badgeText: 'text-violet-400 border-violet-500/20',

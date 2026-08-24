@@ -515,11 +515,30 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                   onChange={(e) => handleCategoryChange(e.target.value as AccountCategory)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:border-slate-400 focus:bg-white"
                 >
-                  {Object.entries(ACCOUNT_CATEGORY_CONFIG).map(([key, val]) => (
-                    <option key={key} value={key}>
-                      {val.label} - ({val.groupLabel})
-                    </option>
-                  ))}
+                  <optgroup label="💳 借记卡">
+                    <option value="DEBIT_CARD">银行借记卡 (储蓄卡/活期)</option>
+                  </optgroup>
+                  <optgroup label="💳 信用卡">
+                    <option value="CREDIT_CARD">借贷信用卡 (银行信用卡)</option>
+                    <option value="JD_BAITIAO">京东白条 (先用后付)</option>
+                    <option value="HUABEI">蚂蚁花呗 (先享后付)</option>
+                  </optgroup>
+                  <optgroup label="📱 数字钱包">
+                    <option value="ALIPAY">支付宝余额 (数字零钱钱包)</option>
+                  </optgroup>
+                  <optgroup label="📈 理财基金">
+                    <option value="YUEBAO">余额宝 (零钱货币基金)</option>
+                    <option value="FUND">基金理财 (公募基金/理财组合)</option>
+                    <option value="GOLD">黄金理财 (积存金/实物黄金)</option>
+                    <option value="JD_FINANCE">京东金融 (京东小金库/理财)</option>
+                  </optgroup>
+                  <optgroup label="💵 现金">
+                    <option value="CASH">现金备用金 (纸币/零钱备用)</option>
+                  </optgroup>
+                  <optgroup label="🤝 借贷">
+                    <option value="RECEIVABLE">借出款项 (待收回债权)</option>
+                    <option value="PAYABLE">借入款项 (待偿还债务)</option>
+                  </optgroup>
                 </select>
               </div>
 

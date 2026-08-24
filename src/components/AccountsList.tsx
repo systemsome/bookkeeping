@@ -28,8 +28,9 @@ import {
   ArrowDownWideNarrow,
   Calendar,
   Search,
+  ReceiptText,
 } from 'lucide-react';
-import { FinancialAccount, AccountCategory } from '../types';
+import { FinancialAccount, AccountCategory, AssetGroup } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
 import { AccountCardFace } from './AccountCardFace';
 import { formatCurrency } from '../lib/formatters';
@@ -67,7 +68,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState<boolean>(false);
   const [filterSearchQuery, setFilterSearchQuery] = useState<string>('');
   const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<'CARD' | 'TABLE'>('CARD');
+  const [viewMode, setViewMode] = useState<'GROUPED' | 'CARD' | 'TABLE'>('GROUPED');
 
   // Drag & Drop Layout State
   const [isReorderMode, setIsReorderMode] = useState(false);
@@ -97,7 +98,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
 
   // Fetch live gold rate for quick reconcile
-  React.useEffect(() => {
+  useEffect(() => {
     fetchLiveGoldRate().then((rate) => setLiveGoldRate(rate));
   }, []);
 
@@ -165,15 +166,15 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const handleSortByCategory = () => {
     const categoryOrder: Record<AccountCategory, number> = {
       DEBIT_CARD: 1,
-      ALIPAY: 2,
-      CASH: 3,
-      YUEBAO: 4,
-      FUND: 5,
-      GOLD: 6,
-      JD_FINANCE: 7,
-      CREDIT_CARD: 8,
-      JD_BAITIAO: 9,
-      HUABEI: 10,
+      CREDIT_CARD: 2,
+      JD_BAITIAO: 3,
+      HUABEI: 4,
+      ALIPAY: 5,
+      YUEBAO: 6,
+      FUND: 7,
+      GOLD: 8,
+      JD_FINANCE: 9,
+      CASH: 10,
       RECEIVABLE: 11,
       PAYABLE: 12,
     };
@@ -183,7 +184,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
       return orderA - orderB;
     });
     onReorderAccounts?.(sorted);
-    showToast('✨ 已按卡片类型标准分组排版');
+    showToast('✨ 已按卡片大类标准排版规整');
   };
 
   const handleSortByDueDate = () => {
@@ -270,52 +271,142 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     setReconcilingAccount(null);
   };
 
-  const groupDefinitions = [
-    {
-      id: 'ALL',
-      label: '全部账户',
-      subLabel: '包含储蓄卡、信用卡、理财、现金等所有卡片',
-      icon: Layers,
-      color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700',
-      count: accounts.length,
-    },
-    {
-      id: 'LIQUID',
-      label: '流动资金',
-      subLabel: '储蓄借记卡 / 微信支付 / 支付宝 / 现金',
-      icon: Wallet,
-      color: 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/60',
-      count: accounts.filter((a) => ['DEBIT_CARD', 'ALIPAY', 'CASH'].includes(a.category)).length,
-    },
-    {
-      id: 'INVESTMENT',
-      label: '理财投资',
-      subLabel: '余额宝 / 公募基金 / 黄金积存 / 京东金融',
-      icon: TrendingUp,
-      color: 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/60',
-      count: accounts.filter((a) =>
-        ['YUEBAO', 'FUND', 'GOLD', 'JD_FINANCE'].includes(a.category)
-      ).length,
-    },
-    {
-      id: 'CREDIT',
-      label: '信用负债',
-      subLabel: '银行信用卡 / 京东白条 / 蚂蚁花呗 / 借入款项',
-      icon: CreditCard,
-      color: 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60',
-      count: accounts.filter((a) =>
-        ['CREDIT_CARD', 'JD_BAITIAO', 'HUABEI', 'PAYABLE'].includes(a.category)
-      ).length,
-    },
-    {
-      id: 'DEBT_RECEIVABLE',
-      label: '借出债权',
-      subLabel: '借给亲友、同事借出待收回 / 应收款项',
-      icon: HandCoins,
-      color: 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900/60',
-      count: accounts.filter((a) => a.category === 'RECEIVABLE').length,
-    },
-  ];
+  // 6 Asset Major Groups requested: 借记卡 信用卡 数字钱包 理财基金 现金 借贷
+  const groupDefinitions = useMemo(() => {
+    // 1. 借记卡
+    const debitCards = accounts.filter((a) => a.category === 'DEBIT_CARD');
+    const debitTotal = debitCards.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    // 2. 信用卡 (信用卡、白条、花呗)
+    const creditCards = accounts.filter((a) =>
+      ['CREDIT_CARD', 'JD_BAITIAO', 'HUABEI'].includes(a.category)
+    );
+    const creditUsedTotal = creditCards.reduce(
+      (sum, a) => sum + (a.usedCredit !== undefined ? a.usedCredit : a.balance || 0),
+      0
+    );
+    const creditLimitTotal = creditCards.reduce((sum, a) => sum + (a.creditLimit || 0), 0);
+
+    // 3. 数字钱包 (支付宝等)
+    const walletAccounts = accounts.filter((a) => a.category === 'ALIPAY');
+    const walletTotal = walletAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    // 4. 理财基金 (余额宝、公募基金、黄金、京东金融)
+    const fundAccounts = accounts.filter((a) =>
+      ['YUEBAO', 'FUND', 'GOLD', 'JD_FINANCE'].includes(a.category)
+    );
+    const fundTotal = fundAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    // 5. 现金
+    const cashAccounts = accounts.filter((a) => a.category === 'CASH');
+    const cashTotal = cashAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    // 6. 借贷 (借出待收 / 借入待还)
+    const lendBorrowAccounts = accounts.filter((a) =>
+      ['RECEIVABLE', 'PAYABLE'].includes(a.category)
+    );
+    const receivableTotal = accounts
+      .filter((a) => a.category === 'RECEIVABLE' && !a.isSettled)
+      .reduce((sum, a) => sum + (a.balance || 0), 0);
+    const payableTotal = accounts
+      .filter((a) => a.category === 'PAYABLE' && !a.isSettled)
+      .reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    return [
+      {
+        id: 'ALL',
+        label: '全部账户',
+        subLabel: '包含借记卡、信用卡、数字钱包、理财基金、现金与借贷',
+        icon: Layers,
+        badgeBg: 'bg-slate-100 dark:bg-slate-800',
+        badgeText: 'text-slate-800 dark:text-slate-200',
+        borderColor: 'border-slate-300 dark:border-slate-700',
+        count: accounts.length,
+        defaultAddCategory: 'DEBIT_CARD' as AccountCategory,
+        metricsText: `共 ${accounts.length} 个账户`,
+      },
+      {
+        id: 'DEBIT_CARD' as AssetGroup,
+        label: '借记卡',
+        subLabel: '各大商业银行储蓄卡、工资卡、活期账户',
+        icon: Building2,
+        badgeBg: 'bg-blue-50 dark:bg-blue-950/60',
+        badgeText: 'text-blue-600 dark:text-blue-400',
+        borderColor: 'border-blue-200 dark:border-blue-900/60',
+        count: debitCards.length,
+        defaultAddCategory: 'DEBIT_CARD' as AccountCategory,
+        totalBalance: debitTotal,
+        metricsText: `余额 ${formatCurrency(debitTotal, privacyMode)}`,
+      },
+      {
+        id: 'CREDIT_CARD' as AssetGroup,
+        label: '信用卡',
+        subLabel: '各大行信用卡、京东白条、蚂蚁花呗消费信贷',
+        icon: CreditCard,
+        badgeBg: 'bg-rose-50 dark:bg-rose-950/60',
+        badgeText: 'text-rose-600 dark:text-rose-400',
+        borderColor: 'border-rose-200 dark:border-rose-900/60',
+        count: creditCards.length,
+        defaultAddCategory: 'CREDIT_CARD' as AccountCategory,
+        totalBalance: creditUsedTotal,
+        totalLimit: creditLimitTotal,
+        metricsText: `已用欠款 ${formatCurrency(creditUsedTotal, privacyMode)} / 额度 ${formatCurrency(creditLimitTotal, privacyMode)}`,
+      },
+      {
+        id: 'DIGITAL_WALLET' as AssetGroup,
+        label: '数字钱包',
+        subLabel: '支付宝余额、微信零钱、第三方移动支付钱包',
+        icon: Smartphone,
+        badgeBg: 'bg-sky-50 dark:bg-sky-950/60',
+        badgeText: 'text-sky-600 dark:text-sky-400',
+        borderColor: 'border-sky-200 dark:border-sky-900/60',
+        count: walletAccounts.length,
+        defaultAddCategory: 'ALIPAY' as AccountCategory,
+        totalBalance: walletTotal,
+        metricsText: `零钱余额 ${formatCurrency(walletTotal, privacyMode)}`,
+      },
+      {
+        id: 'FUND' as AssetGroup,
+        label: '理财基金',
+        subLabel: '余额宝、公募基金、黄金积存金、京东金融',
+        icon: TrendingUp,
+        badgeBg: 'bg-amber-50 dark:bg-amber-950/60',
+        badgeText: 'text-amber-600 dark:text-amber-400',
+        borderColor: 'border-amber-200 dark:border-amber-900/60',
+        count: fundAccounts.length,
+        defaultAddCategory: 'FUND' as AccountCategory,
+        totalBalance: fundTotal,
+        metricsText: `理财市值 ${formatCurrency(fundTotal, privacyMode)}`,
+      },
+      {
+        id: 'CASH' as AssetGroup,
+        label: '现金',
+        subLabel: '纸币现金、钱包零钱、应急备用现金',
+        icon: Banknote,
+        badgeBg: 'bg-emerald-50 dark:bg-emerald-950/60',
+        badgeText: 'text-emerald-600 dark:text-emerald-400',
+        borderColor: 'border-emerald-200 dark:border-emerald-900/60',
+        count: cashAccounts.length,
+        defaultAddCategory: 'CASH' as AccountCategory,
+        totalBalance: cashTotal,
+        metricsText: `备用现金 ${formatCurrency(cashTotal, privacyMode)}`,
+      },
+      {
+        id: 'LEND_BORROW' as AssetGroup,
+        label: '借贷',
+        subLabel: '亲友借出待收回款项 (债权) 与借入款项 (债务)',
+        icon: HandCoins,
+        badgeBg: 'bg-purple-50 dark:bg-purple-950/60',
+        badgeText: 'text-purple-600 dark:text-purple-400',
+        borderColor: 'border-purple-200 dark:border-purple-900/60',
+        count: lendBorrowAccounts.length,
+        defaultAddCategory: 'RECEIVABLE' as AccountCategory,
+        receivables: receivableTotal,
+        payables: payableTotal,
+        metricsText: `待收 ${formatCurrency(receivableTotal, privacyMode)} · 待还 ${formatCurrency(payableTotal, privacyMode)}`,
+      },
+    ];
+  }, [accounts, privacyMode]);
 
   const currentGroupInfo =
     groupDefinitions.find((g) => g.id === filterGroup) || groupDefinitions[0];
@@ -329,13 +420,22 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         g.label.toLowerCase().includes(q) ||
         g.subLabel.toLowerCase().includes(q)
     );
-  }, [filterSearchQuery, accounts]);
+  }, [filterSearchQuery, groupDefinitions]);
 
   const filteredAccounts = accounts.filter((acc) => {
     if (filterGroup === 'ALL') return true;
     const config = ACCOUNT_CATEGORY_CONFIG[acc.category];
-    return config.group === filterGroup;
+    return config?.group === filterGroup;
   });
+
+  // Six asset groups for grouped rendering
+  const activeAssetGroups = useMemo(() => {
+    const nonAllGroups = groupDefinitions.filter((g) => g.id !== 'ALL');
+    if (filterGroup === 'ALL') {
+      return nonAllGroups;
+    }
+    return nonAllGroups.filter((g) => g.id === filterGroup);
+  }, [groupDefinitions, filterGroup]);
 
   return (
     <div className="space-y-6">
@@ -352,7 +452,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
       {/* Top Header & Actions */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               资产账户
             </h2>
@@ -361,12 +461,22 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            支持银行借记卡、信用卡、支付宝、微信、余额宝、公募基金、黄金积存金与白条，支持自由拖动排版与自定义卡片顺序
+            资产大类分为：借记卡、信用卡、数字钱包、理财基金、现金、借贷，支持按大类排版与自由拖动调整
           </p>
         </div>
 
         {/* Action Button Group */}
         <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+          {/* Add Account Master Button */}
+          <button
+            id="btn-add-account-main"
+            onClick={() => onAddAccount('DEBIT_CARD')}
+            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>添加新账户</span>
+          </button>
+
           {/* Reorder Layout Mode Toggle */}
           {accounts.length > 1 && (
             <button
@@ -383,23 +493,35 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             </button>
           )}
 
-          {/* View Mode Toggle */}
+          {/* View Mode Toggle: Grouped, Card, Table */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
             <button
+              onClick={() => setViewMode('GROUPED')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                viewMode === 'GROUPED'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+              title="大类分组排版 (按6大资产大类分区排列)"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>大类排版</span>
+            </button>
+            <button
               onClick={() => setViewMode('CARD')}
-              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
                 viewMode === 'CARD'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
               }`}
-              title="卡面视图 (真实银行卡与平台质感卡面)"
+              title="平铺卡面 (真实银行卡质感卡面)"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>卡面视图</span>
+              <span>平铺卡面</span>
             </button>
             <button
               onClick={() => setViewMode('TABLE')}
-              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
                 viewMode === 'TABLE'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
@@ -445,6 +567,71 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       </div>
 
+      {/* 6 Asset Classes Top Summary & Quick Filter Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {groupDefinitions
+          .filter((g) => g.id !== 'ALL')
+          .map((g) => {
+            const isSelected = filterGroup === g.id;
+            const IconComp = g.icon;
+
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => {
+                  setFilterGroup((prev) => (prev === g.id ? 'ALL' : g.id));
+                }}
+                className={`p-3 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+                  isSelected
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-blue-500/40'
+                    : 'bg-white hover:bg-slate-50/90 border-slate-200/80 text-slate-800 hover:border-slate-300 shadow-xs'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div
+                    className={`p-2 rounded-xl shrink-0 ${
+                      isSelected ? 'bg-white/20 text-white' : `${g.badgeBg} ${g.badgeText}`
+                    }`}
+                  >
+                    <IconComp className="w-4 h-4" />
+                  </div>
+                  <span
+                    className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {g.count} 张
+                  </span>
+                </div>
+
+                <div className="mt-3">
+                  <div
+                    className={`text-xs font-bold truncate ${
+                      isSelected ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    {g.label}
+                  </div>
+                  <div
+                    className={`text-[10px] mt-0.5 truncate font-mono ${
+                      isSelected ? 'text-slate-300' : 'text-slate-500'
+                    }`}
+                  >
+                    {g.metricsText}
+                  </div>
+                </div>
+
+                {isSelected && (
+                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400" />
+                )}
+              </button>
+            );
+          })}
+      </div>
+
       {/* REORDER TOOLBAR (when in reorder mode) */}
       {isReorderMode && accounts.length > 1 && (
         <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/90 shadow-2xs space-y-3 animate-in fade-in duration-200">
@@ -478,7 +665,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-purple-100 text-purple-900 text-xs font-semibold border border-purple-200 shadow-2xs transition-colors flex items-center gap-1"
               >
                 <Layers className="w-3 h-3 text-purple-600" />
-                <span>按卡片类别规整</span>
+                <span>按大类标准规整</span>
               </button>
               <button
                 onClick={handleSortByDueDate}
@@ -492,131 +679,41 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       )}
 
-      {/* Account Category Filter Dropdown (点击选择切换 - 与记账币种功能一致) */}
+      {/* Account Category Filter Pills & Popover Dropdown */}
       {accounts.length > 0 && (
-        <div ref={filterDropdownRef} className="relative z-20">
-          <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
-                <Layers className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                  全部账户 (点击选择切换)
-                </span>
-                <span className="text-[11px] text-slate-400 dark:text-slate-400 truncate block">
-                  {filterGroup === 'ALL'
-                    ? `当前查看: 全部账户 · 共 ${accounts.length} 张卡片`
-                    : `当前查看: ${currentGroupInfo.label} (${currentGroupInfo.subLabel}) · 共 ${currentGroupInfo.count} 张卡片`}
-                </span>
-              </div>
-            </div>
+        <div ref={filterDropdownRef} className="space-y-2">
+          {/* Quick Pill Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {groupDefinitions.map((g) => {
+              const isSelected = filterGroup === g.id;
+              const IconComp = g.icon;
 
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Clickable Pill triggering Dropdown */}
-              <button
-                type="button"
-                id="btn-trigger-account-group-dropdown"
-                onClick={() => setIsFilterDropdownOpen((prev) => !prev)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 border shadow-2xs transition-all ${
-                  isFilterDropdownOpen
-                    ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-700 dark:border-slate-600'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-slate-400'
-                }`}
-              >
-                <CurrentGroupIcon className="w-3.5 h-3.5" />
-                <span className="font-semibold">{currentGroupInfo.label}</span>
-                <span className="text-[11px] opacity-80 font-mono">({currentGroupInfo.count}张)</span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${isFilterDropdownOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-            </div>
-          </div>
-
-          {/* Click-to-Show Group Dropdown Popover */}
-          {isFilterDropdownOpen && (
-            <div className="absolute left-0 right-0 top-full mt-2 z-30 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-3 animate-in fade-in zoom-in-95 duration-150">
-              {/* Search Bar inside popover */}
-              <div className="relative mb-2.5">
-                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  value={filterSearchQuery}
-                  onChange={(e) => setFilterSearchQuery(e.target.value)}
-                  placeholder="搜索分类名称 (如 全部、流动、理财、信用卡、借记卡)..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-slate-400"
-                  autoFocus
-                />
-              </div>
-
-              {/* Category Options Grid */}
-              <div className="max-h-60 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-0.5">
-                {filteredGroupList.map((g) => {
-                  const isSelected = filterGroup === g.id;
-                  const IconComp = g.icon;
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => {
-                        setFilterGroup(g.id);
-                        setIsFilterDropdownOpen(false);
-                        setFilterSearchQuery('');
-                      }}
-                      className={`p-2.5 rounded-xl text-left border flex items-center justify-between transition-all ${
-                        isSelected
-                          ? 'bg-slate-900 dark:bg-slate-700 text-white border-slate-900 dark:border-slate-600 shadow-2xs'
-                          : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200/70 dark:border-slate-700/60 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                      }`}
-                    >
-                      <div className="min-w-0 flex items-center gap-2">
-                        <div className={`p-1.5 rounded-lg shrink-0 ${isSelected ? 'bg-white/20 text-white' : g.color}`}>
-                          <IconComp className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-bold text-xs truncate flex items-center gap-1.5">
-                            <span>{g.label}</span>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                                isSelected
-                                  ? 'bg-white/20 text-slate-100'
-                                  : 'bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                              }`}
-                            >
-                              {g.count} 张
-                            </span>
-                          </div>
-                          <div
-                            className={`text-[10px] truncate mt-0.5 ${
-                              isSelected ? 'text-slate-300' : 'text-slate-400 dark:text-slate-500'
-                            }`}
-                          >
-                            {g.subLabel}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="shrink-0 ml-2">
-                        {isSelected && <Check className="w-4 h-4 text-emerald-400" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Dropdown Footer */}
-              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-[11px] text-slate-400 px-1">
-                <span>支持快速切换资产大类与卡面视图</span>
+              return (
                 <button
+                  key={g.id}
                   type="button"
-                  onClick={() => setIsFilterDropdownOpen(false)}
-                  className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium"
+                  onClick={() => setFilterGroup(g.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
+                    isSelected
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs scale-102'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
                 >
-                  关闭
+                  <IconComp className="w-3.5 h-3.5" />
+                  <span>{g.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {g.count}
+                  </span>
                 </button>
-              </div>
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -632,11 +729,11 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               开始添加您的真实资产卡片
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 mt-2">
-              点击下方任意类别卡片，立即添加招商银行、工商银行、支付宝、微信支付、京东金融等专属卡面。
+              资产已全新重排为6大资产大类：借记卡、信用卡、数字钱包、理财基金、现金、借贷。点击下方即可快速添加。
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 max-w-4xl mx-auto text-left">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-w-4xl mx-auto text-left">
             <button
               onClick={() => onAddAccount('DEBIT_CARD')}
               className="p-4 rounded-2xl bg-slate-50 hover:bg-blue-50/60 border border-slate-200 hover:border-blue-300 transition-all group flex flex-col justify-between"
@@ -647,9 +744,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 </div>
                 <div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
-                    银行储蓄借记卡
+                    借记卡
                   </h4>
-                  <p className="text-[11px] text-slate-500">招商/工行/建行等</p>
+                  <p className="text-[11px] text-slate-500">招行/工行/建行等储蓄卡</p>
                 </div>
               </div>
               <span className="text-xs text-blue-600 font-semibold mt-3 block">
@@ -667,9 +764,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 </div>
                 <div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
-                    借贷信用卡
+                    信用卡 / 白条 / 花呗
                   </h4>
-                  <p className="text-[11px] text-slate-500">经典白金/白麒麟等</p>
+                  <p className="text-[11px] text-slate-500">经典白金/白条/花呗额度</p>
                 </div>
               </div>
               <span className="text-xs text-rose-600 font-semibold mt-3 block">
@@ -687,39 +784,218 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 </div>
                 <div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
-                    支付宝 / 微信 / 京东
+                    数字钱包
                   </h4>
-                  <p className="text-[11px] text-slate-500">平台数字钱包</p>
+                  <p className="text-[11px] text-slate-500">支付宝余额/微信零钱</p>
                 </div>
               </div>
               <span className="text-xs text-sky-600 font-semibold mt-3 block">
-                + 添加数字钱包卡面
+                + 添加数字钱包
               </span>
             </button>
 
             <button
-              onClick={() => onAddAccount('GOLD')}
+              onClick={() => onAddAccount('FUND')}
               className="p-4 rounded-2xl bg-slate-50 hover:bg-amber-50/60 border border-slate-200 hover:border-amber-300 transition-all group flex flex-col justify-between"
             >
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center">
-                  <Coins className="w-5 h-5" />
+                  <TrendingUp className="w-5 h-5" />
                 </div>
                 <div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
-                    黄金 / 基金 / 现金
+                    理财基金
                   </h4>
-                  <p className="text-[11px] text-slate-500">24K积存金/公募组合</p>
+                  <p className="text-[11px] text-slate-500">余额宝/公募基金/黄金/京东金融</p>
                 </div>
               </div>
               <span className="text-xs text-amber-600 font-semibold mt-3 block">
-                + 添加投资理财卡面
+                + 添加理财基金卡面
+              </span>
+            </button>
+
+            <button
+              onClick={() => onAddAccount('CASH')}
+              className="p-4 rounded-2xl bg-slate-50 hover:bg-emerald-50/60 border border-slate-200 hover:border-emerald-300 transition-all group flex flex-col justify-between"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+                  <Banknote className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs sm:text-sm text-slate-900">
+                    现金备用金
+                  </h4>
+                  <p className="text-[11px] text-slate-500">随身现金/家中应急钞</p>
+                </div>
+              </div>
+              <span className="text-xs text-emerald-600 font-semibold mt-3 block">
+                + 添加现金账户
+              </span>
+            </button>
+
+            <button
+              onClick={() => onAddAccount('RECEIVABLE')}
+              className="p-4 rounded-2xl bg-slate-50 hover:bg-purple-50/60 border border-slate-200 hover:border-purple-300 transition-all group flex flex-col justify-between"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center">
+                  <HandCoins className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs sm:text-sm text-slate-900">
+                    借贷往来
+                  </h4>
+                  <p className="text-[11px] text-slate-500">借出待收 / 借入待还</p>
+                </div>
+              </div>
+              <span className="text-xs text-purple-600 font-semibold mt-3 block">
+                + 添加借贷记录
               </span>
             </button>
           </div>
         </div>
+      ) : viewMode === 'GROUPED' ? (
+        /* SECTIONED VIEW: GROUPED BY 6 ASSET CLASSES (借记卡、信用卡、数字钱包、理财基金、现金、借贷) */
+        <div className="space-y-8">
+          {activeAssetGroups.map((group) => {
+            const groupAccounts = accounts.filter(
+              (acc) => ACCOUNT_CATEGORY_CONFIG[acc.category]?.group === group.id
+            );
+
+            // Skip rendering empty groups in filtered mode, but show with add-CTA in ALL mode
+            if (groupAccounts.length === 0 && filterGroup !== 'ALL') {
+              return (
+                <div
+                  key={group.id}
+                  className="rounded-3xl bg-white border border-slate-200/80 p-8 text-center shadow-xs space-y-4"
+                >
+                  <div className={`w-12 h-12 rounded-2xl ${group.badgeBg} ${group.badgeText} flex items-center justify-center mx-auto`}>
+                    <group.icon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      「{group.label}」大类暂无账户
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">{group.subLabel}</p>
+                  </div>
+                  <button
+                    onClick={() => onAddAccount(group.defaultAddCategory)}
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>添加{group.label}账户</span>
+                  </button>
+                </div>
+              );
+            }
+
+            if (groupAccounts.length === 0) {
+              return null; // When viewing ALL, hide completely empty sections
+            }
+
+            const IconComponent = group.icon;
+
+            return (
+              <div
+                key={group.id}
+                className="rounded-3xl bg-slate-50/50 border border-slate-200/70 p-4 sm:p-6 space-y-4 shadow-2xs"
+              >
+                {/* Category Section Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/60">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${group.badgeBg} ${group.badgeText} border ${group.borderColor}`}
+                    >
+                      <IconComponent className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900">
+                          {group.label}
+                        </h3>
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700">
+                          {groupAccounts.length} 张卡片
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {group.subLabel}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Category Summary Metric & Quick Add CTA */}
+                  <div className="flex items-center gap-2.5 self-end sm:self-auto">
+                    <div className="text-right px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                      <span className="text-[10px] text-slate-400 block">大类资产</span>
+                      <span className="text-xs font-bold text-slate-900 font-mono">
+                        {group.metricsText}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onAddAccount(group.defaultAddCategory)}
+                      className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 shadow-2xs transition-colors flex items-center gap-1 shrink-0"
+                      title={`添加「${group.label}」账户`}
+                    >
+                      <Plus className="w-3.5 h-3.5 text-blue-600" />
+                      <span>添加{group.label}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cards Grid for this category */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 pt-1">
+                  {groupAccounts.map((acc, index) => {
+                    const isDraggingThis = draggedAccountId === acc.id;
+                    const isOverThis = dragOverAccountId === acc.id && !isDraggingThis;
+
+                    return (
+                      <div
+                        key={acc.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, acc.id)}
+                        onDragOver={(e) => handleDragOver(e, acc.id)}
+                        onDrop={(e) => handleDrop(e, acc.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`h-full transition-all duration-200 rounded-3xl ${
+                          isDraggingThis
+                            ? 'opacity-30 scale-95 ring-2 ring-purple-500 shadow-2xl'
+                            : isOverThis
+                            ? 'scale-102 ring-4 ring-purple-400 bg-purple-50/50 p-1 shadow-xl'
+                            : ''
+                        }`}
+                      >
+                        <AccountCardFace
+                          account={acc}
+                          privacyMode={privacyMode}
+                          onEditAccount={onEditAccount}
+                          onDeleteAccount={onDeleteAccount}
+                          onQuickReconcile={handleOpenQuickReconcile}
+                          onOpenRepayment={onOpenRepayment}
+                          onOpenNewTx={onOpenNewTx}
+                          isReorderMode={isReorderMode}
+                          reorderIndex={index}
+                          totalCount={groupAccounts.length}
+                          onMoveUp={() => handleMoveUp(acc.id)}
+                          onMoveDown={() => handleMoveDown(acc.id)}
+                          onMoveTop={() => handleMoveTop(acc.id)}
+                          onAutoRegenColor={(accountId) => {
+                            const newPal = getRandomCardBackground();
+                            onDirectUpdateAccount(accountId, { cardBgColor: newPal.gradient });
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : viewMode === 'CARD' ? (
-        /* REALISTIC CARD FACE GRID (Default with Drag and Drop) */
+        /* REALISTIC CARD FACE GRID (Flat with Drag and Drop) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {filteredAccounts.map((acc, index) => {
             const isDraggingThis = draggedAccountId === acc.id;
@@ -773,7 +1049,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 <tr>
                   <th className="py-3 px-3 w-10 text-center">排版</th>
                   <th className="py-3 px-4">账户卡片</th>
-                  <th className="py-3 px-4">类别</th>
+                  <th className="py-3 px-4">资产大类</th>
                   <th className="py-3 px-4">持卡人/卡号</th>
                   <th className="py-3 px-4 text-right">余额 / 待还欠款</th>
                   <th className="py-3 px-4 text-right">额度 / 详情</th>
@@ -825,8 +1101,8 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">
-                          {ACCOUNT_CATEGORY_CONFIG[acc.category]?.label || '账户'}
+                        <span className="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 font-medium">
+                          {ACCOUNT_CATEGORY_CONFIG[acc.category]?.groupLabel || '资产'} · {ACCOUNT_CATEGORY_CONFIG[acc.category]?.label || '账户'}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-mono text-xs text-slate-600">
