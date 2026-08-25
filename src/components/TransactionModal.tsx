@@ -16,19 +16,39 @@ import {
   Trash2,
   Wand2,
   Palette,
+  CreditCard,
+  Building2,
+  Wallet,
+  Coins,
+  Receipt,
+  RotateCcw,
+  SlidersHorizontal,
+  Settings2,
 } from 'lucide-react';
-import { FinancialAccount, TransactionType, Transaction } from '../types';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../lib/constants';
+import { FinancialAccount, TransactionType, Transaction, ExpenseCategory, IncomeCategory } from '../types';
+import {
+  EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
+  getStoredExpenseCategories,
+  saveStoredExpenseCategories,
+  getStoredIncomeCategories,
+  saveStoredIncomeCategories,
+} from '../lib/constants';
 import {
   SUPPORTED_CURRENCIES,
   CurrencyItem,
   fetchLiveForexRates,
   getCachedForexRates,
   getCurrencyInfo,
-  convertForeignToCny,
   ForexRatesResponse,
 } from '../lib/forexRates';
-import { CategoryIcon, POPULAR_CATEGORY_ICONS, matchCategoryIconName } from './CategoryIcon';
+import {
+  CategoryIcon,
+  POPULAR_CATEGORY_ICONS,
+  matchCategoryIconName,
+  setCustomCategoryIcon,
+  removeCustomCategoryIcon,
+} from './CategoryIcon';
 
 interface TransactionModalProps {
   accounts: FinancialAccount[];
@@ -41,7 +61,6 @@ interface TransactionModalProps {
 }
 
 const CUSTOM_TAGS_STORAGE_KEY = 'asset_vault_custom_user_tags';
-const CUSTOM_CATEGORIES_STORAGE_KEY = 'asset_vault_custom_user_categories';
 const DEFAULT_PRESET_TAGS = ['日常必要', '改善娱乐', '境外海淘', '旅游出行', '固定支出', '家庭公共', '投资学习'];
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -70,7 +89,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [showRateCustomizer, setShowRateCustomizer] = useState<boolean>(false);
   const [rateFeedback, setRateFeedback] = useState<string>('');
 
-  // Currency Picker Dropdown / Popover State (点击展示币种)
+  // Currency Picker Popover State
   const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState<boolean>(false);
   const [currencySearchQuery, setCurrencySearchQuery] = useState<string>('');
   const currencyDropdownRef = useRef<HTMLDivElement>(null);
@@ -101,25 +120,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       (accounts.length > 1 ? accounts[1].id : '')
   );
 
-  // Custom User Categories & Tags from LocalStorage
-  const [customExpenseCategories, setCustomExpenseCategories] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_expense`);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Fully Customizable Categories State
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() =>
+    getStoredExpenseCategories()
+  );
+  const [incomeCategories, setIncomeCategories] = useState<IncomeCategory[]>(() =>
+    getStoredIncomeCategories()
+  );
+  const [isManagingCategories, setIsManagingCategories] = useState<boolean>(false);
 
-  const [customIncomeCategories, setCustomIncomeCategories] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_income`);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-
+  // Custom Tags State
   const [availableTags, setAvailableTags] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TAGS_STORAGE_KEY);
@@ -133,9 +143,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     return DEFAULT_PRESET_TAGS;
   });
 
-  // Category & Tag States
+  // Selected Category & Tag
   const [category, setCategory] = useState<string>(
-    initialTransaction?.category || '餐饮美食'
+    initialTransaction?.category || (expenseCategories[0]?.name || '餐饮美食')
   );
   const [tag, setTag] = useState<string>(initialTransaction?.tag || '日常必要');
   const [description, setDescription] = useState<string>(
@@ -153,6 +163,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [selectedCustomIcon, setSelectedCustomIcon] = useState<string>('');
   const [showIconPalette, setShowIconPalette] = useState<boolean>(false);
+  const [iconGroupFilter, setIconGroupFilter] = useState<string>('全部');
 
   const [isAddingCustomTag, setIsAddingCustomTag] = useState<boolean>(false);
   const [newTagName, setNewTagName] = useState<string>('');
@@ -255,20 +266,62 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     );
   }, [currencySearchQuery]);
 
-  // Add custom category handler with intelligent icon selection
-  const handleAddCustomCategory = () => {
+  // Filtered icons in palette
+  const filteredPaletteIcons = useMemo(() => {
+    if (iconGroupFilter === '全部') return POPULAR_CATEGORY_ICONS;
+    return POPULAR_CATEGORY_ICONS.filter((item) => item.categoryGroup === iconGroupFilter);
+  }, [iconGroupFilter]);
+
+  // Icon groups list for category tabs
+  const iconGroups = ['全部', '餐饮食品', '购物百货', '交通出行', '居家生活', '休闲数码', '健康教育', '金融收入'];
+
+  // Add custom category handler with permanent icon mapping registration
+  const handleAddCategory = () => {
     const trimmed = newCategoryName.trim();
     if (!trimmed) return;
 
+    const chosenIconId = predictedIcon || 'Folder';
+    // Persist exact icon selection to global category icon mapper
+    setCustomCategoryIcon(trimmed, chosenIconId);
+
     if (type === 'EXPENSE') {
-      const next = Array.from(new Set([...customExpenseCategories, trimmed]));
-      setCustomExpenseCategories(next);
-      localStorage.setItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_expense`, JSON.stringify(next));
+      const exists = expenseCategories.some((c) => c.name === trimmed);
+      let updated: ExpenseCategory[];
+      if (exists) {
+        updated = expenseCategories.map((c) =>
+          c.name === trimmed ? { ...c, icon: chosenIconId } : c
+        );
+      } else {
+        const newCat: ExpenseCategory = {
+          id: `exp-${Date.now()}-${encodeURIComponent(trimmed)}`,
+          name: trimmed,
+          icon: chosenIconId,
+          color: '#f43f5e',
+        };
+        updated = [...expenseCategories, newCat];
+      }
+      setExpenseCategories(updated);
+      saveStoredExpenseCategories(updated);
     } else if (type === 'INCOME') {
-      const next = Array.from(new Set([...customIncomeCategories, trimmed]));
-      setCustomIncomeCategories(next);
-      localStorage.setItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_income`, JSON.stringify(next));
+      const exists = incomeCategories.some((c) => c.name === trimmed);
+      let updated: IncomeCategory[];
+      if (exists) {
+        updated = incomeCategories.map((c) =>
+          c.name === trimmed ? { ...c, icon: chosenIconId } : c
+        );
+      } else {
+        const newCat: IncomeCategory = {
+          id: `inc-${Date.now()}-${encodeURIComponent(trimmed)}`,
+          name: trimmed,
+          icon: chosenIconId,
+          color: '#10b981',
+        };
+        updated = [...incomeCategories, newCat];
+      }
+      setIncomeCategories(updated);
+      saveStoredIncomeCategories(updated);
     }
+
     setCategory(trimmed);
     setNewCategoryName('');
     setSelectedCustomIcon('');
@@ -276,27 +329,53 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setIsAddingCustomCategory(false);
   };
 
-  // Delete custom category handler
-  const handleDeleteCustomCategory = (
+  // Delete category handler (Supports deleting ANY category, built-in or custom)
+  const handleDeleteCategory = (
     catNameToDelete: string,
     targetType: 'EXPENSE' | 'INCOME',
     e: React.MouseEvent
   ) => {
     e.stopPropagation();
     if (targetType === 'EXPENSE') {
-      const next = customExpenseCategories.filter((c) => c !== catNameToDelete);
-      setCustomExpenseCategories(next);
-      localStorage.setItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_expense`, JSON.stringify(next));
+      if (expenseCategories.length <= 1) {
+        alert('请至少保留一个支出类别');
+        return;
+      }
+      const updated = expenseCategories.filter((c) => c.name !== catNameToDelete);
+      setExpenseCategories(updated);
+      saveStoredExpenseCategories(updated);
+      removeCustomCategoryIcon(catNameToDelete);
       if (category === catNameToDelete) {
-        setCategory(EXPENSE_CATEGORIES[0]?.name || '餐饮美食');
+        setCategory(updated[0]?.name || '餐饮美食');
       }
     } else {
-      const next = customIncomeCategories.filter((c) => c !== catNameToDelete);
-      setCustomIncomeCategories(next);
-      localStorage.setItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_income`, JSON.stringify(next));
-      if (category === catNameToDelete) {
-        setCategory(INCOME_CATEGORIES[0]?.name || '工资薪酬');
+      if (incomeCategories.length <= 1) {
+        alert('请至少保留一个收入类别');
+        return;
       }
+      const updated = incomeCategories.filter((c) => c.name !== catNameToDelete);
+      setIncomeCategories(updated);
+      saveStoredIncomeCategories(updated);
+      removeCustomCategoryIcon(catNameToDelete);
+      if (category === catNameToDelete) {
+        setCategory(updated[0]?.name || '工资薪酬');
+      }
+    }
+  };
+
+  // Reset categories to factory defaults
+  const handleResetCategoriesToDefault = (targetType: 'EXPENSE' | 'INCOME') => {
+    if (confirm(`确定要恢复${targetType === 'EXPENSE' ? '支出' : '收入'}类别为系统预设分类吗？`)) {
+      if (targetType === 'EXPENSE') {
+        setExpenseCategories([...EXPENSE_CATEGORIES]);
+        saveStoredExpenseCategories([...EXPENSE_CATEGORIES]);
+        setCategory(EXPENSE_CATEGORIES[0].name);
+      } else {
+        setIncomeCategories([...INCOME_CATEGORIES]);
+        saveStoredIncomeCategories([...INCOME_CATEGORIES]);
+        setCategory(INCOME_CATEGORIES[0].name);
+      }
+      setIsManagingCategories(false);
     }
   };
 
@@ -324,13 +403,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   };
 
-  // Update defaults when tab changes (only if creating fresh)
+  // Update defaults when tab changes
   useEffect(() => {
     if (!isEditing) {
       if (type === 'EXPENSE') {
-        setCategory(EXPENSE_CATEGORIES[0]?.name || '餐饮美食');
+        setCategory(expenseCategories[0]?.name || '餐饮美食');
       } else if (type === 'INCOME') {
-        setCategory(INCOME_CATEGORIES[0]?.name || '工资薪酬');
+        setCategory(incomeCategories[0]?.name || '工资薪酬');
       } else if (type === 'REPAYMENT') {
         setCategory('还信用卡/花呗/白条');
         const creditAcc = accounts.find(
@@ -354,7 +433,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setCategory('归还借款');
       }
     }
-  }, [type, accounts, isEditing]);
+  }, [type, accounts, isEditing, expenseCategories, incomeCategories]);
 
   const handleQuickAddAmount = (add: number) => {
     const current = parseFloat(amount) || 0;
@@ -405,6 +484,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const isForeign = currency !== 'CNY';
 
+  // Selected active accounts helper
+  const selectedAccount = useMemo(() => {
+    return accounts.find((a) => a.id === accountId) || accounts[0];
+  }, [accounts, accountId]);
+
+  const selectedTargetAccount = useMemo(() => {
+    return accounts.find((a) => a.id === targetAccountId) || accounts[1];
+  }, [accounts, targetAccountId]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
       <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl my-auto text-slate-900 dark:text-white">
@@ -419,7 +507,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 {isEditing ? '编辑流水账目明细' : '记一笔流水账目'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                支持外币折算、丰富图标类别与自定义分类标签
+                支持卡号尾号识别、多币种实时汇率与全自定义类别图标
               </p>
             </div>
           </div>
@@ -464,7 +552,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            转账/划转
+            转账
           </button>
           <button
             type="button"
@@ -479,74 +567,81 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* Currency Click-to-Open Bar (点击展示币种) */}
-          <div ref={currencyDropdownRef} className="relative">
-            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Currency Selector Bar */}
+          <div className="relative" ref={currencyDropdownRef}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                交易币种与实时汇率
+              </span>
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
-                  <Globe2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 block">
-                    记账币种 (点击选择切换)
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    {currency === 'CNY' ? '人民币基准本位币 (CNY)' : `当前选中: ${currentCurrencyInfo.name} (${currency})`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isForeign && (
-                  <button
-                    type="button"
-                    onClick={handleRefreshForex}
-                    disabled={isRefreshingRates}
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-medium flex items-center gap-1 transition-colors px-2 py-1 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200/60 dark:border-blue-900/60"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isRefreshingRates ? 'animate-spin' : ''}`} />
-                    <span>刷新汇率</span>
-                  </button>
-                )}
-
-                {/* Clickable Currency Pill triggering Dropdown */}
                 <button
                   type="button"
-                  id="btn-trigger-currency-dropdown"
-                  onClick={() => setIsCurrencyDropdownOpen((prev) => !prev)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 border shadow-2xs transition-all ${
-                    isCurrencyDropdownOpen
-                      ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-700 dark:border-slate-600'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-slate-400'
-                  }`}
+                  onClick={handleRefreshForex}
+                  disabled={isRefreshingRates}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
                 >
-                  <span className="text-sm">{currentCurrencyInfo.flag}</span>
-                  <span className="font-mono">{currency}</span>
-                  <span className="text-[11px] opacity-80">({currentCurrencyInfo.name})</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isCurrencyDropdownOpen ? 'rotate-180' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 ${isRefreshingRates ? 'animate-spin' : ''}`} />
+                  <span>{isRefreshingRates ? '更新中...' : '刷新汇率'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Click-to-Show Currency Dropdown Popover */}
+            {/* Currency Pill Trigger Button */}
+            <div className="flex items-center gap-2 mt-1.5">
+              <button
+                type="button"
+                onClick={() => setIsCurrencyDropdownOpen(!isCurrencyDropdownOpen)}
+                className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 transition-colors flex-1 text-left group"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{currentCurrencyInfo.flag}</span>
+                  <div>
+                    <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 dark:text-white mr-1.5">
+                      {currency}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {currentCurrencyInfo.name} ({currentCurrencyInfo.symbol})
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  {currency !== 'CNY' && (
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                      1 {currency} ≈ {currentExchangeRate} CNY
+                    </span>
+                  )}
+                  <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                </div>
+              </button>
+
+              {/* Fast CNY reset button */}
+              {currency !== 'CNY' && (
+                <button
+                  type="button"
+                  onClick={() => handleCurrencyChange('CNY')}
+                  className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  切回 CNY
+                </button>
+              )}
+            </div>
+
+            {/* Currency Dropdown Popover */}
             {isCurrencyDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-2 z-30 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-3 animate-in fade-in zoom-in-95 duration-150">
-                {/* Search Bar inside popover */}
-                <div className="relative mb-2.5">
-                  <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <div className="absolute top-full left-0 right-0 z-30 mt-1.5 p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
+                    placeholder="搜索币种代码/名称 (如 USD, 日元, EUR)..."
                     value={currencySearchQuery}
                     onChange={(e) => setCurrencySearchQuery(e.target.value)}
-                    placeholder="搜索币种名称、代码 (如 USD, 日元, 港币)..."
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     autoFocus
                   />
                 </div>
 
-                {/* Popular / All Grid */}
                 <div className="max-h-56 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-0.5">
                   {filteredCurrencies.map((cur) => {
                     const isSelected = currency === cur.code;
@@ -582,7 +677,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   })}
                 </div>
 
-                {/* Currency Footer tip */}
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-[11px] text-slate-400 px-1">
                   <span>支持全球 15+ 主要货币实时汇率自动换算</span>
                   <button
@@ -596,7 +690,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
             )}
 
-            {/* Rate feedback message */}
             {rateFeedback && (
               <div className="text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg mt-1.5 animate-in fade-in border border-blue-100 dark:border-blue-900/60">
                 {rateFeedback}
@@ -660,7 +753,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Foreign Currency Conversion & Exchange Rate Panel */}
+          {/* Foreign Currency Conversion Panel */}
           {isForeign && (
             <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50/90 via-indigo-50/60 to-sky-50/70 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-sky-950/30 border border-blue-200/80 dark:border-blue-800/60 space-y-3 shadow-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -687,7 +780,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </button>
               </div>
 
-              {/* Rate Customizer Input */}
               {showRateCustomizer && (
                 <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-800 border border-blue-200 dark:border-blue-800 space-y-2">
                   <div className="flex items-center justify-between">
@@ -720,7 +812,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* Real-time Conversion Result Banner */}
               <div className="p-3 rounded-xl bg-blue-100/70 dark:bg-blue-950/60 border border-blue-200/90 dark:border-blue-800/80 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-blue-900 dark:text-blue-200 font-semibold block">
@@ -740,28 +831,35 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Account Selection */}
+          {/* Account Selection (支付/扣款账户及目标账户) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
+              <label htmlFor="tx-select-account" className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
                 {type === 'INCOME'
                   ? '收款入账账户'
                   : type === 'TRANSFER' || type === 'REPAYMENT'
-                  ? '转出/扣款付款账户'
+                  ? '支付/扣款转出账户'
                   : '支付/扣款账户'}
               </label>
+
               <select
                 id="tx-select-account"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-slate-400 font-medium"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:border-blue-400 font-medium"
               >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} (余额: ¥{acc.balance?.toFixed(2) || '0.00'})
-                  </option>
-                ))}
+                {accounts.map((acc) => {
+                  const cardSuffix = acc.cardNumberLast4 ? ` [尾号 ${acc.cardNumberLast4}]` : '';
+                  const balanceStr = acc.usedCredit !== undefined
+                    ? `(待还: ¥${acc.usedCredit.toFixed(2)})`
+                    : `(余额: ¥${acc.balance?.toFixed(2) || '0.00'})`;
+                  return (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.bankName || acc.name}{acc.bankName && acc.name !== acc.bankName ? ` (${acc.name})` : ''}{cardSuffix} {balanceStr}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -769,65 +867,104 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               type
             ) && (
               <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
+                <label htmlFor="tx-select-target-account" className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
                   {type === 'REPAYMENT'
                     ? '待还款信用卡/白条'
                     : type === 'TRANSFER'
                     ? '转入目标账户'
                     : '目标关联账户'}
                 </label>
+
                 <select
                   id="tx-select-target-account"
                   value={targetAccountId}
                   onChange={(e) => setTargetAccountId(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-slate-400 font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:border-purple-400 font-medium"
                 >
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name}{' '}
-                      {acc.usedCredit !== undefined
+                  {accounts
+                    .filter((acc) => acc.id !== accountId)
+                    .map((acc) => {
+                      const cardSuffix = acc.cardNumberLast4 ? ` [尾号 ${acc.cardNumberLast4}]` : '';
+                      const balInfo = acc.usedCredit !== undefined
                         ? `(待还: ¥${acc.usedCredit.toFixed(2)})`
-                        : `(余额: ¥${acc.balance?.toFixed(2) || '0.00'})`}
-                    </option>
-                  ))}
+                        : `(余额: ¥${acc.balance?.toFixed(2) || '0.00'})`;
+                      return (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.bankName || acc.name}{acc.bankName && acc.name !== acc.bankName ? ` (${acc.name})` : ''}{cardSuffix} {balInfo}
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
             )}
           </div>
 
-          {/* Category Selector with Icons & Custom Category Support (支持智能关键词匹配图标、自定义图标及删除) */}
+          {/* Fully Customizable Expense Categories (支持全部自定义删除与添加、智能图标库识别) */}
           {type === 'EXPENSE' && (
             <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                   <span>支出类别</span>
                   <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
-                    · 当前: <CategoryIcon nameOrIcon={category} className="w-3.5 h-3.5 inline" /> {category}
+                    · 当前: <CategoryIcon nameOrIcon={category} className="w-3.5 h-3.5 inline text-rose-600" /> {category}
                   </span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingCustomCategory(!isAddingCustomCategory);
-                    setShowIconPalette(false);
-                  }}
-                  className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 font-medium flex items-center gap-1 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{isAddingCustomCategory ? '取消新建' : '自定义新类别'}</span>
-                </button>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsManagingCategories(!isManagingCategories)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium flex items-center gap-1 transition-colors ${
+                      isManagingCategories
+                        ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                    <span>{isManagingCategories ? '完成管理' : '管理/删除分类'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomCategory(!isAddingCustomCategory);
+                      setShowIconPalette(false);
+                    }}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 hover:text-rose-700 dark:text-rose-400 font-medium border border-rose-200/80 dark:border-rose-900/60 flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isAddingCustomCategory ? '取消新建' : '新建类别'}</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Custom Category Input Form with Smart Keyword Icon Preview & Palette */}
+              {/* Management mode top bar with Reset to default button */}
+              {isManagingCategories && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-center justify-between text-xs animate-in fade-in">
+                  <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>点击任意类别右上角的红色 ✕ 即可删除</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleResetCategoriesToDefault('EXPENSE')}
+                    className="text-xs text-amber-700 dark:text-amber-300 hover:text-rose-600 dark:hover:text-rose-400 underline font-semibold shrink-0"
+                  >
+                    恢复预设分类
+                  </button>
+                </div>
+              )}
+
+              {/* Custom Category Input Form with Smart Keyword Icon Preview & Filterable Palette */}
               {isAddingCustomCategory && (
                 <div className="p-3 rounded-2xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200/90 dark:border-rose-900/70 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 shadow-xs">
                   <div className="flex items-center gap-2">
                     {/* Live Preview of Predicted/Selected Icon */}
                     <div
-                      title="根据关键词智能匹配的图标（点击可手动更换）"
+                      title="根据关键词智能匹配的图标（点击可手动挑选）"
                       onClick={() => setShowIconPalette(!showIconPalette)}
-                      className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-2xs hover:scale-105 transition-transform"
+                      className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-2xs hover:scale-105 transition-transform"
                     >
                       <CategoryIcon nameOrIcon={predictedIcon} className="w-4 h-4" />
                     </div>
@@ -837,25 +974,24 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       value={newCategoryName}
                       onChange={(e) => {
                         setNewCategoryName(e.target.value);
-                        // Reset manual override if cleared
                         if (!e.target.value) setSelectedCustomIcon('');
                       }}
-                      placeholder="输入分类关键词 (如 宠物开销、母婴奶粉、咖啡、自驾加油、理发)..."
+                      placeholder="输入分类名 (如 宠物猫粮、美发烫发、咖啡、羽毛球、自驾加油、房租)..."
                       className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          handleAddCustomCategory();
+                          handleAddCategory();
                         }
                       }}
                     />
 
                     <button
                       type="button"
-                      onClick={handleAddCustomCategory}
+                      onClick={handleAddCategory}
                       disabled={!newCategoryName.trim()}
-                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs whitespace-nowrap"
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs whitespace-nowrap"
                     >
                       添加并选中
                     </button>
@@ -867,8 +1003,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       <Wand2 className="w-3 h-3 text-rose-500" />
                       <span>
                         {newCategoryName.trim()
-                          ? `已自动匹配图标: ${predictedIcon}`
-                          : '输入类别关键词即可自动智能识别图标'}
+                          ? `✨ 智能识别匹配图标: ${predictedIcon}`
+                          : '输入类别关键词即可自动智能识别图标库'}
                       </span>
                     </div>
 
@@ -878,18 +1014,32 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       className="text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 font-medium"
                     >
                       <Palette className="w-3 h-3" />
-                      <span>{showIconPalette ? '收起图标库' : '手动挑图标 🎨'}</span>
+                      <span>{showIconPalette ? '收起图标库' : '挑选手选图标 🎨'}</span>
                     </button>
                   </div>
 
-                  {/* Expandable Icon Selector Palette */}
+                  {/* Categorized Icon Selector Palette */}
                   {showIconPalette && (
-                    <div className="pt-2 border-t border-rose-200/60 dark:border-rose-900/60 animate-in fade-in">
-                      <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
-                        可选精选图标库:
+                    <div className="pt-2 border-t border-rose-200/60 dark:border-rose-900/60 animate-in fade-in space-y-2">
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                        {iconGroups.map((grp) => (
+                          <button
+                            key={grp}
+                            type="button"
+                            onClick={() => setIconGroupFilter(grp)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-medium whitespace-nowrap transition-colors ${
+                              iconGroupFilter === grp
+                                ? 'bg-rose-600 text-white font-bold shadow-2xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {grp}
+                          </button>
+                        ))}
                       </div>
-                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-32 overflow-y-auto p-1 bg-white/70 dark:bg-slate-900/60 rounded-xl border border-rose-100 dark:border-rose-900/40">
-                        {POPULAR_CATEGORY_ICONS.map((item) => {
+
+                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-rose-100 dark:border-rose-900/40">
+                        {filteredPaletteIcons.map((item) => {
                           const IconComp = item.icon;
                           const isPicked = predictedIcon === item.id;
                           return (
@@ -899,10 +1049,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                               onClick={() => setSelectedCustomIcon(item.id)}
                               className={`p-1.5 rounded-lg flex flex-col items-center gap-0.5 border text-center transition-all ${
                                 isPicked
-                                  ? 'bg-rose-600 text-white border-rose-600 shadow-2xs font-bold'
+                                  ? 'bg-rose-600 text-white border-rose-600 shadow-2xs font-bold ring-1 ring-rose-400'
                                   : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                               }`}
-                              title={item.name}
+                              title={`${item.name} (${item.id})`}
                             >
                               <IconComp className="w-3.5 h-3.5" />
                               <span className="text-[9px] truncate w-full leading-tight">{item.name}</span>
@@ -915,57 +1065,33 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* Expense Category Grid with Delete Buttons for Custom Categories */}
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-44 overflow-y-auto p-1 scrollbar-thin">
-                {EXPENSE_CATEGORIES.map((c) => {
+              {/* Expense Category Grid - All categories deletable and customizable */}
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin">
+                {expenseCategories.map((c) => {
                   const isSelected = category === c.name;
                   return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setCategory(c.name)}
-                      className={`p-2 rounded-xl text-xs font-medium flex flex-col items-center gap-1.5 border transition-all ${
-                        isSelected
-                          ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800 shadow-xs font-bold ring-1 ring-rose-400/40'
-                          : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      <div
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                          isSelected
-                            ? 'bg-rose-600 text-white'
-                            : 'bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <CategoryIcon nameOrIcon={c.icon || c.name} className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="truncate w-full text-center text-[11px]">{c.name}</span>
-                    </button>
-                  );
-                })}
-
-                {/* Custom User Categories with Delete X Icon */}
-                {customExpenseCategories.map((customCat) => {
-                  const isSelected = category === customCat;
-                  return (
                     <div
-                      key={customCat}
+                      key={c.id || c.name}
                       className={`relative group p-2 rounded-xl text-xs font-medium flex flex-col items-center gap-1.5 border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800 shadow-xs font-bold ring-1 ring-rose-400/40'
                           : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
-                      onClick={() => setCategory(customCat)}
+                      onClick={() => setCategory(c.name)}
                     >
-                      {/* Delete Custom Category Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteCustomCategory(customCat, 'EXPENSE', e)}
-                        title={`删除自定义类别「${customCat}」`}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 hover:bg-rose-700 text-white flex items-center justify-center shadow-xs transition-transform hover:scale-110 z-10"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      {/* Delete button (Always visible in management mode, visible on hover in normal mode) */}
+                      {(isManagingCategories || true) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteCategory(c.name, 'EXPENSE', e)}
+                          title={`删除分类「${c.name}」`}
+                          className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 hover:bg-rose-700 text-white flex items-center justify-center shadow-xs transition-transform hover:scale-110 z-10 ${
+                            isManagingCategories ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100'
+                          }`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
 
                       <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center ${
@@ -974,9 +1100,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             : 'bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400'
                         }`}
                       >
-                        <CategoryIcon nameOrIcon={customCat} className="w-3.5 h-3.5" />
+                        <CategoryIcon nameOrIcon={c.icon || c.name} className="w-3.5 h-3.5" />
                       </div>
-                      <span className="truncate w-full text-center text-[11px]">{customCat}</span>
+                      <span className="truncate w-full text-center text-[11px]">{c.name}</span>
                     </div>
                   );
                 })}
@@ -984,38 +1110,69 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Income Category Selector with Icons & Custom Support */}
+          {/* Fully Customizable Income Categories */}
           {type === 'INCOME' && (
             <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                   <span>收入类别</span>
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                    · 当前: <CategoryIcon nameOrIcon={category} className="w-3.5 h-3.5 inline" /> {category}
+                    · 当前: <CategoryIcon nameOrIcon={category} className="w-3.5 h-3.5 inline text-emerald-600" /> {category}
                   </span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingCustomCategory(!isAddingCustomCategory);
-                    setShowIconPalette(false);
-                  }}
-                  className="text-xs text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 font-medium flex items-center gap-1 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{isAddingCustomCategory ? '取消新建' : '自定义新类别'}</span>
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsManagingCategories(!isManagingCategories)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium flex items-center gap-1 transition-colors ${
+                      isManagingCategories
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                    <span>{isManagingCategories ? '完成管理' : '管理/删除分类'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomCategory(!isAddingCustomCategory);
+                      setShowIconPalette(false);
+                    }}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 font-medium border border-emerald-200/80 dark:border-emerald-900/60 flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isAddingCustomCategory ? '取消新建' : '新建类别'}</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Custom Income Category Input Form with Smart Keyword Icon Preview & Palette */}
+              {isManagingCategories && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-center justify-between text-xs animate-in fade-in">
+                  <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>点击任意类别右上角的红色 ✕ 即可删除</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleResetCategoriesToDefault('INCOME')}
+                    className="text-xs text-amber-700 dark:text-amber-300 hover:text-rose-600 dark:hover:text-rose-400 underline font-semibold shrink-0"
+                  >
+                    恢复预设分类
+                  </button>
+                </div>
+              )}
+
+              {/* Custom Income Category Input Form */}
               {isAddingCustomCategory && (
                 <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/90 dark:border-emerald-900/70 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 shadow-xs">
                   <div className="flex items-center gap-2">
-                    {/* Live Preview of Predicted/Selected Icon */}
                     <div
-                      title="根据关键词智能匹配的图标（点击可手动更换）"
+                      title="根据关键词智能匹配的图标（点击可手动挑选）"
                       onClick={() => setShowIconPalette(!showIconPalette)}
-                      className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-2xs hover:scale-105 transition-transform"
+                      className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-2xs hover:scale-105 transition-transform"
                     >
                       <CategoryIcon nameOrIcon={predictedIcon} className="w-4 h-4" />
                     </div>
@@ -1027,35 +1184,34 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         setNewCategoryName(e.target.value);
                         if (!e.target.value) setSelectedCustomIcon('');
                       }}
-                      placeholder="输入收入分类关键词 (如 租金收益、咨询外快、理财分红、打赏)..."
+                      placeholder="输入收入分类名 (如 租金收益、咨询外快、理财分红、打赏、奖金)..."
                       className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          handleAddCustomCategory();
+                          handleAddCategory();
                         }
                       }}
                     />
 
                     <button
                       type="button"
-                      onClick={handleAddCustomCategory}
+                      onClick={handleAddCategory}
                       disabled={!newCategoryName.trim()}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs whitespace-nowrap"
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs whitespace-nowrap"
                     >
                       添加并选中
                     </button>
                   </div>
 
-                  {/* Smart Icon Feedback & Manual Palette Trigger */}
                   <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
                     <div className="flex items-center gap-1.5">
                       <Wand2 className="w-3 h-3 text-emerald-600" />
                       <span>
                         {newCategoryName.trim()
-                          ? `已自动匹配图标: ${predictedIcon}`
-                          : '输入类别关键词即可自动智能识别图标'}
+                          ? `✨ 智能识别匹配图标: ${predictedIcon}`
+                          : '输入类别关键词即可自动智能识别图标库'}
                       </span>
                     </div>
 
@@ -1065,18 +1221,31 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       className="text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1 font-medium"
                     >
                       <Palette className="w-3 h-3" />
-                      <span>{showIconPalette ? '收起图标库' : '手动挑图标 🎨'}</span>
+                      <span>{showIconPalette ? '收起图标库' : '挑选手选图标 🎨'}</span>
                     </button>
                   </div>
 
-                  {/* Expandable Icon Selector Palette */}
                   {showIconPalette && (
-                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-900/60 animate-in fade-in">
-                      <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
-                        可选精选图标库:
+                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-900/60 animate-in fade-in space-y-2">
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                        {iconGroups.map((grp) => (
+                          <button
+                            key={grp}
+                            type="button"
+                            onClick={() => setIconGroupFilter(grp)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-medium whitespace-nowrap transition-colors ${
+                              iconGroupFilter === grp
+                                ? 'bg-emerald-700 text-white font-bold shadow-2xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {grp}
+                          </button>
+                        ))}
                       </div>
-                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-32 overflow-y-auto p-1 bg-white/70 dark:bg-slate-900/60 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
-                        {POPULAR_CATEGORY_ICONS.map((item) => {
+
+                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                        {filteredPaletteIcons.map((item) => {
                           const IconComp = item.icon;
                           const isPicked = predictedIcon === item.id;
                           return (
@@ -1086,10 +1255,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                               onClick={() => setSelectedCustomIcon(item.id)}
                               className={`p-1.5 rounded-lg flex flex-col items-center gap-0.5 border text-center transition-all ${
                                 isPicked
-                                  ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs font-bold'
+                                  ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs font-bold ring-1 ring-emerald-400'
                                   : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                               }`}
-                              title={item.name}
+                              title={`${item.name} (${item.id})`}
                             >
                               <IconComp className="w-3.5 h-3.5" />
                               <span className="text-[9px] truncate w-full leading-tight">{item.name}</span>
@@ -1103,56 +1272,31 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
 
               {/* Income Category Grid */}
-              <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1 scrollbar-thin">
-                {INCOME_CATEGORIES.map((c) => {
+              <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin">
+                {incomeCategories.map((c) => {
                   const isSelected = category === c.name;
                   return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setCategory(c.name)}
-                      className={`p-2 rounded-xl text-xs font-medium flex flex-col items-center gap-1.5 border transition-all ${
-                        isSelected
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 shadow-xs font-bold ring-1 ring-emerald-400/40'
-                          : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      <div
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                          isSelected
-                            ? 'bg-emerald-700 text-white'
-                            : 'bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <CategoryIcon nameOrIcon={c.icon || c.name} className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="truncate w-full text-center text-[11px]">{c.name}</span>
-                    </button>
-                  );
-                })}
-
-                {/* Custom Income Categories with Delete X Button */}
-                {customIncomeCategories.map((customCat) => {
-                  const isSelected = category === customCat;
-                  return (
                     <div
-                      key={customCat}
+                      key={c.id || c.name}
                       className={`relative group p-2 rounded-xl text-xs font-medium flex flex-col items-center gap-1.5 border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 shadow-xs font-bold ring-1 ring-emerald-400/40'
                           : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
-                      onClick={() => setCategory(customCat)}
+                      onClick={() => setCategory(c.name)}
                     >
-                      {/* Delete Custom Income Category Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteCustomCategory(customCat, 'INCOME', e)}
-                        title={`删除自定义类别「${customCat}」`}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 hover:bg-rose-700 text-white flex items-center justify-center shadow-xs transition-transform hover:scale-110 z-10"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      {(isManagingCategories || true) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteCategory(c.name, 'INCOME', e)}
+                          title={`删除分类「${c.name}」`}
+                          className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 hover:bg-rose-700 text-white flex items-center justify-center shadow-xs transition-transform hover:scale-110 z-10 ${
+                            isManagingCategories ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100'
+                          }`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
 
                       <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center ${
@@ -1161,9 +1305,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             : 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400'
                         }`}
                       >
-                        <CategoryIcon nameOrIcon={customCat} className="w-3.5 h-3.5" />
+                        <CategoryIcon nameOrIcon={c.icon || c.name} className="w-3.5 h-3.5" />
                       </div>
-                      <span className="truncate w-full text-center text-[11px]">{customCat}</span>
+                      <span className="truncate w-full text-center text-[11px]">{c.name}</span>
                     </div>
                   );
                 })}
@@ -1182,13 +1326,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:bg-white dark:focus:bg-slate-800"
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:bg-white dark:focus:bg-slate-800 font-mono"
                 />
                 <input
                   type="time"
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  className="w-24 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:bg-white dark:focus:bg-slate-800"
+                  className="w-24 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:bg-white dark:focus:bg-slate-800 font-mono"
                 />
               </div>
             </div>
@@ -1237,7 +1381,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* Tags Badges with Delete support for custom ones */}
+              {/* Tags Badges with Delete support */}
               <div className="flex items-center gap-1.5 flex-wrap max-h-24 overflow-y-auto p-0.5">
                 {availableTags.map((t) => {
                   const isSelected = tag === t;

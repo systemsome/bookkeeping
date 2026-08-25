@@ -142,35 +142,52 @@ export const exportTransactions = (
   });
 
   if (options.format === 'xlsx') {
-    const ws = XLSX.utils.json_to_sheet(rows);
-    // 设置列宽
-    ws['!cols'] = [
-      { wch: 6 },  // 序号
-      { wch: 12 }, // 日期
-      { wch: 8 },  // 时间
-      { wch: 10 }, // 类型
-      { wch: 12 }, // 分类
-      { wch: 14 }, // 金额
-      { wch: 8 },  // 币种
-      { wch: 12 }, // 原币金额
-      { wch: 10 }, // 汇率
-      { wch: 16 }, // 扣款账户
-      { wch: 16 }, // 目标账户
-      { wch: 16 }, // 商户/对方
-      { wch: 10 }, // 标签
-      { wch: 22 }, // 备注
-      { wch: 20 }, // ID
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '记账流水明细');
-    XLSX.writeFile(wb, `${baseFilename}.xlsx`);
-    return;
+    try {
+      const ws = XLSX.utils.json_to_sheet(rows);
+      // 设置列宽
+      ws['!cols'] = [
+        { wch: 6 },  // 序号
+        { wch: 12 }, // 日期
+        { wch: 8 },  // 时间
+        { wch: 10 }, // 类型
+        { wch: 12 }, // 分类
+        { wch: 14 }, // 金额
+        { wch: 8 },  // 币种
+        { wch: 12 }, // 原币金额
+        { wch: 10 }, // 汇率
+        { wch: 16 }, // 扣款账户
+        { wch: 16 }, // 目标账户
+        { wch: 16 }, // 商户/对方
+        { wch: 10 }, // 标签
+        { wch: 22 }, // 备注
+        { wch: 20 }, // ID
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '记账流水明细');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      downloadBlob(blob, `${baseFilename}.xlsx`);
+      return;
+    } catch (err) {
+      console.error('XLSX export failed, fallback to CSV:', err);
+      // Fallback to CSV
+      const csvContent = Papa.unparse(rows);
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      downloadBlob(blob, `${baseFilename}.csv`);
+      return;
+    }
   }
 
   // 默认 CSV 导出 (使用 \uFEFF UTF-8 BOM 确保 Excel/WPS 打开不乱码)
-  const csvContent = Papa.unparse(rows);
-  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  downloadBlob(blob, `${baseFilename}.csv`);
+  try {
+    const csvContent = Papa.unparse(rows);
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    downloadBlob(blob, `${baseFilename}.csv`);
+  } catch (err) {
+    console.error('CSV export failed:', err);
+  }
 };
 
 /**

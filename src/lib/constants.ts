@@ -39,6 +39,15 @@ export const ACCOUNT_CATEGORY_CONFIG: Record<
     badgeBg: 'bg-blue-500/10',
     badgeText: 'text-blue-500 border-blue-500/20',
   },
+  WECHAT: {
+    label: '微信支付',
+    description: '微信零钱、零钱通、微信数字钱包',
+    group: 'DIGITAL_WALLET',
+    groupLabel: '数字钱包',
+    defaultColor: '#07c160', // official wechat green
+    badgeBg: 'bg-emerald-500/10',
+    badgeText: 'text-emerald-500 border-emerald-500/20',
+  },
   YUEBAO: {
     label: '余额宝',
     description: '支付宝零钱理财/货币基金',
@@ -127,24 +136,96 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   { id: 'shopping', name: '日用百货', icon: 'ShoppingBag', color: '#ec4899' },
   { id: 'transport', name: '交通出行', icon: 'Car', color: '#3b82f6' },
   { id: 'housing', name: '房租物业', icon: 'Home', color: '#8b5cf6' },
-  { id: 'digital', name: '数码数码', icon: 'Laptop', color: '#06b6d4' },
+  { id: 'digital', name: '数码科技', icon: 'Laptop', color: '#06b6d4' },
+  { id: 'clothing', name: '服饰装扮', icon: 'Shirt', color: '#f43f5e' },
   { id: 'medical', name: '医疗健康', icon: 'HeartPulse', color: '#ef4444' },
   { id: 'entertainment', name: '休闲娱乐', icon: 'Gamepad2', color: '#10b981' },
-  { id: 'social', name: '人情往来', icon: 'Gift', color: '#eab308' },
-  { id: 'bills', name: '充值水电气', icon: 'Zap', color: '#6366f1' },
-  { id: 'repay_fee', name: '分期与手续费', icon: 'Percent', color: '#f43f5e' },
+  { id: 'pets', name: '宠物萌宠', icon: 'PawPrint', color: '#eab308' },
+  { id: 'education', name: '学习培训', icon: 'GraduationCap', color: '#6366f1' },
+  { id: 'social', name: '人情往来', icon: 'Gift', color: '#d97706' },
+  { id: 'bills', name: '充值水电气', icon: 'Zap', color: '#0284c7' },
+  { id: 'repay_fee', name: '分期与手续费', icon: 'Percent', color: '#e11d48' },
   { id: 'other_exp', name: '其他杂项', icon: 'MoreHorizontal', color: '#64748b' },
 ];
 
 export const INCOME_CATEGORIES: IncomeCategory[] = [
   { id: 'salary', name: '工资薪酬', icon: 'Briefcase', color: '#10b981' },
-  { id: 'bonus', name: '年终奖金', icon: 'Award', color: '#eab308' },
+  { id: 'bonus', name: '奖金提成', icon: 'Award', color: '#eab308' },
   { id: 'investment_yield', name: '理财分红收益', icon: 'TrendingUp', color: '#8b5cf6' },
   { id: 'sideline', name: '副业外快', icon: 'Sparkles', color: '#06b6d4' },
   { id: 'refund', name: '退款退税', icon: 'RotateCcw', color: '#3b82f6' },
+  { id: 'reimburse', name: '报销补贴', icon: 'Receipt', color: '#14b8a6' },
   { id: 'redpacket', name: '红包礼金', icon: 'Gift', color: '#f43f5e' },
   { id: 'other_inc', name: '其他收入', icon: 'PlusCircle', color: '#64748b' },
 ];
+
+export const STORAGE_KEY_USER_EXPENSE_CATS = 'asset_vault_custom_user_categories_expense_v4';
+export const STORAGE_KEY_USER_INCOME_CATS = 'asset_vault_custom_user_categories_income_v4';
+
+export function getStoredExpenseCategories(): ExpenseCategory[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_USER_EXPENSE_CATS) || localStorage.getItem('asset_vault_custom_user_categories_expense_v3');
+    if (!raw) return [...EXPENSE_CATEGORIES];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      if (typeof parsed[0] === 'string') {
+        return parsed.map((name: string, i: number) => ({
+          id: `custom-exp-${i}-${name}`,
+          name: name === '数码数码' ? '数码科技' : name,
+          icon: name === '数码数码' ? 'Laptop' : name,
+          color: '#f43f5e',
+        }));
+      }
+      return parsed.map((cat: ExpenseCategory) => {
+        if (cat.name === '数码数码') {
+          return { ...cat, name: '数码科技', icon: 'Laptop' };
+        }
+        return cat;
+      });
+    }
+    return [...EXPENSE_CATEGORIES];
+  } catch {
+    return [...EXPENSE_CATEGORIES];
+  }
+}
+
+export function saveStoredExpenseCategories(categories: ExpenseCategory[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_USER_EXPENSE_CATS, JSON.stringify(categories));
+  } catch (e) {
+    console.warn('Failed to save expense categories:', e);
+  }
+}
+
+export function getStoredIncomeCategories(): IncomeCategory[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_USER_INCOME_CATS) || localStorage.getItem('asset_vault_custom_user_categories_income_v3');
+    if (!raw) return [...INCOME_CATEGORIES];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      if (typeof parsed[0] === 'string') {
+        return parsed.map((name: string, i: number) => ({
+          id: `custom-inc-${i}-${name}`,
+          name,
+          icon: name,
+          color: '#10b981',
+        }));
+      }
+      return parsed;
+    }
+    return [...INCOME_CATEGORIES];
+  } catch {
+    return [...INCOME_CATEGORIES];
+  }
+}
+
+export function saveStoredIncomeCategories(categories: IncomeCategory[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_USER_INCOME_CATS, JSON.stringify(categories));
+  } catch (e) {
+    console.warn('Failed to save income categories:', e);
+  }
+}
 
 export const INITIAL_DEMO_ACCOUNTS: FinancialAccount[] = [
   {

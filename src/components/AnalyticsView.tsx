@@ -33,6 +33,7 @@ import {
   getCachedGoldRate,
   GoldMarketRate,
 } from '../lib/goldRates';
+import { CategoryIcon } from './CategoryIcon';
 
 interface AnalyticsViewProps {
   accounts: FinancialAccount[];
@@ -366,7 +367,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <div className="flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-medium text-slate-800 flex items-center gap-2">
                       <span className="w-4 text-slate-400 font-mono">{idx + 1}.</span>
-                      {cat.name}
+                      <CategoryIcon nameOrIcon={cat.name} className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>{cat.name}</span>
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-900">

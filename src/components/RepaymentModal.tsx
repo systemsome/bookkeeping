@@ -3,6 +3,8 @@ import {
   X,
   CheckCircle2,
   ReceiptText,
+  CreditCard,
+  Building2,
 } from 'lucide-react';
 import { FinancialAccount } from '../types';
 import { formatCurrency } from '../lib/formatters';
@@ -110,23 +112,27 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          {/* Target Account to repay */}
+          {/* Target Account to repay (待还款信用卡/白条/借款) */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+            <label htmlFor="repay-target-select" className="block text-xs font-medium text-slate-600 mb-1.5">
               待还款信用卡 / 白条 / 借款
             </label>
+
             <select
               id="repay-target-select"
               value={selectedTargetId}
               onChange={(e) => setSelectedTargetId(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs sm:text-sm focus:outline-none focus:border-purple-400 font-medium"
             >
-              {creditAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} (当前应还: ¥{(a.usedCredit !== undefined ? a.usedCredit : a.balance || 0).toFixed(2)})
-                </option>
-              ))}
+              {creditAccounts.map((a) => {
+                const cardSuffix = a.cardNumberLast4 ? ` [尾号 ${a.cardNumberLast4}]` : '';
+                return (
+                  <option key={a.id} value={a.id}>
+                    {a.bankName || a.name}{a.bankName && a.name !== a.bankName ? ` (${a.name})` : ''}{cardSuffix} (当前应还: ¥{(a.usedCredit !== undefined ? a.usedCredit : a.balance || 0).toFixed(2)})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -159,23 +165,27 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
             </div>
           </div>
 
-          {/* Source Account to deduct */}
+          {/* Source Account to deduct (扣款/出资账户) */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1.5">
-              扣款/出资账户
+            <label htmlFor="repay-source-select" className="block text-xs font-medium text-slate-600 mb-1.5">
+              扣款 / 出资支付账户
             </label>
+
             <select
               id="repay-source-select"
               value={selectedSourceId}
               onChange={(e) => setSelectedSourceId(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs sm:text-sm focus:outline-none focus:border-blue-400 font-medium"
             >
-              {liquidAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} (可用余额: ¥{(a.balance || 0).toFixed(2)})
-                </option>
-              ))}
+              {liquidAccounts.map((a) => {
+                const cardSuffix = a.cardNumberLast4 ? ` [尾号 ${a.cardNumberLast4}]` : '';
+                return (
+                  <option key={a.id} value={a.id}>
+                    {a.bankName || a.name}{a.bankName && a.name !== a.bankName ? ` (${a.name})` : ''}{cardSuffix} (可用余额: ¥{(a.balance || 0).toFixed(2)})
+                  </option>
+                );
+              })}
             </select>
           </div>
 

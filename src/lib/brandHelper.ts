@@ -301,10 +301,10 @@ export const BANK_BRANDS: BankBrandInfo[] = [
     name: '微信支付',
     shortName: '微信支付',
     englishName: 'WECHAT PAY',
-    category: 'ALIPAY',
-    primaryColor: '#10b981',
+    category: 'WECHAT',
+    primaryColor: '#07c160',
     secondaryColor: '#065f46',
-    gradientClass: 'from-[#10b981] via-[#059669] to-[#064e3b]',
+    gradientClass: 'from-[#07c160] via-[#059669] to-[#064e3b]',
     cardSkin: 'wechat-green',
     cardNetwork: 'NONE',
     logoType: 'wechat',
@@ -545,6 +545,18 @@ export function getDefaultPresetForCategory(category: AccountCategory): Category
         logoType: 'alipay',
         balance: '0',
       };
+    case 'WECHAT':
+      return {
+        category: 'WECHAT',
+        name: '微信支付 (微信零钱)',
+        bankName: '微信支付',
+        cardTier: '微信数字钱包',
+        cardSkin: 'wechat-green',
+        cardNetwork: 'NONE',
+        primaryColor: '#07c160',
+        logoType: 'wechat',
+        balance: '0',
+      };
     case 'HUABEI':
       return {
         category: 'HUABEI',
@@ -715,8 +727,9 @@ export function getBrandsForCategory(
       );
 
     case 'ALIPAY':
+    case 'WECHAT':
       return BANK_BRANDS.filter(
-        (b) => ['ALIPAY', 'WECHAT', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+        (b) => ['WECHAT', 'ALIPAY', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
       );
 
     case 'HUABEI':
@@ -1058,7 +1071,7 @@ export function detectBrandInfo(accountName: string, bankName?: string, category
   if (text.includes('余额宝') || category === 'YUEBAO') {
     return BANK_BRANDS.find((b) => b.id === 'YUEBAO')!;
   }
-  if (text.includes('微信') || text.includes('wechat')) {
+  if (text.includes('微信') || text.includes('wechat') || category === 'WECHAT') {
     return BANK_BRANDS.find((b) => b.id === 'WECHAT')!;
   }
   if (text.includes('支付宝') || text.includes('alipay') || category === 'ALIPAY') {

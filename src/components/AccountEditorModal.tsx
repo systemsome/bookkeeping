@@ -525,6 +525,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                   </optgroup>
                   <optgroup label="📱 数字钱包">
                     <option value="ALIPAY">支付宝余额 (数字零钱钱包)</option>
+                    <option value="WECHAT">微信支付 (微信零钱/零钱通)</option>
                   </optgroup>
                   <optgroup label="📈 理财基金">
                     <option value="YUEBAO">余额宝 (零钱货币基金)</option>

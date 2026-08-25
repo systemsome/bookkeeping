@@ -368,6 +368,7 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
     switch (acc.category) {
       case 'DEBIT_CARD':
       case 'ALIPAY':
+      case 'WECHAT':
       case 'CASH':
         liquidAssets += acc.balance || 0;
         break;

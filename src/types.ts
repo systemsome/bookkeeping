@@ -2,6 +2,7 @@ export type AccountCategory =
   | 'DEBIT_CARD'      // 银行借记卡
   | 'CREDIT_CARD'     // 借贷信用卡
   | 'ALIPAY'          // 支付宝
+  | 'WECHAT'          // 微信支付 (微信零钱/零钱通)
   | 'YUEBAO'          // 余额宝
   | 'FUND'            // 基金理财
   | 'GOLD'            // 黄金理财

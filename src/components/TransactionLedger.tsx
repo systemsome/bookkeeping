@@ -461,22 +461,29 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         </div>
       </div>
 
-      {/* 2. Collapsible Income/Expense Calendar Widget (隐藏式收支日历，点击打开和关闭) */}
+      {/* 2. Collapsible Income/Expense Calendar Widget (折叠式收支日历，支持点击日期快速筛选并显示对应当天的消费列表) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xs transition-all">
         {/* Calendar Header & Month Navigation */}
         <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isCalendarExpanded ? 'pb-3 border-b border-slate-100 dark:border-slate-800' : ''}`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
             <button
               onClick={() => setIsCalendarExpanded((prev) => !prev)}
               className="flex items-center gap-2 text-left group"
               title={isCalendarExpanded ? '点击收起日历' : '点击展开日历'}
             >
-              <div className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/60 group-hover:scale-105 transition-transform">
+              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/60 group-hover:scale-105 transition-transform">
                 <CalendarDays className="w-4 h-4" />
               </div>
-              <span className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-mono flex items-center gap-1.5">
-                <span>{currentYear}年 {String(currentMonth).padStart(2, '0')}月 收支日历</span>
-              </span>
+              <div className="flex flex-col">
+                <span className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+                  <span>{currentYear}年 {String(currentMonth).padStart(2, '0')}月 收支日历</span>
+                  {selectedDateFilter && (
+                    <span className="text-[11px] font-sans font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse">
+                      已锁定: {selectedDateFilter}
+                    </span>
+                  )}
+                </span>
+              </div>
             </button>
 
             {isCalendarExpanded && (
@@ -504,7 +511,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <select
                 value={calendarYearMonth}
                 onChange={(e) => setCalendarYearMonth(e.target.value)}
-                className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-0.5 text-slate-600 dark:text-slate-300 focus:outline-none"
+                className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-700 dark:text-slate-200 font-medium focus:outline-none"
               >
                 {availableMonths.map((m) => (
                   <option key={m} value={m}>
@@ -517,7 +524,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
           {/* Quick Month Metrics Badges & Toggle Button */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-xs font-mono">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-mono">
               <span className="px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold border border-rose-100 dark:border-rose-900/40">
                 月支: -{formatCurrency(monthStats.totalExpense, privacyMode)}
               </span>
@@ -547,7 +554,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
               <button
                 onClick={() => setIsCalendarExpanded((prev) => !prev)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200/80 dark:border-slate-700 transition-all shadow-2xs"
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all shadow-2xs ${
+                  isCalendarExpanded
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200/80 dark:border-slate-700'
+                }`}
                 title={isCalendarExpanded ? '点击收起收支日历' : '点击展开收支日历'}
               >
                 <span>{isCalendarExpanded ? '收起日历' : '展开日历'}</span>
@@ -593,17 +604,17 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         setSelectedDateFilter(cell.dateStr);
                       }
                     }}
-                    className={`h-[48px] sm:h-[52px] p-1 sm:p-1.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between select-none relative group ${
+                    className={`h-[50px] sm:h-[54px] p-1 sm:p-1.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between select-none relative group ${
                       cell.isSelected
-                        ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-2 ring-emerald-500/20 shadow-xs'
+                        ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/50 ring-2 ring-emerald-500/30 shadow-xs'
                         : cell.isCurrentMonth
                         ? 'border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
                         : 'border-slate-100 dark:border-slate-800/30 bg-white dark:bg-slate-900/20 opacity-30 hover:opacity-60'
                     }`}
-                    title={`${cell.dateStr} (点击过滤下方明细)`}
+                    title={`${cell.dateStr} (点击快速筛选当天消费列表)`}
                   >
                     {/* Centered Day Number Header */}
-                    <div className="relative flex items-center justify-center w-full">
+                    <div className="relative flex items-center justify-between w-full">
                       <span
                         className={`text-xs sm:text-[13px] font-bold font-mono tracking-tight text-center ${
                           cell.isToday
@@ -619,7 +630,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                       </span>
 
                       {hasTrans && (
-                        <span className="absolute right-0 top-0.5 text-[8px] font-mono text-slate-400 dark:text-slate-500">
+                        <span className="text-[9px] font-mono font-medium px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                           {cell.summary!.totalCount}笔
                         </span>
                       )}
@@ -628,7 +639,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     {/* Compact Amount / Indicator Badges */}
                     <div className="flex items-center gap-0.5 justify-between text-[9px] sm:text-[10px] font-mono leading-none truncate w-full px-0.5">
                       {hasExpense ? (
-                        <span className="text-rose-600 dark:text-rose-400 truncate text-left">
+                        <span className="text-rose-600 dark:text-rose-400 truncate text-left font-medium">
                           -{Math.round(cell.summary!.expense)}
                         </span>
                       ) : (
@@ -646,14 +657,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             </div>
 
             {/* Calendar Quick Prompt Bar */}
-            <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 mt-2 px-1">
-              <span>💡 点击上方任一日历格子可直接筛选该日流水；再次点击可取消筛选</span>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 mt-2.5 px-1">
+              <span>💡 点击上方任一日历日期即可快速筛选显示当天明细；再次点击同一日期取消筛选</span>
               {selectedDateFilter && (
                 <button
                   onClick={() => setSelectedDateFilter(null)}
-                  className="text-emerald-600 hover:text-emerald-700 font-semibold"
+                  className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-semibold"
                 >
-                  显示全月所有明细
+                  显示全月所有流水
                 </button>
               )}
             </div>
@@ -703,12 +714,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               id="ledger-filter-account"
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400 font-medium"
             >
-              <option value="ALL">全部关联账户</option>
+              <option value="ALL">全部关联账户 ({accounts.length})</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.bankName || a.name}{a.bankName && a.name !== a.bankName ? ` (${a.name})` : ''} {a.cardNumberLast4 ? `(*${a.cardNumberLast4})` : ''}
                 </option>
               ))}
             </select>
@@ -873,15 +884,69 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         </div>
 
+        {/* Dedicated Daily Focus Consumption Banner (当点击日历日期快速筛选时，醒目显示当天消费明细统计与快捷记账) */}
+        {selectedDateFilter && (
+          <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-blue-950/40 border-b border-emerald-200/60 dark:border-emerald-900/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                <CalendarIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-mono">
+                    {selectedDateFilter} {getWeekdayName(selectedDateFilter)} 当天账单明细
+                  </h3>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-mono">
+                    共 {filteredTransactions.length} 笔流水
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5 mt-0.5 text-xs font-mono flex-wrap">
+                  <span className="text-rose-600 dark:text-rose-400 font-bold">
+                    当日支出: -{formatCurrency(filteredExpense, privacyMode)}
+                  </span>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                    当日收入: +{formatCurrency(filteredIncome, privacyMode)}
+                  </span>
+                  <span className="text-slate-600 dark:text-slate-300 font-medium">
+                    收支净额: {formatCurrency(filteredIncome - filteredExpense, privacyMode)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="btn-add-for-selected-date"
+                onClick={() => onOpenNewTx('EXPENSE', undefined, selectedDateFilter)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+                title={`为 ${selectedDateFilter} 补记一笔`}
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>为该日记一笔</span>
+              </button>
+              <button
+                onClick={() => setSelectedDateFilter(null)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 shadow-2xs transition-all"
+                title="返回查看全部流水"
+              >
+                <X className="w-3.5 h-3.5 text-slate-400" />
+                <span>查看全部流水</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {filteredTransactions.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-4">
             <ReceiptText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
             <div>
               <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
-                暂无符合条件的记账明细
+                {selectedDateFilter ? `「${selectedDateFilter}」当天暂无记账明细` : '暂无符合条件的记账明细'}
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                您可以点击右上角“记一笔”快速添加，或点击“上传导入”批量导入历史账单
+                {selectedDateFilter
+                  ? `点击下方按钮即可为 ${selectedDateFilter} 快速补录消费账单`
+                  : '您可以点击右上角“记一笔”快速添加，或点击“上传导入”批量导入历史账单'}
               </p>
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
@@ -890,15 +955,17 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 text-white font-semibold text-xs sm:text-sm hover:bg-slate-800 transition-all inline-flex items-center gap-1.5"
               >
                 <PlusCircle className="w-4 h-4 text-emerald-400" />
-                <span>记一笔账单</span>
+                <span>{selectedDateFilter ? `为 ${selectedDateFilter} 记一笔` : '记一笔账单'}</span>
               </button>
-              <button
-                onClick={() => setIsImportModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-semibold text-xs sm:text-sm hover:bg-emerald-100 transition-all inline-flex items-center gap-1.5"
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>批量导入</span>
-              </button>
+              {!selectedDateFilter && (
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-semibold text-xs sm:text-sm hover:bg-emerald-100 transition-all inline-flex items-center gap-1.5"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>批量导入</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -978,14 +1045,24 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                             </span>
                           )}
                           <span>·</span>
-                          <span className="text-slate-600 dark:text-slate-300 font-medium">
-                            {acc?.name || '账户'}
+                          <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+                            <span>{acc?.name || '账户'}</span>
+                            {acc?.cardNumberLast4 && (
+                              <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                                *{acc.cardNumberLast4}
+                              </span>
+                            )}
                           </span>
                           {targetAcc && (
                             <>
                               <span>➔</span>
-                              <span className="text-slate-600 dark:text-slate-300 font-medium">
-                                {targetAcc.name}
+                              <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+                                <span>{targetAcc.name}</span>
+                                {targetAcc.cardNumberLast4 && (
+                                  <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                                    *{targetAcc.cardNumberLast4}
+                                  </span>
+                                )}
                               </span>
                             </>
                           )}
@@ -1082,8 +1159,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
       {isExportModalOpen && (
         <TransactionExportModal
           isOpen={isExportModalOpen}
-          transactions={filteredTransactions.length > 0 ? filteredTransactions : sortedTransactions}
+          allTransactions={sortedTransactions}
+          filteredTransactions={filteredTransactions}
+          transactions={sortedTransactions}
           accounts={accounts}
+          privacyMode={privacyMode}
           onClose={() => setIsExportModalOpen(false)}
           onShowToast={onShowToast}
         />
@@ -1097,7 +1177,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             setIsReceiptModalOpen(false);
             setReceiptSingleTxId(null);
           }}
-          transactions={filteredTransactions.length > 0 ? filteredTransactions : sortedTransactions}
+          transactions={sortedTransactions}
           accounts={accounts}
           selectedDate={selectedDateFilter}
           initialSingleTxId={receiptSingleTxId}

@@ -29,6 +29,9 @@ import {
   Calendar,
   Search,
   ReceiptText,
+  FolderClosed,
+  FolderOpen,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory, AssetGroup } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
@@ -65,9 +68,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   onOpenNewTx,
 }) => {
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
-  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState<boolean>(false);
-  const [filterSearchQuery, setFilterSearchQuery] = useState<string>('');
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'GROUPED' | 'CARD' | 'TABLE'>('GROUPED');
 
   // Drag & Drop Layout State
@@ -76,16 +76,32 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [dragOverAccountId, setDragOverAccountId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Close filter dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
-        setIsFilterDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Collapsed Category Sections State (默认全部展开展示卡面，支持用户手动折叠/展开)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroupCollapse = (groupId: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
+  const handleCollapseAll = () => {
+    setCollapsedGroups({
+      DEBIT_CARD: true,
+      CREDIT_CARD: true,
+      DIGITAL_WALLET: true,
+      FUND: true,
+      CASH: true,
+      LEND_BORROW: true,
+    });
+    showToast('📁 已折叠全部资产大类');
+  };
+
+  const handleExpandAll = () => {
+    setCollapsedGroups({});
+    showToast('📂 已展开全部资产大类');
+  };
 
   // Quick Reconcile Modal State
   const [reconcilingAccount, setReconcilingAccount] = useState<FinancialAccount | null>(null);
@@ -170,13 +186,14 @@ export const AccountsList: React.FC<AccountsListProps> = ({
       JD_BAITIAO: 3,
       HUABEI: 4,
       ALIPAY: 5,
-      YUEBAO: 6,
-      FUND: 7,
-      GOLD: 8,
-      JD_FINANCE: 9,
-      CASH: 10,
-      RECEIVABLE: 11,
-      PAYABLE: 12,
+      WECHAT: 6,
+      YUEBAO: 7,
+      FUND: 8,
+      GOLD: 9,
+      JD_FINANCE: 10,
+      CASH: 11,
+      RECEIVABLE: 12,
+      PAYABLE: 13,
     };
     const sorted = [...accounts].sort((a, b) => {
       const orderA = categoryOrder[a.category] || 99;
@@ -287,8 +304,10 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     );
     const creditLimitTotal = creditCards.reduce((sum, a) => sum + (a.creditLimit || 0), 0);
 
-    // 3. 数字钱包 (支付宝等)
-    const walletAccounts = accounts.filter((a) => a.category === 'ALIPAY');
+    // 3. 数字钱包 (支付宝、微信支付等)
+    const walletAccounts = accounts.filter((a) =>
+      ['ALIPAY', 'WECHAT'].includes(a.category)
+    );
     const walletTotal = walletAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
 
     // 4. 理财基金 (余额宝、公募基金、黄金、京东金融)
@@ -408,19 +427,13 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     ];
   }, [accounts, privacyMode]);
 
-  const currentGroupInfo =
-    groupDefinitions.find((g) => g.id === filterGroup) || groupDefinitions[0];
-  const CurrentGroupIcon = currentGroupInfo.icon;
-
-  const filteredGroupList = useMemo(() => {
-    if (!filterSearchQuery.trim()) return groupDefinitions;
-    const q = filterSearchQuery.toLowerCase();
-    return groupDefinitions.filter(
-      (g) =>
-        g.label.toLowerCase().includes(q) ||
-        g.subLabel.toLowerCase().includes(q)
-    );
-  }, [filterSearchQuery, groupDefinitions]);
+  const currentGroupLabel = useMemo(() => {
+    if (filterGroup === 'ALL') {
+      return '全部账户';
+    }
+    const found = groupDefinitions.find((g) => g.id === filterGroup);
+    return found ? found.label : '全部账户';
+  }, [filterGroup, groupDefinitions]);
 
   const filteredAccounts = accounts.filter((acc) => {
     if (filterGroup === 'ALL') return true;
@@ -449,7 +462,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       )}
 
-      {/* Top Header & Actions */}
+      {/* Top Header & Clean Actions */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -461,7 +474,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            资产大类分为：借记卡、信用卡、数字钱包、理财基金、现金、借贷，支持按大类排版与自由拖动调整
+            资产分为：借记卡、信用卡、数字钱包、理财基金、现金、借贷 6 大类别，支持按分类排版与卡面拖动调整
           </p>
         </div>
 
@@ -471,17 +484,30 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           <button
             id="btn-add-account-main"
             onClick={() => onAddAccount('DEBIT_CARD')}
-            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-xs transition-colors"
+            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>添加新账户</span>
           </button>
 
+          {/* Batch Reconcile */}
+          {accounts.length > 0 && (
+            <button
+              id="btn-batch-reconcile"
+              onClick={onOpenBatchReconcile}
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm px-3 py-2 rounded-xl border border-slate-200 shadow-2xs transition-colors"
+              title="快速校准所有账户余额"
+            >
+              <Sliders className="w-3.5 h-3.5 text-slate-500" />
+              <span>批量校对</span>
+            </button>
+          )}
+
           {/* Reorder Layout Mode Toggle */}
           {accounts.length > 1 && (
             <button
               onClick={() => setIsReorderMode(!isReorderMode)}
-              className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-xl border transition-all ${
+              className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl border transition-all ${
                 isReorderMode
                   ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-600 shadow-xs'
                   : 'bg-white hover:bg-purple-50 text-purple-700 border-purple-200/80'
@@ -489,12 +515,12 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               title="开启拖拽排版与卡面位置调整"
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
-              <span>{isReorderMode ? '完成排版' : '拖动排版'}</span>
+              <span>{isReorderMode ? '完成排版' : '拖动排序'}</span>
             </button>
           )}
 
-          {/* View Mode Toggle: Grouped, Card, Table */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          {/* View Mode Switcher: Grouped, Card, Table */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
             <button
               onClick={() => setViewMode('GROUPED')}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
@@ -532,42 +558,10 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               <span>列表</span>
             </button>
           </div>
-
-          {accounts.length > 0 && (
-            <>
-              <button
-                id="btn-batch-reconcile"
-                onClick={onOpenBatchReconcile}
-                className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm px-3 py-2.5 rounded-xl border border-slate-200 shadow-2xs transition-colors"
-                title="在一个页面快速校准所有账户余额"
-              >
-                <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                <span>批量校准</span>
-              </button>
-
-              <button
-                id="btn-clear-preset-demo"
-                onClick={() => {
-                  if (
-                    confirm(
-                      '确定清空当前的示例数据并从零开始手工录入您的真实资产吗？（此操作将重置所有账户与流水）'
-                    )
-                  ) {
-                    onClearPresetData();
-                  }
-                }}
-                className="flex items-center gap-1 bg-white hover:bg-rose-50 text-rose-600 font-medium text-xs px-3 py-2.5 rounded-xl border border-rose-200/80 transition-colors"
-                title="清空预设数据，从零手工录入"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>清空示例</span>
-              </button>
-            </>
-          )}
         </div>
       </div>
 
-      {/* 6 Asset Classes Top Summary & Quick Filter Ribbon */}
+      {/* 6 Asset Classes Interactive Summary & Filter Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {groupDefinitions
           .filter((g) => g.id !== 'ALL')
@@ -587,6 +581,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                     ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-blue-500/40'
                     : 'bg-white hover:bg-slate-50/90 border-slate-200/80 text-slate-800 hover:border-slate-300 shadow-xs'
                 }`}
+                title={isSelected ? `点击取消筛选「${g.label}」` : `点击筛选「${g.label}」`}
               >
                 <div className="flex items-center justify-between w-full">
                   <div
@@ -675,44 +670,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 <span>还款日临近优先</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Account Category Filter Pills & Popover Dropdown */}
-      {accounts.length > 0 && (
-        <div ref={filterDropdownRef} className="space-y-2">
-          {/* Quick Pill Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {groupDefinitions.map((g) => {
-              const isSelected = filterGroup === g.id;
-              const IconComp = g.icon;
-
-              return (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => setFilterGroup(g.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
-                    isSelected
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs scale-102'
-                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <IconComp className="w-3.5 h-3.5" />
-                  <span>{g.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      isSelected
-                        ? 'bg-white/20 text-white'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {g.count}
-                  </span>
-                </button>
-              );
-            })}
           </div>
         </div>
       )}
@@ -857,7 +814,53 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       ) : viewMode === 'GROUPED' ? (
         /* SECTIONED VIEW: GROUPED BY 6 ASSET CLASSES (借记卡、信用卡、数字钱包、理财基金、现金、借贷) */
-        <div className="space-y-8">
+        <div className="space-y-5">
+          {/* Quick Collapse / Expand All Header Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-1">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-slate-500" />
+              <span className="text-xs font-bold text-slate-700">
+                {filterGroup === 'ALL' ? '全部账户' : currentGroupLabel}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                · {filterGroup === 'ALL' ? '点击各分类标题栏即可单独折叠/展开' : `展示「${currentGroupLabel}」下全部卡片`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {filterGroup !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setFilterGroup('ALL')}
+                  className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold shadow-2xs flex items-center gap-1 transition-colors"
+                  title="返回查看全部账户"
+                >
+                  <span>查看全部账户</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCollapseAll}
+                className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold shadow-2xs flex items-center gap-1.5 transition-colors"
+                title="折叠所有分类"
+              >
+                <FolderClosed className="w-3.5 h-3.5 text-slate-500" />
+                <span>全部折叠</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExpandAll}
+                className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold shadow-2xs flex items-center gap-1.5 transition-colors"
+                title="展开所有分类"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-slate-500" />
+                <span>全部展开</span>
+              </button>
+            </div>
+          </div>
+
           {activeAssetGroups.map((group) => {
             const groupAccounts = accounts.filter(
               (acc) => ACCOUNT_CATEGORY_CONFIG[acc.category]?.group === group.id
@@ -875,7 +878,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900">
-                      「{group.label}」大类暂无账户
+                      「{group.label}」暂无账户卡片
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">{group.subLabel}</p>
                   </div>
@@ -895,37 +898,57 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             }
 
             const IconComponent = group.icon;
+            const isCollapsed = filterGroup === 'ALL' ? !!collapsedGroups[group.id] : (collapsedGroups[group.id] === true);
 
             return (
               <div
                 key={group.id}
-                className="rounded-3xl bg-slate-50/50 border border-slate-200/70 p-4 sm:p-6 space-y-4 shadow-2xs"
+                className={`transition-all duration-200 border ${
+                  isCollapsed
+                    ? 'rounded-2xl bg-white hover:bg-slate-50/70 border-slate-200/80 p-3.5 sm:p-4 shadow-2xs hover:shadow-xs'
+                    : 'rounded-3xl bg-slate-50/50 border-slate-200/70 p-4 sm:p-6 space-y-4 shadow-2xs'
+                }`}
               >
-                {/* Category Section Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/60">
+                {/* Category Section Header (Clickable Accordion) */}
+                <div
+                  onClick={() => toggleGroupCollapse(group.id)}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none group ${
+                    isCollapsed ? '' : 'pb-3 border-b border-slate-200/60'
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleGroupCollapse(group.id);
+                    }
+                  }}
+                  title={isCollapsed ? `点击展开「${group.label}」` : `点击折叠「${group.label}」`}
+                >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${group.badgeBg} ${group.badgeText} border ${group.borderColor}`}
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${group.badgeBg} ${group.badgeText} border ${group.borderColor} group-hover:scale-105 transition-transform`}
                     >
                       <IconComponent className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base sm:text-lg font-black text-slate-900">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-blue-600 transition-colors">
                           {group.label}
                         </h3>
                         <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700">
                           {groupAccounts.length} 张卡片
                         </span>
                       </div>
+
                       <p className="text-xs text-slate-500 mt-0.5">
                         {group.subLabel}
                       </p>
                     </div>
                   </div>
 
-                  {/* Category Summary Metric & Quick Add CTA */}
-                  <div className="flex items-center gap-2.5 self-end sm:self-auto">
+                  {/* Category Summary Metric, Quick Add CTA & Collapse Chevron */}
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                     <div className="text-right px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
                       <span className="text-[10px] text-slate-400 block">大类资产</span>
                       <span className="text-xs font-bold text-slate-900 font-mono">
@@ -935,61 +958,76 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => onAddAccount(group.defaultAddCategory)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddAccount(group.defaultAddCategory);
+                      }}
                       className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 shadow-2xs transition-colors flex items-center gap-1 shrink-0"
                       title={`添加「${group.label}」账户`}
                     >
                       <Plus className="w-3.5 h-3.5 text-blue-600" />
                       <span>添加{group.label}</span>
                     </button>
+
+                    <div
+                      className={`p-2 rounded-xl bg-white border border-slate-200 text-slate-600 group-hover:text-slate-900 group-hover:border-slate-300 transition-colors shadow-2xs flex items-center justify-center`}
+                    >
+                      {isCollapsed ? (
+                        <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-blue-600 transition-colors" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4 text-slate-500 group-hover:text-blue-600 transition-colors" />
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Cards Grid for this category */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 pt-1">
-                  {groupAccounts.map((acc, index) => {
-                    const isDraggingThis = draggedAccountId === acc.id;
-                    const isOverThis = dragOverAccountId === acc.id && !isDraggingThis;
+                {/* Cards Grid for this category (when expanded) */}
+                {!isCollapsed && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 pt-1 animate-in fade-in duration-200">
+                    {groupAccounts.map((acc, index) => {
+                      const isDraggingThis = draggedAccountId === acc.id;
+                      const isOverThis = dragOverAccountId === acc.id && !isDraggingThis;
 
-                    return (
-                      <div
-                        key={acc.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, acc.id)}
-                        onDragOver={(e) => handleDragOver(e, acc.id)}
-                        onDrop={(e) => handleDrop(e, acc.id)}
-                        onDragEnd={handleDragEnd}
-                        className={`h-full transition-all duration-200 rounded-3xl ${
-                          isDraggingThis
-                            ? 'opacity-30 scale-95 ring-2 ring-purple-500 shadow-2xl'
-                            : isOverThis
-                            ? 'scale-102 ring-4 ring-purple-400 bg-purple-50/50 p-1 shadow-xl'
-                            : ''
-                        }`}
-                      >
-                        <AccountCardFace
-                          account={acc}
-                          privacyMode={privacyMode}
-                          onEditAccount={onEditAccount}
-                          onDeleteAccount={onDeleteAccount}
-                          onQuickReconcile={handleOpenQuickReconcile}
-                          onOpenRepayment={onOpenRepayment}
-                          onOpenNewTx={onOpenNewTx}
-                          isReorderMode={isReorderMode}
-                          reorderIndex={index}
-                          totalCount={groupAccounts.length}
-                          onMoveUp={() => handleMoveUp(acc.id)}
-                          onMoveDown={() => handleMoveDown(acc.id)}
-                          onMoveTop={() => handleMoveTop(acc.id)}
-                          onAutoRegenColor={(accountId) => {
-                            const newPal = getRandomCardBackground();
-                            onDirectUpdateAccount(accountId, { cardBgColor: newPal.gradient });
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+                      return (
+                        <div
+                          key={acc.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, acc.id)}
+                          onDragOver={(e) => handleDragOver(e, acc.id)}
+                          onDrop={(e) => handleDrop(e, acc.id)}
+                          onDragEnd={handleDragEnd}
+                          className={`h-full transition-all duration-200 rounded-3xl ${
+                            isDraggingThis
+                              ? 'opacity-30 scale-95 ring-2 ring-purple-500 shadow-2xl'
+                              : isOverThis
+                              ? 'scale-102 ring-4 ring-purple-400 bg-purple-50/50 p-1 shadow-xl'
+                              : ''
+                          }`}
+                        >
+                          <AccountCardFace
+                            account={acc}
+                            privacyMode={privacyMode}
+                            onEditAccount={onEditAccount}
+                            onDeleteAccount={onDeleteAccount}
+                            onQuickReconcile={handleOpenQuickReconcile}
+                            onOpenRepayment={onOpenRepayment}
+                            onOpenNewTx={onOpenNewTx}
+                            isReorderMode={isReorderMode}
+                            reorderIndex={index}
+                            totalCount={groupAccounts.length}
+                            onMoveUp={() => handleMoveUp(acc.id)}
+                            onMoveDown={() => handleMoveDown(acc.id)}
+                            onMoveTop={() => handleMoveTop(acc.id)}
+                            onAutoRegenColor={(accountId) => {
+                              const newPal = getRandomCardBackground();
+                              onDirectUpdateAccount(accountId, { cardBgColor: newPal.gradient });
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

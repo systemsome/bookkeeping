@@ -1,30 +1,34 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Receipt,
   X,
   Download,
   Share2,
   Copy,
-  Printer,
   Sparkles,
   Volume2,
   VolumeX,
   RotateCcw,
   Calendar,
-  Tag,
   Store,
   SlidersHorizontal,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Stamp as StampIcon,
   Palette,
-  Scissors,
   Check,
+  Filter,
+  Layers,
+  CalendarDays,
+  ArrowRight,
 } from 'lucide-react';
 import { toPng, toBlob } from 'html-to-image';
 import confetti from 'canvas-confetti';
 import { Transaction, FinancialAccount } from '../types';
 import { playPOSSound } from '../lib/receiptSound';
+import { sortTransactions } from '../lib/formatters';
 
 interface ReceiptModalProps {
   isOpen: boolean;
@@ -36,8 +40,36 @@ interface ReceiptModalProps {
 }
 
 type ReceiptTheme = 'classic' | 'cafe' | 'cyber' | 'muji';
-type ScopeType = 'SELECTED_DATE' | 'TODAY' | 'MONTH' | 'ALL_FILTERED' | 'SINGLE';
+type ScopeType = 'TODAY' | 'MONTH' | 'DATE' | 'ALL' | 'SINGLE';
 type StampShape = 'circle' | 'rect' | 'badge';
+export type StampPosition =
+  | 'bottom-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'middle-right'
+  | 'center'
+  | 'middle-left'
+  | 'top-right'
+  | 'top-left';
+
+const STAMP_POSITIONS: { id: StampPosition; label: string; desc: string }[] = [
+  { id: 'bottom-right', label: '右下角', desc: '经典收据盖章' },
+  { id: 'bottom-left', label: '左下角', desc: '底部签名处' },
+  { id: 'bottom-center', label: '底居中', desc: '正下方封签' },
+  { id: 'middle-right', label: '中右侧', desc: '金额汇总旁' },
+  { id: 'center', label: '正中央', desc: '居中透印水印' },
+  { id: 'middle-left', label: '中左侧', desc: '明细列表旁' },
+  { id: 'top-right', label: '右上角', desc: '标头右侧' },
+  { id: 'top-left', label: '左上角', desc: '标头左侧' },
+];
+
+const STAMP_ROTATIONS = [
+  { value: -25, label: '-25° 醒目' },
+  { value: -12, label: '-12° 经典' },
+  { value: 0, label: '0° 平整' },
+  { value: 12, label: '+12° 微倾' },
+  { value: 25, label: '+25° 动感' },
+];
 
 const QUOTES = [
   '每一次记账，都是对美好生活的用心投资 ☕',
@@ -80,19 +112,75 @@ const STAMP_COLORS = [
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   isOpen,
   onClose,
-  transactions,
-  accounts,
+  transactions = [],
+  accounts = [],
   selectedDate,
   initialSingleTxId,
 }) => {
-  // Theme & Scope
+  // Today and current month dates
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const currentMonthStr = useMemo(() => todayStr.substring(0, 7), [todayStr]);
+
+  // Extract all available months from transactions
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    transactions.forEach((t) => {
+      if (t.date && t.date.length >= 7) {
+        set.add(t.date.substring(0, 7));
+      }
+    });
+    set.add(currentMonthStr);
+    return Array.from(set).sort().reverse();
+  }, [transactions, currentMonthStr]);
+
+  // Extract all dates that have transactions
+  const datesWithTransactions = useMemo(() => {
+    const map = new Map<string, { count: number; expense: number; income: number }>();
+    transactions.forEach((t) => {
+      if (t.date) {
+        const entry = map.get(t.date) || { count: 0, expense: 0, income: 0 };
+        entry.count += 1;
+        if (t.type === 'EXPENSE') entry.expense += t.amount;
+        if (t.type === 'INCOME') entry.income += t.amount;
+        map.set(t.date, entry);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [transactions]);
+
+  // All transactions sorted chronologically descending (latest first)
+  const sortedAllTransactions = useMemo(() => {
+    return sortTransactions(transactions, 'desc');
+  }, [transactions]);
+
+  // Latest recorded transaction ID (最后一笔/最新记账明细)
+  const latestTxId = useMemo(() => {
+    return sortedAllTransactions[0]?.id || null;
+  }, [sortedAllTransactions]);
+
+  // Theme & Scope States
   const [theme, setTheme] = useState<ReceiptTheme>('classic');
   const [scope, setScope] = useState<ScopeType>(() => {
     if (initialSingleTxId) return 'SINGLE';
-    if (selectedDate) return 'SELECTED_DATE';
-    return 'MONTH';
+    if (selectedDate) return 'DATE';
+    return 'TODAY';
   });
-  const [singleTxId, setSingleTxId] = useState<string | null>(initialSingleTxId || null);
+
+  // Selected Start Date (起始日) and End Date (截止日) filters
+  const [customStartDate, setCustomStartDate] = useState<string>(() => selectedDate || todayStr);
+  const [customEndDate, setCustomEndDate] = useState<string>(() => selectedDate || todayStr);
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    if (selectedDate && selectedDate.length >= 7) return selectedDate.substring(0, 7);
+    return currentMonthStr;
+  });
+
+  // 单笔打单默认选择单笔明细为最后一笔记账明细
+  const [singleTxId, setSingleTxId] = useState<string | null>(() => {
+    return initialSingleTxId || (sortedAllTransactions[0]?.id ?? null);
+  });
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME'>('EXPENSE');
 
   // Custom Header & Custom Stamp States
@@ -103,36 +191,47 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [stampBottomText, setStampBottomText] = useState<string>('消费入账');
   const [stampColorId, setStampColorId] = useState<string>('crimson');
   const [stampShape, setStampShape] = useState<StampShape>('circle');
+  const [stampPosition, setStampPosition] = useState<StampPosition>('bottom-right');
+  const [stampRotation, setStampRotation] = useState<number>(-12);
 
-  // Controls auto-hide / collapse state (默认自动折叠隐藏，呈现纯净出票机与小票)
+  // Controls auto-hide / collapse state
   const [isControlsExpanded, setIsControlsExpanded] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'scope' | 'header' | 'stamp' | 'theme'>('scope');
+  const [activeTab, setActiveTab] = useState<'header' | 'stamp' | 'theme'>('header');
 
   // Realistic POS Printer & Cutting Blade Animation States
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [printStage, setPrintStage] = useState<'idle' | 'printing' | 'cutting' | 'done'>('done');
   const [showStamp, setShowStamp] = useState<boolean>(true);
   const [isCutterActive, setIsCutterActive] = useState<boolean>(false);
-  const [isGeneratingImg, setIsGeneratingImg] = useState<boolean>(false);
+  const [, setIsGeneratingImg] = useState<boolean>(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [randomQuote, setRandomQuote] = useState<string>(QUOTES[0]);
 
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  const accountMap = new Map<string, FinancialAccount>();
-  accounts.forEach((acc) => accountMap.set(acc.id, acc));
+  const accountMap = useMemo(() => {
+    const map = new Map<string, FinancialAccount>();
+    accounts.forEach((acc) => map.set(acc.id, acc));
+    return map;
+  }, [accounts]);
 
-  // Determine current date strings
-  const todayStr = new Date().toISOString().split('T')[0];
-  const currentMonthStr = todayStr.substring(0, 7);
-
-  // Sync initial single tx
+  // Sync initial single tx or selected date
   useEffect(() => {
     if (initialSingleTxId) {
       setSingleTxId(initialSingleTxId);
       setScope('SINGLE');
+    } else if (!singleTxId && latestTxId) {
+      setSingleTxId(latestTxId);
     }
-  }, [initialSingleTxId]);
+  }, [initialSingleTxId, latestTxId, singleTxId]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setCustomStartDate(selectedDate);
+      setCustomEndDate(selectedDate);
+      if (selectedDate.length >= 7) setSelectedMonth(selectedDate.substring(0, 7));
+    }
+  }, [selectedDate]);
 
   // Random quote & trigger print effect on modal open
   useEffect(() => {
@@ -194,34 +293,117 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }, 1350);
   };
 
-  // Filter transactions based on scope and type
-  const targetTransactions = transactions.filter((tx) => {
-    if (typeFilter === 'EXPENSE' && tx.type !== 'EXPENSE') return false;
-    if (typeFilter === 'INCOME' && tx.type !== 'INCOME') return false;
+  // Month navigation helpers
+  const handlePrevMonth = () => {
+    const [yStr, mStr] = selectedMonth.split('-');
+    let y = parseInt(yStr, 10);
+    let m = parseInt(mStr, 10) - 1;
+    if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    const newMonth = `${y}-${String(m).padStart(2, '0')}`;
+    setSelectedMonth(newMonth);
+    setScope('MONTH');
+    triggerPrintEffect();
+  };
 
-    if (scope === 'SINGLE') {
-      return singleTxId ? tx.id === singleTxId : true;
+  const handleNextMonth = () => {
+    const [yStr, mStr] = selectedMonth.split('-');
+    let y = parseInt(yStr, 10);
+    let m = parseInt(mStr, 10) + 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
     }
-    if (scope === 'SELECTED_DATE' && selectedDate) {
-      return tx.date === selectedDate;
+    const newMonth = `${y}-${String(m).padStart(2, '0')}`;
+    setSelectedMonth(newMonth);
+    setScope('MONTH');
+    triggerPrintEffect();
+  };
+
+  // Quick Date Range Helpers
+  const handleSetQuickRange = (preset: 'today' | 'yesterday' | '3days' | '7days' | '30days' | 'thisMonth') => {
+    const now = new Date();
+    const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+    if (preset === 'today') {
+      setCustomStartDate(todayStr);
+      setCustomEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const yDate = new Date();
+      yDate.setDate(yDate.getDate() - 1);
+      const yStr = formatDate(yDate);
+      setCustomStartDate(yStr);
+      setCustomEndDate(yStr);
+    } else if (preset === '3days') {
+      const past = new Date();
+      past.setDate(past.getDate() - 2);
+      setCustomStartDate(formatDate(past));
+      setCustomEndDate(todayStr);
+    } else if (preset === '7days') {
+      const past = new Date();
+      past.setDate(past.getDate() - 6);
+      setCustomStartDate(formatDate(past));
+      setCustomEndDate(todayStr);
+    } else if (preset === '30days') {
+      const past = new Date();
+      past.setDate(past.getDate() - 29);
+      setCustomStartDate(formatDate(past));
+      setCustomEndDate(todayStr);
+    } else if (preset === 'thisMonth') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      setCustomStartDate(formatDate(firstDay));
+      setCustomEndDate(todayStr);
     }
-    if (scope === 'TODAY') {
-      return tx.date === todayStr;
-    }
-    if (scope === 'MONTH') {
-      return tx.date.startsWith(currentMonthStr);
-    }
-    return true;
-  });
+
+    setScope('DATE');
+    triggerPrintEffect();
+  };
+
+  // Resolve valid date range
+  const minDate = customStartDate <= customEndDate ? customStartDate : customEndDate;
+  const maxDate = customStartDate <= customEndDate ? customEndDate : customStartDate;
+  const isSingleDay = minDate === maxDate;
+
+  // Filter transactions strictly based on selected scope and type
+  const targetTransactions = useMemo(() => {
+    return transactions.filter((tx) => {
+      if (!tx) return false;
+      
+      if (scope === 'SINGLE') {
+        const effectiveId = singleTxId || latestTxId;
+        return effectiveId ? tx.id === effectiveId : false;
+      }
+
+      if (typeFilter === 'EXPENSE' && tx.type !== 'EXPENSE') return false;
+      if (typeFilter === 'INCOME' && tx.type !== 'INCOME') return false;
+
+      if (scope === 'DATE') {
+        return tx.date >= minDate && tx.date <= maxDate;
+      }
+      if (scope === 'TODAY') {
+        return tx.date === todayStr;
+      }
+      if (scope === 'MONTH') {
+        return tx.date && tx.date.startsWith(selectedMonth);
+      }
+      return true; // ALL
+    });
+  }, [transactions, typeFilter, scope, singleTxId, latestTxId, minDate, maxDate, todayStr, selectedMonth]);
 
   // Calculate totals
-  const totalExpense = targetTransactions
-    .filter((t) => t.type === 'EXPENSE')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = useMemo(() => {
+    return targetTransactions
+      .filter((t) => t.type === 'EXPENSE')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  }, [targetTransactions]);
 
-  const totalIncome = targetTransactions
-    .filter((t) => t.type === 'INCOME')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalIncome = useMemo(() => {
+    return targetTransactions
+      .filter((t) => t.type === 'INCOME')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  }, [targetTransactions]);
 
   const netBalance = totalIncome - totalExpense;
   const itemCount = targetTransactions.length;
@@ -231,15 +413,26 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     setTimeout(() => setCopyToast(null), 2500);
   };
 
-  // Receipt ID & Timestamp
-  const receiptNo = `POS-${todayStr.replace(/-/g, '')}-${String(itemCount).padStart(3, '0')}`;
+  // Descriptive period label
+  const periodLabel = useMemo(() => {
+    if (scope === 'TODAY') return `今日小票 (${todayStr})`;
+    if (scope === 'MONTH') return `月度汇总 (${selectedMonth} 月)`;
+    if (scope === 'SINGLE') return `单笔流水专属小票`;
+    if (scope === 'ALL') return `全量账单汇总 (${transactions.length} 笔)`;
+    if (isSingleDay) return `指定日期 (${minDate})`;
+    return `指定区间 (${minDate} 至 ${maxDate})`;
+  }, [scope, todayStr, selectedMonth, transactions.length, isSingleDay, minDate, maxDate]);
+
+  // Receipt ID & Timestamp based on selected date
+  const receiptDateRef = scope === 'DATE' ? `${minDate.replace(/-/g, '')}${isSingleDay ? '' : `_${maxDate.replace(/-/g, '')}`}` : scope === 'MONTH' ? selectedMonth.replace(/-/g, '') : todayStr.replace(/-/g, '');
+  const receiptNo = `POS-${receiptDateRef}-${String(itemCount).padStart(3, '0')}`;
   const printTimeStr = new Date().toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   });
 
-  // 1. Download as PNG Image (With exact 1:1 layout, font, background and dimensions preservation)
+  // 1. Download as PNG Image (Showing all transactions cleanly)
   const handleDownloadImage = async () => {
     if (!receiptRef.current) return;
     try {
@@ -270,7 +463,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       link.href = dataUrl;
       link.click();
 
-      showNotification('✅ 账单小票已保存为高清长图！');
+      showNotification('✅ 账单小票已保存为高清长图（含全部明细）！');
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
     } catch (err) {
       console.error('Failed to export receipt image:', err);
@@ -280,7 +473,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }
   };
 
-  // 2. Copy Image to Clipboard (With exact layout matching)
+  // 2. Copy Image to Clipboard
   const handleCopyImage = async () => {
     if (!receiptRef.current) return;
     try {
@@ -321,31 +514,29 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }
   };
 
-  // 3. Copy Plain Text Receipt
+  // 3. Copy Plain Text Receipt (Display ALL transactions without truncation)
   const handleCopyText = () => {
     const divider = '--------------------------------';
     const lines = [
       `🧾 【${storeName} · ${storeSubtitle}】`,
       `流水单号: ${receiptNo}`,
+      `结算范围: ${periodLabel}`,
       `打印时间: ${todayStr} ${printTimeStr}`,
       `收银终端: 01号收银台 (记账员: 本人)`,
       divider,
       `[序号]  品类明细        方式        金额`,
     ];
 
-    targetTransactions.slice(0, 30).forEach((t, i) => {
+    // List ALL items without truncation
+    targetTransactions.forEach((t, i) => {
       const acc = accountMap.get(t.accountId);
       const accName = acc?.name || '默认账户';
       const typeSign = t.type === 'EXPENSE' ? '-' : '+';
-      const desc = t.description || t.category;
+      const desc = t.description ? `${t.category}(${t.description})` : t.category;
       lines.push(
-        `${String(i + 1).padStart(2, '0')}.  ${desc.padEnd(10, ' ')}  ${accName.substring(0, 4)}  ${typeSign}¥${t.amount.toFixed(2)}`
+        `${String(i + 1).padStart(2, '0')}.  ${desc.padEnd(12, ' ')}  ${accName.substring(0, 4)}  ${typeSign}¥${t.amount.toFixed(2)}`
       );
     });
-
-    if (targetTransactions.length > 30) {
-      lines.push(`... 还有 ${targetTransactions.length - 30} 笔明细已汇总 ...`);
-    }
 
     lines.push(divider);
     lines.push(`消费总笔数: ${itemCount} 笔`);
@@ -360,41 +551,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     lines.push(`★ 感谢惠顾 · 欢迎再次记账 ★`);
 
     navigator.clipboard.writeText(lines.join('\n'));
-    showNotification('📄 纯文本小票已复制，可直接发微信或备忘录！');
-  };
-
-  // 4. Native Share
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        if (!receiptRef.current) return;
-        const blob = await toBlob(receiptRef.current, { pixelRatio: 2 });
-        if (blob) {
-          const file = new File([blob], `账单小票_${receiptNo}.png`, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `${storeName} - ${storeSubtitle}`,
-              text: `我的消费小票：共计 ${itemCount} 笔，支出 ¥${totalExpense.toFixed(2)}。`,
-            });
-            return;
-          }
-        }
-        await navigator.share({
-          title: `${storeName} - ${storeSubtitle}`,
-          text: `我的消费小票：共计 ${itemCount} 笔，支出 ¥${totalExpense.toFixed(2)}。${randomQuote}`,
-        });
-      } catch {
-        // user cancelled
-      }
-    } else {
-      handleCopyImage();
-    }
-  };
-
-  // 5. System Print
-  const handlePrint = () => {
-    window.print();
+    showNotification('📄 纯文本小票（全部明细）已复制，可直接发微信或备忘录！');
   };
 
   if (!isOpen) return null;
@@ -402,7 +559,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   // Selected Stamp Color Config
   const selectedStampColor = STAMP_COLORS.find((c) => c.id === stampColorId) || STAMP_COLORS[0];
 
-  // Theme styling configurations - Clean, pure paper surfaces WITHOUT dot-matrix
+  // Theme styling configurations
   const themeStyles = {
     classic: {
       bg: 'bg-white',
@@ -447,7 +604,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   }[theme];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
       {/* Toast Notification */}
       {copyToast && (
         <div className="fixed top-5 z-60 left-1/2 -translate-x-1/2 px-4 py-2 rounded-2xl bg-slate-900/95 text-white text-xs sm:text-sm font-medium shadow-2xl border border-slate-700 flex items-center gap-2 animate-in slide-in-from-top-4 backdrop-blur-sm">
@@ -456,10 +613,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </div>
       )}
 
-      {/* Adjusted Modal Dialog Container (Sleek, well-proportioned, max-w-2xl) */}
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+      {/* Modal Dialog Container */}
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[95vh] flex flex-col">
         {/* Modal Header */}
-        <div className="px-4 py-3.5 sm:px-5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/95 shrink-0">
+        <div className="px-4 py-3 sm:px-5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/95 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <Receipt className="w-4 h-4" />
@@ -471,17 +628,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                   <Sparkles className="w-2.5 h-2.5" />
-                  沉浸式出票
+                  全明细完整打单
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                模拟真实收银机热敏出票、激光切纸与印章落戳
+                支持今日、当月汇总、起始日~截止日区间打单及全量明细输出
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Customization Toggle Button (自动隐藏/一键展开) */}
+            {/* Customization Toggle Button */}
             <button
               onClick={() => setIsControlsExpanded(!isControlsExpanded)}
               className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
@@ -489,10 +646,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
                   : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700 hover:bg-slate-700'
               }`}
-              title="展开/隐藏自定义标头、印章与范围设置"
+              title="展开/隐藏自定义标头、印章与风格设置"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>{isControlsExpanded ? '收起自定义' : '自定义设置'}</span>
+              <span className="hidden sm:inline">{isControlsExpanded ? '收起配置' : '外观配置'}</span>
+              <span className="sm:hidden">配置</span>
               {isControlsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
@@ -523,13 +681,298 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </div>
         </div>
 
-        {/* Collapsible / Auto-Hide Customization Drawer */}
+        {/* Top Prominent Scope & Date Selection Bar (清晰的一级筛选器) */}
+        <div className="bg-slate-950 px-4 py-3 border-b border-slate-800/80 space-y-2.5 shrink-0">
+          {/* Main Scope Tabs */}
+          <div className="grid grid-cols-5 gap-1.5">
+            {[
+              {
+                id: 'TODAY',
+                label: '今日小票',
+                icon: Calendar,
+                badge: `${transactions.filter((t) => t.date === todayStr).length} 笔`,
+              },
+              {
+                id: 'MONTH',
+                label: '当月汇总',
+                icon: CalendarDays,
+                badge: `${transactions.filter((t) => t.date && t.date.startsWith(selectedMonth)).length} 笔`,
+              },
+              {
+                id: 'DATE',
+                label: '指定日期/区间',
+                icon: Filter,
+                badge: `${targetTransactions.length} 笔`,
+              },
+              {
+                id: 'ALL',
+                label: '全部流水',
+                icon: Layers,
+                badge: `${transactions.length} 笔`,
+              },
+              {
+                id: 'SINGLE',
+                label: '单笔打单',
+                icon: Receipt,
+                badge: '专属',
+              },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = scope === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setScope(tab.id as ScopeType);
+                    if (tab.id === 'SINGLE' && !singleTxId && latestTxId) {
+                      setSingleTxId(latestTxId);
+                    }
+                    triggerPrintEffect();
+                  }}
+                  className={`p-2 rounded-xl text-center border transition-all flex flex-col items-center justify-center gap-0.5 ${
+                    isActive
+                      ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm ring-1 ring-emerald-400 font-bold'
+                      : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-850 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-xs">{tab.label}</span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono ${
+                      isActive ? 'text-emerald-100' : 'text-slate-400'
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sub-Controllers based on selected Scope */}
+          {/* 1. Month Switcher (When scope is MONTH) */}
+          {scope === 'MONTH' && (
+            <div className="flex items-center justify-between gap-2 p-2 bg-slate-900 rounded-xl border border-slate-800 animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs flex items-center gap-1 transition-colors"
+                  title="上一月"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="text-xs">上一月</span>
+                </button>
+
+                <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800">
+                  <CalendarDays className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-xs font-bold text-emerald-300 font-mono">
+                    {selectedMonth} 月度账单
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs flex items-center gap-1 transition-colors"
+                  title="下一月"
+                >
+                  <span className="text-xs">下一月</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Month Dropdown fast selector */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-400 hidden sm:inline">选择月份:</span>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(e.target.value);
+                    triggerPrintEffect();
+                  }}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                >
+                  {availableMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {m} 月 ({transactions.filter((t) => t.date && t.date.startsWith(m)).length} 笔)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Clickable Date Range Picker (起始日 + 截止日) & Quick Range Buttons (When scope is DATE) */}
+          {scope === 'DATE' && (
+            <div className="space-y-2.5 p-2.5 bg-slate-900 rounded-xl border border-slate-800 animate-in fade-in duration-150">
+              {/* Start Date & End Date Inputs */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Start Date (起始日) */}
+                  <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-700">
+                    <span className="text-[11px] text-slate-400 font-semibold whitespace-nowrap">起始日:</span>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setCustomStartDate(e.target.value);
+                          triggerPrintEffect();
+                        }
+                      }}
+                      className="bg-transparent text-xs text-emerald-300 font-mono font-bold focus:outline-none"
+                    />
+                  </div>
+
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+
+                  {/* End Date (截止日) */}
+                  <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-700">
+                    <span className="text-[11px] text-slate-400 font-semibold whitespace-nowrap">截止日:</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setCustomEndDate(e.target.value);
+                          triggerPrintEffect();
+                        }
+                      }}
+                      className="bg-transparent text-xs text-emerald-300 font-mono font-bold focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-300 font-medium">
+                  区间共 <strong className="text-emerald-400 font-mono font-bold">{targetTransactions.length}</strong> 笔明细
+                </div>
+              </div>
+
+              {/* Quick Range Presets (快捷区间预设) */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span className="text-[11px] text-slate-400">快捷区间:</span>
+                {[
+                  { id: 'today', label: '今天' },
+                  { id: 'yesterday', label: '昨天' },
+                  { id: '3days', label: '近3天' },
+                  { id: '7days', label: '近7天' },
+                  { id: '30days', label: '近30天' },
+                  { id: 'thisMonth', label: '本月至今' },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleSetQuickRange(preset.id as any)}
+                    className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 text-[11px] font-medium transition-colors"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Clickable Quick Date Chips */}
+              {datesWithTransactions.length > 0 && (
+                <div className="pt-1 border-t border-slate-800/80">
+                  <div className="text-[11px] text-slate-400 mb-1 flex items-center justify-between">
+                    <span>快捷单日打单 (点击直接填入):</span>
+                    <span className="text-[10px] text-slate-500">点击任意日期即刻出票</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-thin">
+                    {datesWithTransactions.slice(0, 10).map((d) => (
+                      <button
+                        key={d.date}
+                        type="button"
+                        onClick={() => {
+                          setCustomStartDate(d.date);
+                          setCustomEndDate(d.date);
+                          triggerPrintEffect();
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-mono whitespace-nowrap transition-all flex items-center gap-1 border shrink-0 ${
+                          customStartDate === d.date && customEndDate === d.date
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-bold'
+                            : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <span>{d.date}</span>
+                        <span className="text-[10px] opacity-75">({d.count}笔)</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3. Single Tx Selector (When scope is SINGLE) */}
+          {scope === 'SINGLE' && (
+            <div className="flex items-center gap-2 p-2 bg-slate-900 rounded-xl border border-slate-800 animate-in fade-in duration-150">
+              <span className="text-xs text-slate-300 font-medium whitespace-nowrap">选择单笔明细:</span>
+              <select
+                value={singleTxId || latestTxId || ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSingleTxId(e.target.value);
+                    triggerPrintEffect();
+                  }
+                }}
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+              >
+                {sortedAllTransactions.length === 0 ? (
+                  <option value="">暂无记账明细</option>
+                ) : (
+                  sortedAllTransactions.map((t, idx) => (
+                    <option key={t.id} value={t.id}>
+                      {idx === 0 ? '【最新一笔】' : ''}{t.date} · {t.category} {t.description ? `(${t.description})` : ''} · {t.type === 'EXPENSE' ? '-' : '+'}¥{t.amount.toFixed(2)} ({accountMap.get(t.accountId)?.name || '账户'})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
+
+          {/* Transaction Type Filter (全部 / 仅支出 / 仅收入) */}
+          <div className="flex items-center justify-between text-xs pt-0.5">
+            <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+              {[
+                { id: 'EXPENSE', label: '仅支出' },
+                { id: 'ALL', label: '全部收支' },
+                { id: 'INCOME', label: '仅收入' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setTypeFilter(t.id as typeof typeFilter);
+                    triggerPrintEffect();
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs transition-all ${
+                    typeFilter === t.id
+                      ? 'bg-slate-800 text-white font-bold shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-[11px] text-slate-400">
+              当前打单明细: <strong className="text-emerald-400 font-mono font-bold">{targetTransactions.length}</strong> 笔，总计{' '}
+              <strong className="text-white font-mono font-bold">¥{totalExpense.toFixed(2)}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Customization Drawer (标头 / 印章 / 风格) */}
         {isControlsExpanded && (
-          <div className="bg-slate-950/90 border-b border-slate-800 p-4 space-y-4 animate-in slide-in-from-top-3 duration-200">
+          <div className="bg-slate-950/95 border-b border-slate-800 p-4 space-y-4 animate-in slide-in-from-top-3 duration-200 shrink-0">
             {/* Nav Tabs */}
             <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
               {[
-                { id: 'scope', label: '范围筛选', icon: Calendar },
                 { id: 'header', label: '自定义标头', icon: Store },
                 { id: 'stamp', label: '自定义印章', icon: StampIcon },
                 { id: 'theme', label: '小票风格', icon: Palette },
@@ -553,60 +996,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               })}
             </div>
 
-            {/* Tab 1: Scope & Date Filter */}
-            {activeTab === 'scope' && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { id: 'TODAY', label: '今日小票', sub: todayStr },
-                    { id: 'MONTH', label: '当月汇总', sub: `${currentMonthStr} 月` },
-                    { id: 'SELECTED_DATE', label: '已选日期', sub: selectedDate || '当前未选' },
-                    { id: 'ALL_FILTERED', label: '当前全部', sub: `共 ${transactions.length} 笔` },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setScope(item.id as ScopeType);
-                        triggerPrintEffect();
-                      }}
-                      className={`p-2 rounded-xl text-left border text-xs transition-all ${
-                        scope === item.id
-                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500 font-bold'
-                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="font-semibold">{item.label}</div>
-                      <div className="text-[10px] text-slate-400 truncate">{item.sub}</div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Single Tx Selector */}
-                <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
-                  <span className="text-xs text-slate-400 whitespace-nowrap">单笔消费:</span>
-                  <select
-                    value={singleTxId || ''}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        setSingleTxId(e.target.value);
-                        setScope('SINGLE');
-                        triggerPrintEffect();
-                      }
-                    }}
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="">-- 选择任意单笔交易生成专属小票 --</option>
-                    {transactions.slice(0, 30).map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.date} · {t.category} {t.description ? `(${t.description})` : ''} · ¥{t.amount.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 2: Custom Header (自定义标头) */}
+            {/* Tab 1: Custom Header (自定义标头) */}
             {activeTab === 'header' && (
               <div className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -659,7 +1049,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </div>
             )}
 
-            {/* Tab 3: Custom Stamp (自定义印章) */}
+            {/* Tab 2: Custom Stamp (自定义印章) */}
             {activeTab === 'stamp' && (
               <div className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -769,7 +1159,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </div>
             )}
 
-            {/* Tab 4: Themes */}
+            {/* Tab 3: Themes */}
             {activeTab === 'theme' && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
@@ -799,14 +1189,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </div>
         )}
 
-        {/* Modal Main Body (Centering the Realistic Thermal Printer & Receipt) */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col items-center justify-start bg-slate-950/60">
-          {/* Realistic High-End POS Thermal Printer Hardware Frame (设备比出票偏大一号：外壳宽阔舒展，工业质感拉满) */}
-          <div className="w-full max-w-lg bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 border border-slate-700/80 rounded-3xl p-4 sm:p-5 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.7)] relative z-10 select-none ring-1 ring-white/10">
-            {/* Top Surface Bar with Hardware Branding & Controls */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-700/70">
-              {/* Brand & Model Logo */}
-              <div className="flex items-center gap-2.5">
+        {/* Modal Main Body (Centering the Realistic Thermal Printer & Full Receipt) */}
+        <div className="p-3 sm:p-5 overflow-y-auto flex-1 flex flex-col items-center justify-start bg-slate-950/60">
+          {/* POS Thermal Printer Frame */}
+          <div className="w-full max-w-lg bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 border border-slate-700/80 rounded-3xl p-3.5 sm:p-4 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.7)] relative z-10 select-none ring-1 ring-white/10 shrink-0">
+            {/* Top Surface Bar */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-700/70">
+              <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center shadow-inner">
                   <Receipt className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
@@ -821,18 +1210,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
               </div>
 
-              {/* Status Indicators & Action Button */}
-              <div className="flex items-center gap-3">
-                {/* LED Status Indicators Group */}
-                <div className="flex items-center gap-2.5 bg-slate-950/70 px-2.5 py-1.5 rounded-xl border border-slate-800">
-                  {/* Power LED */}
-                  <div className="flex items-center gap-1" title="电源指示正常">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2 bg-slate-950/70 px-2 py-1 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
                     <span className="text-[9px] font-mono text-slate-400">电源</span>
                   </div>
-
-                  {/* Status / Working LED */}
-                  <div className="flex items-center gap-1" title="出票运行指示">
+                  <div className="flex items-center gap-1">
                     <div
                       className={`w-2 h-2 rounded-full transition-all ${
                         printStage === 'printing'
@@ -842,9 +1226,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     />
                     <span className="text-[9px] font-mono text-slate-400">出票</span>
                   </div>
-
-                  {/* Cutter LED */}
-                  <div className="flex items-center gap-1" title="自动切刀状态">
+                  <div className="flex items-center gap-1">
                     <div
                       className={`w-2 h-2 rounded-full transition-all ${
                         isCutterActive
@@ -856,33 +1238,27 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   </div>
                 </div>
 
-                {/* FEED / Re-Print Hardware Button */}
                 <button
                   type="button"
                   onClick={triggerPrintEffect}
                   disabled={printStage === 'printing' || printStage === 'cutting'}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-b from-slate-750 to-slate-800 hover:from-slate-700 hover:to-slate-750 active:scale-95 border border-slate-600/70 text-[11px] text-slate-200 font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 shadow-md shadow-black/40"
+                  className="px-2.5 py-1 rounded-xl bg-gradient-to-b from-slate-750 to-slate-800 hover:from-slate-700 hover:to-slate-750 active:scale-95 border border-slate-600/70 text-[10px] text-slate-200 font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shadow-md"
                   title="重新进纸并演示激光切纸效果"
                 >
-                  <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>进纸 (FEED)</span>
+                  <RotateCcw className="w-3 h-3 text-emerald-400" />
+                  <span>进纸</span>
                 </button>
               </div>
             </div>
 
-            {/* Recessed Thermal Print Engine & Metallic Paper Ejection Slot (微凹出票槽与机械切刀) */}
-            <div className="relative mt-3 p-1 bg-slate-950 rounded-xl border border-slate-800 shadow-inner">
-              {/* Inner Slot Bezel */}
-              <div className="relative h-4 bg-black rounded-lg border-t border-b border-slate-800/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.9)] overflow-hidden flex items-center justify-center">
-                {/* Paper Delivery Rubber Rollers Accent */}
+            {/* Recessed Slot */}
+            <div className="relative mt-2.5 p-1 bg-slate-950 rounded-xl border border-slate-800 shadow-inner">
+              <div className="relative h-3.5 bg-black rounded-lg border-t border-b border-slate-800/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.9)] overflow-hidden flex items-center justify-center">
                 <div className="absolute inset-x-8 top-0.5 h-0.5 bg-slate-800/80 rounded-full" />
                 <div className="w-48 h-0.5 bg-slate-700/40 rounded-full" />
-
-                {/* Left/Right Paper Guide Aligners (两端金属导纸卡口) */}
                 <div className="absolute left-2 inset-y-0.5 w-1.5 bg-slate-800 rounded-xs border-r border-slate-700" />
                 <div className="absolute right-2 inset-y-0.5 w-1.5 bg-slate-800 rounded-xs border-l border-slate-700" />
 
-                {/* Dynamic Metallic Guillotine Cutter Blade Animation (激光与金属切刀划过光效) */}
                 {isCutterActive && (
                   <div
                     className="absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-95 shadow-[0_0_16px_#38bdf8] pointer-events-none"
@@ -895,7 +1271,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             </div>
           </div>
 
-          {/* Paper Ejection Slide Container with Physical Cutting Bounce Separation (小票尺寸相比打印机适中收敛) */}
+          {/* Paper Slide Container */}
           <div
             className={`w-full max-w-sm sm:max-w-md transition-all duration-700 ease-out origin-top -mt-2 ${
               printStage === 'printing'
@@ -905,12 +1281,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 : 'translate-y-2 opacity-100 scale-y-100'
             }`}
           >
-            {/* The Actual Receipt Document Node to Capture (固定宽度与强制防折行保护，确保导出长图与展示 100% 绝对一致) */}
+            {/* The Actual Receipt Document Node to Capture */}
             <div
               ref={receiptRef}
-              className={`relative mt-2 p-6 sm:p-7 rounded-sm ${themeStyles.bg} ${themeStyles.text} ${themeStyles.font} ${themeStyles.paperShadow} transition-colors select-none w-[360px] sm:w-[380px] mx-auto box-border`}
+              className={`relative mt-2 p-6 sm:p-7 rounded-xs ${themeStyles.bg} ${themeStyles.text} ${themeStyles.font} ${themeStyles.paperShadow} transition-colors select-none w-[360px] sm:w-[380px] mx-auto box-border`}
             >
-              {/* Top Sawtooth / Zigzag Edge */}
+              {/* Top Sawtooth Edge */}
               <div
                 className="absolute -top-2 left-0 right-0 h-2 bg-repeat-x pointer-events-none"
                 style={{
@@ -919,7 +1295,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 }}
               />
 
-              {/* Receipt Header (自定义标头) */}
+              {/* Receipt Header */}
               <div className="text-center space-y-1.5 pb-4 border-b border-dashed border-slate-400/40">
                 <div className="inline-flex items-center justify-center p-2 rounded-full border-2 border-current mb-1">
                   <Store className="w-5 h-5" />
@@ -940,6 +1316,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <span className="font-bold shrink-0 whitespace-nowrap">{receiptNo}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                  <span className="opacity-75 shrink-0 whitespace-nowrap">结算周期:</span>
+                  <span className="font-bold shrink-0 whitespace-nowrap">
+                    {periodLabel}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 whitespace-nowrap">
                   <span className="opacity-75 shrink-0 whitespace-nowrap">打印时间:</span>
                   <span className="shrink-0 whitespace-nowrap">
                     {todayStr} {printTimeStr}
@@ -955,7 +1337,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
               </div>
 
-              {/* Goods / Transactions List */}
+              {/* Goods / Transactions List (Showing ALL transactions without truncation) */}
               <div className="py-3">
                 <div className="flex items-center justify-between text-[11px] font-bold pb-2 border-b border-slate-400/50 tracking-wider whitespace-nowrap">
                   <span className="w-2/5 shrink-0">品类明细</span>
@@ -964,118 +1346,183 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
 
                 {targetTransactions.length === 0 ? (
-                  <div className="py-6 text-center text-xs opacity-60 whitespace-nowrap">
-                    当前范围暂无记账明细
+                  <div className="py-8 text-center text-xs opacity-60">
+                    <p className="font-bold">当前筛选范围暂无流水记录</p>
+                    <p className="text-[10px] mt-1 opacity-75">
+                      可切换上方「今日小票 / 当月汇总 / 起始~截止日」查看其他记账记录
+                    </p>
                   </div>
                 ) : (
                   <div className="divide-y divide-dashed divide-slate-300/40 dark:divide-slate-700/40 text-xs">
-                    {targetTransactions.slice(0, 15).map((tx, idx) => {
+                    {targetTransactions.map((tx, idx) => {
                       const acc = accountMap.get(tx.accountId);
                       const isExp = tx.type === 'EXPENSE';
                       return (
-                        <div key={tx.id} className="py-2 flex items-center justify-between gap-1 whitespace-nowrap">
-                          <div className="w-2/5 min-w-0 pr-1">
-                            <div className="font-bold truncate flex items-center gap-1">
-                              <span className="text-[10px] opacity-60 font-mono shrink-0">{idx + 1}.</span>
+                        <div key={tx.id} className="py-2 flex items-center justify-between gap-1">
+                          {/* Item Name & Meta */}
+                          <div className="w-2/5 shrink-0 pr-1">
+                            <div className="font-semibold flex items-center gap-1 truncate">
+                              <span className="opacity-50 text-[10px] font-mono">
+                                {String(idx + 1).padStart(2, '0')}.
+                              </span>
                               <span className="truncate">{tx.category}</span>
                             </div>
                             {tx.description && (
-                              <div className="text-[10px] opacity-70 truncate">
+                              <div className="text-[10px] opacity-70 truncate font-sans">
                                 {tx.description}
                               </div>
                             )}
-                            <div className="text-[9px] opacity-50 font-mono">{tx.date}</div>
+                            <div className="text-[9px] opacity-50 font-mono">
+                              {tx.date} {tx.time || ''}
+                            </div>
                           </div>
 
-                          <div className="w-1/4 text-center text-[10px] opacity-80 truncate px-1 shrink-0">
-                            {acc?.name || '默认卡'}
+                          {/* Account */}
+                          <div className="w-1/4 shrink-0 text-center text-[10px] opacity-80 truncate font-sans">
+                            {acc ? (
+                              <span title={`${acc.name}${acc.cardNumberLast4 ? ` (尾号 ${acc.cardNumberLast4})` : ''}`}>
+                                {acc.bankName || acc.name}
+                                {acc.cardNumberLast4 ? ` (*${acc.cardNumberLast4})` : ''}
+                              </span>
+                            ) : (
+                              '默认账户'
+                            )}
                           </div>
 
-                          <div className="w-1/3 text-right font-mono font-bold whitespace-nowrap shrink-0">
-                            <span className={isExp ? '' : 'text-emerald-600 dark:text-emerald-400'}>
+                          {/* Amount */}
+                          <div className="w-1/3 shrink-0 text-right font-mono font-bold">
+                            <span className={isExp ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
                               {isExp ? '-' : '+'}¥{tx.amount.toFixed(2)}
                             </span>
-                            {tx.originalAmount && tx.currency && tx.currency !== 'CNY' && (
-                              <div className="text-[9px] opacity-60">
-                                ({tx.currency} {tx.originalAmount})
-                              </div>
-                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
+              </div>
 
-                {targetTransactions.length > 15 && (
-                  <div className="pt-2 text-center text-[10px] opacity-60 border-t border-dashed border-slate-300/40 whitespace-nowrap">
-                    ... 还有 {targetTransactions.length - 15} 笔消费明细已合并计入 ...
+              {/* Totals & Summary */}
+              <div className="py-3 border-t border-b border-dashed border-slate-400/50 space-y-1 text-xs font-mono">
+                <div className="flex items-center justify-between">
+                  <span className="opacity-75">消费笔数:</span>
+                  <span className="font-bold">{itemCount} 笔</span>
+                </div>
+                <div className="flex items-center justify-between text-sm font-bold pt-1">
+                  <span>总支出:</span>
+                  <span className="text-rose-600 dark:text-rose-400">¥{totalExpense.toFixed(2)}</span>
+                </div>
+                {totalIncome > 0 && (
+                  <div className="flex items-center justify-between text-xs opacity-80">
+                    <span>同期总入账:</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">+¥{totalIncome.toFixed(2)}</span>
+                  </div>
+                )}
+                {totalIncome > 0 && (
+                  <div className="flex items-center justify-between text-xs font-semibold pt-1 border-t border-dotted border-slate-400/40">
+                    <span>收支净结余:</span>
+                    <span>¥{netBalance.toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
-              {/* Subtotal & Summary Calculation */}
-              <div className="pt-3 border-t-2 border-slate-800 dark:border-slate-300 space-y-2 text-xs font-mono">
-                <div className="flex items-center justify-between whitespace-nowrap">
-                  <span className="opacity-75 shrink-0 whitespace-nowrap">消费总笔数:</span>
-                  <span className="font-bold shrink-0 whitespace-nowrap font-mono">{itemCount} 笔</span>
+              {/* Barcode & Signature */}
+              <div className="pt-4 text-center space-y-2">
+                {/* Visual Barcode */}
+                <div className="flex flex-col items-center justify-center opacity-85">
+                  <div
+                    className="h-10 w-44 bg-current opacity-80"
+                    style={{
+                      maskImage:
+                        'repeating-linear-gradient(90deg, #000 0px, #000 2px, transparent 2px, transparent 4px, #000 4px, #000 7px, transparent 7px, transparent 9px, #000 9px, #000 12px, transparent 12px, transparent 15px)',
+                      WebkitMaskImage:
+                        'repeating-linear-gradient(90deg, #000 0px, #000 2px, transparent 2px, transparent 4px, #000 4px, #000 7px, transparent 7px, transparent 9px, #000 9px, #000 12px, transparent 12px, transparent 15px)',
+                    }}
+                  />
+                  <div className="text-[9px] font-mono tracking-widest mt-1 opacity-70">
+                    {receiptNo}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-base font-extrabold pt-1 whitespace-nowrap">
-                  <span className="shrink-0 whitespace-nowrap">总支出:</span>
-                  <span className="shrink-0 whitespace-nowrap font-mono tracking-tight">¥{totalExpense.toFixed(2)}</span>
+
+                {/* Quote / Slogan */}
+                <p className="text-[10px] italic opacity-75 font-serif px-2">
+                  “ {randomQuote} ”
+                </p>
+
+                <div className="text-[9px] opacity-60 font-sans">
+                  ★ 凭此票据享受生活 · 欢迎再次记账 ★
                 </div>
-                {totalIncome > 0 && (
-                  <>
-                    <div className="flex items-center justify-between opacity-85 whitespace-nowrap">
-                      <span className="shrink-0 whitespace-nowrap">同期总入账:</span>
-                      <span className="text-emerald-600 font-bold shrink-0 whitespace-nowrap font-mono">+¥{totalIncome.toFixed(2)}</span>
+              </div>
+
+              {/* Stamp Impact (Realistic rubber stamp) */}
+              {showStamp && (
+                <div
+                  className={`absolute right-4 bottom-24 pointer-events-none transition-all duration-300 ${
+                    printStage === 'done'
+                      ? 'scale-100 opacity-85 -rotate-12'
+                      : 'scale-150 opacity-0 -rotate-45'
+                  }`}
+                  style={{
+                    animation: printStage === 'done' ? 'stampImpact 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275)' : 'none',
+                  }}
+                >
+                  {stampShape === 'circle' && (
+                    <div
+                      className={`w-24 h-24 rounded-full border-3 border-double ${selectedStampColor.border} p-1 flex flex-col items-center justify-center text-center shadow-xs backdrop-blur-[0.5px]`}
+                    >
+                      <div
+                        className={`w-full h-full rounded-full border border-dashed ${selectedStampColor.border} flex flex-col items-center justify-center p-1`}
+                      >
+                        <span className={`text-[8px] font-bold ${selectedStampColor.text} tracking-tighter uppercase scale-90`}>
+                          {stampTopText}
+                        </span>
+                        <span
+                          className={`text-base font-black ${selectedStampColor.text} tracking-wider my-0.5 font-serif`}
+                        >
+                          {stampMainText}
+                        </span>
+                        <span className={`text-[7px] font-mono ${selectedStampColor.text} scale-85 opacity-90`}>
+                          {stampBottomText}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between opacity-85 whitespace-nowrap">
-                      <span className="shrink-0 whitespace-nowrap">收支净结余:</span>
-                      <span className="font-bold shrink-0 whitespace-nowrap font-mono">
-                        {netBalance >= 0 ? '+' : '-'}¥{Math.abs(netBalance).toFixed(2)}
+                  )}
+
+                  {stampShape === 'rect' && (
+                    <div
+                      className={`px-3 py-2 rounded-xl border-3 ${selectedStampColor.border} flex flex-col items-center justify-center text-center shadow-xs`}
+                    >
+                      <span className={`text-[8px] font-bold ${selectedStampColor.text} tracking-wider`}>
+                        {stampTopText}
+                      </span>
+                      <span className={`text-base font-black ${selectedStampColor.text} tracking-widest font-serif`}>
+                        {stampMainText}
+                      </span>
+                      <span className={`text-[8px] font-mono ${selectedStampColor.text}`}>
+                        {stampBottomText}
                       </span>
                     </div>
-                  </>
-                )}
-                <div className="flex items-center justify-between opacity-75 text-[11px] pt-1 whitespace-nowrap">
-                  <span className="shrink-0 whitespace-nowrap">付款状态:</span>
-                  <span className="font-bold tracking-wider shrink-0 whitespace-nowrap">支付成功 (已核销入账)</span>
-                </div>
-              </div>
+                  )}
 
-              {/* Quotes / Life Motto */}
-              <div className="mt-4 p-2.5 rounded-lg bg-black/5 dark:bg-white/5 text-center text-[11px] italic opacity-85 border border-dashed border-slate-300/60 dark:border-slate-700/60">
-                “ {randomQuote} ”
-              </div>
-
-              {/* Barcode & Footer */}
-              <div className="mt-5 pt-3 border-t border-dashed border-slate-400/40 text-center space-y-2">
-                <div className="flex items-center justify-center gap-0.5 h-9 opacity-85 overflow-hidden max-w-[240px] mx-auto">
-                  {[
-                    2, 1, 3, 1, 2, 4, 1, 2, 3, 1, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 4, 1,
-                    3, 1, 2, 4, 1, 2, 3, 1, 2, 4, 2, 1, 3, 1, 4, 2, 1, 3, 1, 2,
-                  ].map((w, i) => (
+                  {stampShape === 'badge' && (
                     <div
-                      key={i}
-                      className="bg-current h-full"
-                      style={{ width: `${w * 1.5}px` }}
-                    />
-                  ))}
+                      className={`w-24 h-24 rounded-2xl border-3 border-dashed ${selectedStampColor.border} p-1 flex flex-col items-center justify-center text-center rotate-6`}
+                    >
+                      <span className={`text-[8px] font-bold ${selectedStampColor.text}`}>
+                        {stampTopText}
+                      </span>
+                      <span className={`text-sm font-black ${selectedStampColor.text} tracking-wider my-0.5`}>
+                        {stampMainText}
+                      </span>
+                      <span className={`text-[7px] font-mono ${selectedStampColor.text}`}>
+                        {stampBottomText}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="text-[10px] font-mono tracking-widest opacity-70 whitespace-nowrap">
-                  * 6 9 2 8 8 2 0 1 9 4 8 2 6 *
-                </div>
+              )}
 
-                <div className="text-[11px] font-bold tracking-wider pt-1 whitespace-nowrap">
-                  ★ 感谢惠顾 · 欢迎再次记账 ★
-                </div>
-                <div className="text-[9px] opacity-60 whitespace-nowrap">
-                  个人极简资产管理系统
-                </div>
-              </div>
-
-              {/* Bottom Sawtooth / Zigzag Edge */}
+              {/* Bottom Sawtooth Edge */}
               <div
                 className="absolute -bottom-2 left-0 right-0 h-2 bg-repeat-x pointer-events-none"
                 style={{
@@ -1083,121 +1530,53 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   backgroundSize: '8px 8px',
                 }}
               />
-
-              {/* Custom Stamped Seal (自定义印章与落戳动效：尺寸舒展、严格防折行防重叠) */}
-              {showStamp && (
-                <div className="absolute right-3 bottom-20 sm:right-5 sm:bottom-24 pointer-events-none transform -rotate-12 select-none">
-                  {stampShape === 'circle' && (
-                    <div
-                      className={`w-28 h-28 rounded-full border-4 border-dashed ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1.5 text-center font-bold tracking-tight shadow-sm opacity-90 box-border`}
-                    >
-                      <div className="text-[8px] font-bold tracking-wider opacity-90 whitespace-nowrap shrink-0 leading-tight">
-                        {stampTopText}
-                      </div>
-                      <div className="text-base font-extrabold tracking-wider my-0.5 whitespace-nowrap shrink-0 leading-tight">
-                        {stampMainText}
-                      </div>
-                      <div className="text-[9px] font-bold whitespace-nowrap shrink-0 leading-tight">
-                        {stampBottomText}
-                      </div>
-                      <div className="text-[8px] font-mono opacity-80 whitespace-nowrap shrink-0 leading-tight mt-0.5">
-                        {todayStr}
-                      </div>
-                    </div>
-                  )}
-
-                  {stampShape === 'rect' && (
-                    <div
-                      className={`w-28 h-22 rounded-xl border-4 border-double ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1.5 text-center font-bold tracking-tight shadow-sm opacity-90 box-border`}
-                    >
-                      <div className="text-[8px] font-bold tracking-wider whitespace-nowrap shrink-0 leading-tight">
-                        {stampTopText}
-                      </div>
-                      <div className="text-sm font-extrabold tracking-widest my-0.5 border-t border-b border-current px-2 whitespace-nowrap shrink-0 leading-tight">
-                        {stampMainText}
-                      </div>
-                      <div className="text-[8px] font-mono whitespace-nowrap shrink-0 leading-tight">
-                        {stampBottomText} · {todayStr}
-                      </div>
-                    </div>
-                  )}
-
-                  {stampShape === 'badge' && (
-                    <div
-                      className={`w-28 h-28 rounded-2xl rotate-45 border-4 border-dashed ${selectedStampColor.border} ${selectedStampColor.text} flex flex-col items-center justify-center p-1.5 text-center font-bold shadow-sm opacity-90 box-border`}
-                    >
-                      <div className="-rotate-45 flex flex-col items-center justify-center">
-                        <div className="text-[8px] font-bold whitespace-nowrap shrink-0 leading-tight">
-                          {stampTopText}
-                        </div>
-                        <div className="text-sm font-extrabold tracking-wider whitespace-nowrap shrink-0 leading-tight my-0.5">
-                          {stampMainText}
-                        </div>
-                        <div className="text-[8px] whitespace-nowrap shrink-0 leading-tight">
-                          {stampBottomText}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Modal Bottom Action Bar (居中在下方展示：保存小票长图、复制小票图片、复制文本、分享、打印) */}
-        <div className="p-3.5 sm:p-4 border-t border-slate-800 bg-slate-900/95 flex items-center justify-center gap-2 sm:gap-3 flex-wrap shrink-0">
-          {/* 1. 保存小票长图 (Primary) */}
-          <button
-            onClick={handleDownloadImage}
-            disabled={isGeneratingImg}
-            className="flex items-center gap-1.5 px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm shadow-md active:scale-95 transition-all disabled:opacity-50"
-            title="保存高清长图到本地相册"
-          >
-            <Download className="w-4 h-4" />
-            <span>{isGeneratingImg ? '生成中...' : '保存小票长图'}</span>
-          </button>
+        {/* Modal Action Bar (高清长图保存 / 复制小票图片 / 复制文本 / 分享) */}
+        <div className="px-4 py-3 sm:px-6 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">已选打单明细:</span>
+            <span className="text-xs font-bold text-white font-mono">{itemCount} 笔</span>
+            <span className="text-xs text-slate-500">|</span>
+            <span className="text-xs font-bold text-emerald-400 font-mono">¥{totalExpense.toFixed(2)}</span>
+          </div>
 
-          {/* 2. 复制小票图片 */}
-          <button
-            onClick={handleCopyImage}
-            disabled={isGeneratingImg}
-            className="flex items-center gap-1.5 px-3.5 py-2 sm:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
-            title="复制小票图片到剪贴板，可直接粘贴发微信/备忘录"
-          >
-            <Copy className="w-4 h-4 text-emerald-400" />
-            <span>复制小票图片</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Copy Plain Text */}
+            <button
+              type="button"
+              onClick={handleCopyText}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+              title="复制全部明细的纯文本小票"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>复制文本</span>
+            </button>
 
-          {/* 3. 复制文本 */}
-          <button
-            onClick={handleCopyText}
-            className="flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-xs sm:text-sm transition-all"
-            title="复制纯文本格式排版"
-          >
-            <Tag className="w-3.5 h-3.5 text-blue-400" />
-            <span>复制文本</span>
-          </button>
+            {/* Copy Image */}
+            <button
+              type="button"
+              onClick={handleCopyImage}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+              title="复制小票长图到剪贴板"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>复制图片</span>
+            </button>
 
-          {/* 4. 分享 */}
-          <button
-            onClick={handleNativeShare}
-            className="flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-xs sm:text-sm transition-all"
-            title="调起系统分享"
-          >
-            <Share2 className="w-3.5 h-3.5 text-amber-400" />
-            <span>分享</span>
-          </button>
-
-          {/* 5. 打印 */}
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-xs sm:text-sm transition-all"
-            title="调起系统打印机"
-          >
-            <Printer className="w-3.5 h-3.5 text-purple-400" />
-            <span>打印</span>
-          </button>
+            {/* Print */}
+            <button
+              type="button"
+              onClick={handleDownloadImage}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+              title="保存包含全部明细的高清小票长图"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>保存高清小票长图</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
