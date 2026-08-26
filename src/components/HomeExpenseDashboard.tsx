@@ -159,9 +159,6 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
                   {now.getFullYear()}年{now.getMonth() + 1}月
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                实时追踪今日花销、本月支出进度、日均额度与分类构成
-              </p>
             </div>
           </div>
 

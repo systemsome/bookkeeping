@@ -376,9 +376,6 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
               <Sparkles className="w-5 h-5 text-emerald-600" />
               <span>卡面与账户</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              1:1还原现实卡面尺寸 (ISO 85.6×53.98mm)，可配置品牌LOGO、卡面底色、卡组织徽标 (银联/VISA/万事达/AMEX/JCB)
-            </p>
           </div>
           <button
             onClick={onClose}

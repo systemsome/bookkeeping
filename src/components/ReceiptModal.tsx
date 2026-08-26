@@ -559,6 +559,60 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   // Selected Stamp Color Config
   const selectedStampColor = STAMP_COLORS.find((c) => c.id === stampColorId) || STAMP_COLORS[0];
 
+  const getStampPlacementStyle = (pos: StampPosition, rot: number): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      position: 'absolute',
+      pointerEvents: 'none',
+      zIndex: 10,
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    };
+
+    switch (pos) {
+      case 'top-left':
+        base.top = '24px';
+        base.left = '16px';
+        base.transform = `rotate(${rot}deg)`;
+        break;
+      case 'top-right':
+        base.top = '24px';
+        base.right = '16px';
+        base.transform = `rotate(${rot}deg)`;
+        break;
+      case 'middle-left':
+        base.top = '50%';
+        base.left = '12px';
+        base.transform = `translateY(-50%) rotate(${rot}deg)`;
+        break;
+      case 'center':
+        base.top = '50%';
+        base.left = '50%';
+        base.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+        break;
+      case 'middle-right':
+        base.top = '50%';
+        base.right = '12px';
+        base.transform = `translateY(-50%) rotate(${rot}deg)`;
+        break;
+      case 'bottom-left':
+        base.bottom = '88px';
+        base.left = '16px';
+        base.transform = `rotate(${rot}deg)`;
+        break;
+      case 'bottom-center':
+        base.bottom = '88px';
+        base.left = '50%';
+        base.transform = `translateX(-50%) rotate(${rot}deg)`;
+        break;
+      case 'bottom-right':
+      default:
+        base.bottom = '88px';
+        base.right = '16px';
+        base.transform = `rotate(${rot}deg)`;
+        break;
+    }
+    return base;
+  };
+
   // Theme styling configurations
   const themeStyles = {
     classic: {
@@ -1156,6 +1210,63 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Stamp Position & Rotation Picker (印章位置与角度自定义) */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-300 font-medium flex items-center gap-1.5">
+                      <span>印章盖印位置:</span>
+                      <span className="text-emerald-400 font-bold">
+                        {STAMP_POSITIONS.find((p) => p.id === stampPosition)?.label || '右下角'}
+                      </span>
+                    </span>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <span>角度:</span>
+                      <div className="flex items-center gap-1">
+                        {STAMP_ROTATIONS.map((rot) => (
+                          <button
+                            key={rot.value}
+                            type="button"
+                            onClick={() => setStampRotation(rot.value)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] transition-all ${
+                              stampRotation === rot.value
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                            }`}
+                          >
+                            {rot.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 8-Direction Position Grid */}
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                    {STAMP_POSITIONS.map((pos) => {
+                      const isSelected = stampPosition === pos.id;
+                      return (
+                        <button
+                          key={pos.id}
+                          type="button"
+                          onClick={() => {
+                            setStampPosition(pos.id);
+                            if (soundEnabled) playPOSSound('stamp');
+                          }}
+                          className={`p-1.5 rounded-lg border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${
+                            isSelected
+                              ? 'bg-emerald-500/20 border-emerald-400/80 text-emerald-300 font-bold ring-1 ring-emerald-400/40'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+                          }`}
+                          title={`${pos.label} (${pos.desc})`}
+                        >
+                          <span className="text-xs">{pos.label}</span>
+                          <span className="text-[9px] opacity-60 scale-90">{pos.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1457,13 +1568,19 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               {/* Stamp Impact (Realistic rubber stamp) */}
               {showStamp && (
                 <div
-                  className={`absolute right-4 bottom-24 pointer-events-none transition-all duration-300 ${
+                  className={`pointer-events-none transition-all duration-300 ${
                     printStage === 'done'
-                      ? 'scale-100 opacity-85 -rotate-12'
-                      : 'scale-150 opacity-0 -rotate-45'
+                      ? stampPosition === 'center'
+                        ? 'scale-100 opacity-75'
+                        : 'scale-100 opacity-90'
+                      : 'scale-150 opacity-0'
                   }`}
                   style={{
-                    animation: printStage === 'done' ? 'stampImpact 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275)' : 'none',
+                    ...getStampPlacementStyle(stampPosition, stampRotation),
+                    animation:
+                      printStage === 'done'
+                        ? 'stampImpact 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                        : 'none',
                   }}
                 >
                   {stampShape === 'circle' && (
@@ -1506,7 +1623,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
                   {stampShape === 'badge' && (
                     <div
-                      className={`w-24 h-24 rounded-2xl border-3 border-dashed ${selectedStampColor.border} p-1 flex flex-col items-center justify-center text-center rotate-6`}
+                      className={`w-24 h-24 rounded-2xl border-3 border-dashed ${selectedStampColor.border} p-1 flex flex-col items-center justify-center text-center rotate-3`}
                     >
                       <span className={`text-[8px] font-bold ${selectedStampColor.text}`}>
                         {stampTopText}

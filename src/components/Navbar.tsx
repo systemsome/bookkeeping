@@ -80,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-                全资产类别规整 · 信用卡额度与账单监控
+                个人极简资产管理系统
               </p>
             </div>
           </div>
@@ -388,59 +388,82 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Mobile Navigation Tabs */}
-        <div className="flex md:hidden items-center justify-between overflow-x-auto py-2 border-t border-slate-100 dark:border-slate-800 gap-1 text-xs no-scrollbar">
+        {/* Mobile Fixed Bottom Navigation Bar (原生质感移动端底部导航栏) */}
+        <nav
+          id="mobile-bottom-dock"
+          aria-label="移动端底部导航"
+          className="fixed md:hidden bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 px-2 py-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-lg shadow-slate-950/10 flex items-center justify-around select-none"
+        >
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
               activeTab === 'overview'
-                ? 'bg-slate-900 dark:bg-slate-700 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            财务全览
+            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'overview' ? 'scale-110 bg-emerald-50 dark:bg-emerald-950/60' : ''}`}>
+              <Layers className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">全览</span>
           </button>
+
           <button
             onClick={() => setActiveTab('credit')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
               activeTab === 'credit'
-                ? 'bg-slate-900 dark:bg-slate-700 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'text-rose-600 dark:text-rose-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            信用卡
+            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'credit' ? 'scale-110 bg-rose-50 dark:bg-rose-950/60' : ''}`}>
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">信用卡</span>
           </button>
+
           <button
             onClick={() => setActiveTab('accounts')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
               activeTab === 'accounts'
-                ? 'bg-slate-900 dark:bg-slate-700 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'text-purple-600 dark:text-purple-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            资产账户
+            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'accounts' ? 'scale-110 bg-purple-50 dark:bg-purple-950/60' : ''}`}>
+              <Wallet className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">资产卡包</span>
           </button>
+
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
               activeTab === 'transactions'
-                ? 'bg-slate-900 dark:bg-slate-700 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'text-amber-600 dark:text-amber-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            记账本
+            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'transactions' ? 'scale-110 bg-amber-50 dark:bg-amber-950/60' : ''}`}>
+              <ListOrdered className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">记账本</span>
           </button>
+
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
               activeTab === 'analytics'
-                ? 'bg-slate-900 dark:bg-slate-700 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'text-teal-600 dark:text-teal-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            图表分析
+            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'analytics' ? 'scale-110 bg-teal-50 dark:bg-teal-950/60' : ''}`}>
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">图表分析</span>
           </button>
-        </div>
+        </nav>
       </div>
     </header>
   );

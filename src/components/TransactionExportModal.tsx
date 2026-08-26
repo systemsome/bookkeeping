@@ -308,9 +308,6 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
                   支持日期区间与预览勾选
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                在导出前自由筛选起止日期区间、按需勾选特定账单并实时核对导出明细
-              </p>
             </div>
           </div>
 

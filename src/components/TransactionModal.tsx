@@ -495,7 +495,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl my-auto text-slate-900 dark:text-white">
+      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl my-auto max-h-[92vh] overflow-y-auto text-slate-900 dark:text-white">
         {/* Header with Close */}
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
@@ -506,9 +506,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
                 {isEditing ? '编辑流水账目明细' : '记一笔流水账目'}
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                支持卡号尾号识别、多币种实时汇率与全自定义类别图标
-              </p>
             </div>
           </div>
           <button

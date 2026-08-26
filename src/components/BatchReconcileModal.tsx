@@ -54,9 +54,6 @@ export const BatchReconcileModal: React.FC<BatchReconcileModalProps> = ({
               <h2 className="text-lg sm:text-xl font-bold text-slate-900">
                 全账户批量资产盘点与余额校准
               </h2>
-              <p className="text-xs text-slate-500">
-                快速手工录入与校对每一张银行卡、信用卡已用额度、钱包与理财最新真实余额
-              </p>
             </div>
           </div>
 

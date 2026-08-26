@@ -98,9 +98,6 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
               <h2 className="text-lg font-bold text-slate-900">
                 信用卡与信贷快速还款
               </h2>
-              <p className="text-xs text-slate-500">
-                还款成功后将自动扣减付款卡余额并实时恢复信用可用额度
-              </p>
             </div>
           </div>
           <button

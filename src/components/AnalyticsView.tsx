@@ -231,9 +231,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
           全维度财务统计与资产分析
         </h2>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          多维度洞察资产配置结构、信用卡负债健康度、分类支出排行榜与历史收支趋势
-        </p>
       </div>
 
       {/* Main Row: Asset Structure Donut + Monthly Trend */}

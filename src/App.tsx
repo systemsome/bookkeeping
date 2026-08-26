@@ -94,6 +94,13 @@ export default function App() {
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'analytics'>('overview');
 
+  // 当切换功能 Tab 时，自动滚动回页面顶部
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [activeTab]);
+
   // Main Data States
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -552,7 +559,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-7">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12 space-y-5 sm:space-y-7">
         {/* 1. OVERVIEW VIEW - Centered on Expense Tracking & Financial Dashboard */}
         {activeTab === 'overview' && (
           <div className="space-y-7 animate-in fade-in duration-300">
@@ -736,31 +743,31 @@ export default function App() {
         )}
       </main>
 
-      {/* Fixed Bottom-Center Floating Action Button for Accounts & Credit (统一位置到页面下方居中) */}
+      {/* Fixed Bottom-Center Floating Action Button for Accounts & Credit (小巧精致悬浮胶囊按钮) */}
       {(activeTab === 'accounts' || activeTab === 'credit') && (
         <button
           id="btn-fixed-add-account"
           onClick={() => handleOpenAddAccount(activeTab === 'credit' ? 'CREDIT_CARD' : 'DEBIT_CARD')}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 sm:bottom-8 z-40 flex items-center gap-2.5 bg-slate-900/95 dark:bg-slate-800/95 hover:bg-slate-900 dark:hover:bg-slate-700 text-white font-semibold text-sm sm:text-base px-6 py-3.5 sm:px-7 sm:py-4 rounded-full shadow-2xl active:scale-95 transition-all duration-200 border border-slate-700/60 dark:border-slate-600/70 backdrop-blur-md ring-4 ring-slate-900/10 dark:ring-white/10 animate-in fade-in slide-in-from-bottom-4 whitespace-nowrap"
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-35 flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 dark:bg-slate-800/90 hover:bg-slate-900 dark:hover:bg-slate-700 text-white font-medium text-xs sm:text-sm px-4 py-2 sm:px-4.5 sm:py-2.5 rounded-full shadow-lg shadow-slate-950/20 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 border border-slate-700/50 dark:border-slate-600/60 backdrop-blur-md whitespace-nowrap"
           title="添加新资产或信用卡账户"
         >
-          <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Plus className="w-4 h-4 stroke-[2.5]" />
+          <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
           </div>
           <span className="tracking-wide">添加资产</span>
         </button>
       )}
 
-      {/* Fixed Bottom-Center Floating Action Button for Transactions (记账本 - 统一位置到页面下方居中) */}
+      {/* Fixed Bottom-Center Floating Action Button for Transactions (记账本 - 小巧精致悬浮胶囊按钮) */}
       {activeTab === 'transactions' && (
         <button
           id="btn-fixed-add-tx"
           onClick={() => handleOpenNewTx('EXPENSE')}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 sm:bottom-8 z-40 flex items-center gap-2.5 bg-slate-900/95 dark:bg-slate-800/95 hover:bg-slate-900 dark:hover:bg-slate-700 text-white font-semibold text-sm sm:text-base px-6 py-3.5 sm:px-7 sm:py-4 rounded-full shadow-2xl active:scale-95 transition-all duration-200 border border-slate-700/60 dark:border-slate-600/70 backdrop-blur-md ring-4 ring-slate-900/10 dark:ring-white/10 animate-in fade-in slide-in-from-bottom-4 whitespace-nowrap"
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-35 flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 dark:bg-slate-800/90 hover:bg-slate-900 dark:hover:bg-slate-700 text-white font-medium text-xs sm:text-sm px-4 py-2 sm:px-4.5 sm:py-2.5 rounded-full shadow-lg shadow-slate-950/20 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 border border-slate-700/50 dark:border-slate-600/60 backdrop-blur-md whitespace-nowrap"
           title="快速记录一笔新消费支出、收入或转账"
         >
-          <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Plus className="w-4 h-4 stroke-[2.5]" />
+          <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
           </div>
           <span className="tracking-wide">记一笔</span>
         </button>

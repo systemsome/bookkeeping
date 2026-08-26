@@ -230,9 +230,6 @@ export const TransactionImportModal: React.FC<TransactionImportModalProps> = ({
               <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg">
                 上传导入记账流水
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                支持支付宝、微信支付账单、银行流水表格与标准 CSV / Excel / JSON
-              </p>
             </div>
           </div>
 

@@ -44,9 +44,6 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               信用卡与额度还款管理
             </h2>
-            <p className="text-sm text-slate-500 mt-1 max-w-xl">
-              实时规整各大银行信用卡及授信额度，监控已出账单、剩余可用额度及免息还款期。
-            </p>
           </div>
 
           {/* Quick Repayment CTA */}

@@ -405,9 +405,6 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               </span>
             )}
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            收支日历与全量流水明细同屏排列，按日期与时间自动倒序归纳，支持账单批量导入与导出
-          </p>
         </div>
 
         {/* Action Buttons */}
@@ -431,10 +428,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           <button
             id="btn-ledger-upload"
             onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
             title="上传导入微信/支付宝账单、银行流水或标准表格"
           >
-            <UploadCloud className="w-4 h-4" />
+            <UploadCloud className="w-3.5 h-3.5" />
             <span>上传导入</span>
           </button>
 
@@ -442,10 +439,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           <button
             id="btn-ledger-export"
             onClick={() => setIsExportModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-medium text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
             title="导出 Excel / CSV / JSON"
           >
-            <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>导出</span>
           </button>
 
@@ -453,9 +450,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           <button
             id="btn-ledger-add"
             onClick={() => onOpenNewTx('EXPENSE', undefined, selectedDateFilter || undefined)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-medium text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
           >
-            <PlusCircle className="w-4 h-4 text-emerald-400" />
+            <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
             <span>记一笔</span>
           </button>
         </div>

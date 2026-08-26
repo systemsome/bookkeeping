@@ -151,9 +151,6 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
               <h2 className="text-lg font-bold text-slate-900">
                 安全保护与数据管理
               </h2>
-              <p className="text-xs text-slate-500">
-                修改登录密码、PIN码、自动锁屏与数据离线备份导出
-              </p>
             </div>
           </div>
           <button

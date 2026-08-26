@@ -473,9 +473,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               共 {accounts.length} 张卡片/账户
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            资产分为：借记卡、信用卡、数字钱包、理财基金、现金、借贷 6 大类别，支持按分类排版与卡面拖动调整
-          </p>
         </div>
 
         {/* Action Button Group */}
@@ -484,9 +481,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           <button
             id="btn-add-account-main"
             onClick={() => onAddAccount('DEBIT_CARD')}
-            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-xs transition-colors"
+            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-xs transition-colors active:scale-95"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>添加新账户</span>
           </button>
 
@@ -495,7 +492,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             <button
               id="btn-batch-reconcile"
               onClick={onOpenBatchReconcile}
-              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm px-3 py-2 rounded-xl border border-slate-200 shadow-2xs transition-colors"
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs transition-colors active:scale-95"
               title="快速校准所有账户余额"
             >
               <Sliders className="w-3.5 h-3.5 text-slate-500" />
@@ -507,7 +504,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           {accounts.length > 1 && (
             <button
               onClick={() => setIsReorderMode(!isReorderMode)}
-              className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl border transition-all ${
+              className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium px-2.5 py-1.5 rounded-xl border transition-all active:scale-95 ${
                 isReorderMode
                   ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-600 shadow-xs'
                   : 'bg-white hover:bg-purple-50 text-purple-700 border-purple-200/80'
@@ -562,7 +559,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
       </div>
 
       {/* 6 Asset Classes Interactive Summary & Filter Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
         {groupDefinitions
           .filter((g) => g.id !== 'ALL')
           .map((g) => {
@@ -576,7 +573,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 onClick={() => {
                   setFilterGroup((prev) => (prev === g.id ? 'ALL' : g.id));
                 }}
-                className={`p-3 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+                className={`p-2.5 sm:p-3 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                   isSelected
                     ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-blue-500/40'
                     : 'bg-white hover:bg-slate-50/90 border-slate-200/80 text-slate-800 hover:border-slate-300 shadow-xs'
@@ -585,14 +582,14 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               >
                 <div className="flex items-center justify-between w-full">
                   <div
-                    className={`p-2 rounded-xl shrink-0 ${
+                    className={`p-1.5 sm:p-2 rounded-xl shrink-0 ${
                       isSelected ? 'bg-white/20 text-white' : `${g.badgeBg} ${g.badgeText}`
                     }`}
                   >
-                    <IconComp className="w-4 h-4" />
+                    <IconComp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                   <span
-                    className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] sm:text-[11px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full ${
                       isSelected
                         ? 'bg-white/20 text-white'
                         : 'bg-slate-100 text-slate-600'
@@ -602,7 +599,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   </span>
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-2 sm:mt-3">
                   <div
                     className={`text-xs font-bold truncate ${
                       isSelected ? 'text-white' : 'text-slate-900'
@@ -703,7 +700,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                     借记卡
                   </h4>
-                  <p className="text-[11px] text-slate-500">招行/工行/建行等储蓄卡</p>
                 </div>
               </div>
               <span className="text-xs text-blue-600 font-semibold mt-3 block">
@@ -723,7 +719,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                     信用卡 / 白条 / 花呗
                   </h4>
-                  <p className="text-[11px] text-slate-500">经典白金/白条/花呗额度</p>
                 </div>
               </div>
               <span className="text-xs text-rose-600 font-semibold mt-3 block">
@@ -743,7 +738,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                     数字钱包
                   </h4>
-                  <p className="text-[11px] text-slate-500">支付宝余额/微信零钱</p>
                 </div>
               </div>
               <span className="text-xs text-sky-600 font-semibold mt-3 block">
@@ -763,7 +757,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                     理财基金
                   </h4>
-                  <p className="text-[11px] text-slate-500">余额宝/公募基金/黄金/京东金融</p>
                 </div>
               </div>
               <span className="text-xs text-amber-600 font-semibold mt-3 block">
@@ -783,7 +776,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                     现金备用金
                   </h4>
-                  <p className="text-[11px] text-slate-500">随身现金/家中应急钞</p>
                 </div>
               </div>
               <span className="text-xs text-emerald-600 font-semibold mt-3 block">
@@ -803,7 +795,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                     借贷往来
                   </h4>
-                  <p className="text-[11px] text-slate-500">借出待收 / 借入待还</p>
                 </div>
               </div>
               <span className="text-xs text-purple-600 font-semibold mt-3 block">
@@ -821,9 +812,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               <Layers className="w-4 h-4 text-slate-500" />
               <span className="text-xs font-bold text-slate-700">
                 {filterGroup === 'ALL' ? '全部账户' : currentGroupLabel}
-              </span>
-              <span className="text-[11px] text-slate-400">
-                · {filterGroup === 'ALL' ? '点击各分类标题栏即可单独折叠/展开' : `展示「${currentGroupLabel}」下全部卡片`}
               </span>
             </div>
 
@@ -880,7 +868,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                     <h3 className="text-base font-bold text-slate-900">
                       「{group.label}」暂无账户卡片
                     </h3>
-                    <p className="text-xs text-slate-500 mt-1">{group.subLabel}</p>
                   </div>
                   <button
                     onClick={() => onAddAccount(group.defaultAddCategory)}
@@ -940,17 +927,12 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                           {groupAccounts.length} 张卡片
                         </span>
                       </div>
-
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {group.subLabel}
-                      </p>
                     </div>
                   </div>
 
                   {/* Category Summary Metric, Quick Add CTA & Collapse Chevron */}
                   <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                     <div className="text-right px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
-                      <span className="text-[10px] text-slate-400 block">大类资产</span>
                       <span className="text-xs font-bold text-slate-900 font-mono">
                         {group.metricsText}
                       </span>
