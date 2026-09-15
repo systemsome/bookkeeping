@@ -87,9 +87,9 @@ export const TransactionImportModal: React.FC<TransactionImportModalProps> = ({
 
       // Initialize account mappings
       const initialMap: Record<string, string> = {};
-      result.detectedAccountNames.forEach((name) => {
-        const matched = findBestMatchingAccountId(name, accounts);
-        initialMap[name] = matched || accounts[0]?.id || '';
+      (result.detectedAccountNames || []).forEach((name) => {
+        const matched = findBestMatchingAccountId(name, accounts || []);
+        initialMap[name] = matched || accounts?.[0]?.id || '';
       });
       setAccountMappings(initialMap);
 

@@ -30,8 +30,10 @@ import {
   Plus,
   Layers,
   ArrowUpDown,
+  RotateCcw,
+  FolderKanban,
 } from 'lucide-react';
-import { Transaction, FinancialAccount, TransactionType } from '../types';
+import { Transaction, FinancialAccount, TransactionType, LedgerProject } from '../types';
 import {
   formatCurrency,
   formatDate,
@@ -47,12 +49,14 @@ import { downloadTransactionTemplate } from '../lib/transactionImportExport';
 import { CategoryIcon } from './CategoryIcon';
 
 interface TransactionLedgerProps {
-  transactions: Transaction[];
-  accounts: FinancialAccount[];
+  transactions?: Transaction[];
+  accounts?: FinancialAccount[];
+  projects?: LedgerProject[];
   privacyMode: boolean;
   onDeleteTransaction: (txId: string) => void;
   onEditTransaction: (tx: Transaction) => void;
-  onOpenNewTx: (type?: string, accountId?: string, defaultDate?: string) => void;
+  onOpenNewTx: (type?: string, accountId?: string, defaultDate?: string, projectId?: string) => void;
+  onRefundTransaction?: (tx: Transaction) => void;
   onImportTransactions: (
     importedList: Transaction[],
     syncAccountBalances: boolean
@@ -61,12 +65,14 @@ interface TransactionLedgerProps {
 }
 
 export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
-  transactions,
-  accounts,
+  transactions = [],
+  accounts = [],
+  projects = [],
   privacyMode,
   onDeleteTransaction,
   onEditTransaction,
   onOpenNewTx,
+  onRefundTransaction,
   onImportTransactions,
   onShowToast,
 }) => {
@@ -94,6 +100,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   // List View filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
   const [selectedCurrency, setSelectedCurrency] = useState<string>('ALL');
@@ -108,14 +115,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   // Account map for quick lookup
   const accountMap = useMemo(() => {
     const map = new Map<string, FinancialAccount>();
-    accounts.forEach((a) => map.set(a.id, a));
+    (accounts || []).forEach((a) => map.set(a.id, a));
     return map;
   }, [accounts]);
 
   // Extract unique months for month selectors
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
-    transactions.forEach((t) => {
+    (transactions || []).forEach((t) => {
       if (t.date && t.date.length >= 7) {
         set.add(t.date.substring(0, 7));
       }
@@ -127,7 +134,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   // Extract unique currencies
   const currenciesPresent = useMemo(() => {
     const set = new Set<string>();
-    transactions.forEach((t) => {
+    (transactions || []).forEach((t) => {
       if (t.currency) set.add(t.currency);
     });
     return Array.from(set);
@@ -189,7 +196,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
       }
     >();
 
-    transactions.forEach((tx) => {
+    (transactions || []).forEach((tx) => {
       if (!tx.date) return;
       let entry = map.get(tx.date);
       if (!entry) {
@@ -323,6 +330,15 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
       if (selectedType !== 'ALL' && tx.type !== selectedType) {
         return false;
       }
+      if (selectedProjectId !== 'ALL') {
+        if (selectedProjectId === 'NONE') {
+          if (tx.projectId) return false;
+        } else {
+          if (tx.projectId !== selectedProjectId && tx.projectName !== selectedProjectId) {
+            return false;
+          }
+        }
+      }
       if (
         selectedAccountId !== 'ALL' &&
         tx.accountId !== selectedAccountId &&
@@ -347,13 +363,15 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         const matchTag = tx.tag?.toLowerCase().includes(term);
         const matchCounterparty = tx.counterparty?.toLowerCase().includes(term);
         const matchCurrency = tx.currency?.toLowerCase().includes(term);
+        const matchProject = tx.projectName?.toLowerCase().includes(term);
         if (
           !matchDesc &&
           !matchCat &&
           !matchMerchant &&
           !matchTag &&
           !matchCounterparty &&
-          !matchCurrency
+          !matchCurrency &&
+          !matchProject
         ) {
           return false;
         }
@@ -364,6 +382,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     sortedTransactions,
     selectedDateFilter,
     selectedType,
+    selectedProjectId,
     selectedAccountId,
     selectedMonth,
     selectedCurrency,
@@ -374,7 +393,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   let filteredExpense = 0;
   let filteredIncome = 0;
   let foreignCount = 0;
-  filteredTransactions.forEach((tx) => {
+  (filteredTransactions || []).forEach((tx) => {
     if (tx.type === 'EXPENSE') filteredExpense += tx.amount;
     if (tx.type === 'INCOME') filteredIncome += tx.amount;
     if (tx.currency && tx.currency !== 'CNY') foreignCount += 1;
@@ -390,7 +409,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               记账本
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-              共 {transactions.length} 笔明细
+              共 {(transactions || []).length} 笔明细
             </span>
             {selectedDateFilter && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60 flex items-center gap-1">
@@ -671,16 +690,16 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
       {/* 3. Unified Filters & Search Toolbar */}
       <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2.5">
           {/* Search */}
-          <div className="relative lg:col-span-2">
+          <div className="relative sm:col-span-2 lg:col-span-2">
             <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
             <input
               id="ledger-search-input"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜索分类、备注、商户、标签、币种..."
+              placeholder="搜索项目、分类、备注、商户、标签..."
               className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-none focus:border-slate-400 focus:bg-white dark:focus:bg-slate-800"
             />
           </div>
@@ -696,12 +715,31 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <option value="ALL">全部交易类型</option>
               <option value="EXPENSE">支出消费</option>
               <option value="INCOME">收入进账</option>
+              <option value="REFUND">平账冲红退费</option>
               <option value="TRANSFER">账户转账划转</option>
               <option value="REPAYMENT">信用卡与白条还款</option>
               <option value="LEND_OUT">借出款项</option>
               <option value="COLLECT_LENT">收回借款</option>
               <option value="BORROW_IN">借入款项</option>
               <option value="PAY_BORROW">归还借款</option>
+            </select>
+          </div>
+
+          {/* Project Filter */}
+          <div>
+            <select
+              id="ledger-filter-project"
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-indigo-400 font-medium"
+            >
+              <option value="ALL">全部项目 ({projects.length})</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  📁 {p.name}
+                </option>
+              ))}
+              <option value="NONE">未关联任何项目</option>
             </select>
           </div>
 
@@ -805,6 +843,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             {(searchTerm ||
               selectedDateFilter ||
               selectedType !== 'ALL' ||
+              selectedProjectId !== 'ALL' ||
               selectedAccountId !== 'ALL' ||
               selectedMonth !== 'ALL' ||
               selectedCurrency !== 'ALL') && (
@@ -813,6 +852,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   setSearchTerm('');
                   setSelectedDateFilter(null);
                   setSelectedType('ALL');
+                  setSelectedProjectId('ALL');
                   setSelectedAccountId('ALL');
                   setSelectedMonth('ALL');
                   setSelectedCurrency('ALL');
@@ -1018,11 +1058,31 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                           <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
                             {tx.category}
                           </span>
+                          {tx.projectName && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProjectId(tx.projectId || tx.projectName || 'ALL')}
+                              className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 hover:bg-indigo-100 transition-colors flex items-center gap-0.5"
+                              title={`点击筛选「${tx.projectName}」项目明细`}
+                            >
+                              📁 {tx.projectName}
+                            </button>
+                          )}
                           {tx.tag && (
                             <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100/80 dark:bg-slate-800/80 text-slate-400">
                               #{tx.tag}
                             </span>
                           )}
+                          {tx.isRefund && (
+                            <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800">
+                              平账冲红凭证
+                            </span>
+                          )}
+                          {tx.refundedAmount && tx.refundedAmount > 0 ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
+                              已冲红退款 ¥{tx.refundedAmount.toFixed(2)}
+                            </span>
+                          ) : null}
                           {tx.merchant && (
                             <span className="text-[10px] text-slate-400">
                               商户: {tx.merchant}
@@ -1092,6 +1152,13 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                             : formatCurrency(tx.amount, privacyMode)}
                         </div>
 
+                        {/* Net expenditure after red-ink refund offset */}
+                        {isExpense && tx.refundedAmount && tx.refundedAmount > 0 && (
+                          <div className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                            净支: {formatCurrency(Math.max(0, tx.amount - tx.refundedAmount), privacyMode)}
+                          </div>
+                        )}
+
                         {isForeign && curInfo && (
                           <div className="text-[10px] text-blue-700 dark:text-blue-300 font-mono">
                             原币: {curInfo.symbol}{tx.originalAmount || tx.amount}
@@ -1101,6 +1168,17 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
                       {/* Quick Action buttons */}
                       <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                        {/* Direct Red-ink Reversal Action for Expense Bills */}
+                        {isExpense && onRefundTransaction && (
+                          <button
+                            onClick={() => onRefundTransaction(tx)}
+                            className="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 transition-all flex items-center gap-1 shadow-2xs"
+                            title="对该笔支出账单平账冲红 (退款入账并冲减净支出)"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>冲红</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setReceiptSingleTxId(tx.id);

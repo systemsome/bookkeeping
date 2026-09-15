@@ -21,6 +21,8 @@ import {
   setAppLocked,
   updateCurrentUser,
   fetchLatestDataFromServer,
+  getProjects,
+  saveProjects,
 } from './lib/storage';
 import {
   UserProfile,
@@ -29,6 +31,7 @@ import {
   FinancialSummary,
   AccountCategory,
   TransactionType,
+  LedgerProject,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
@@ -38,6 +41,8 @@ import { HomeExpenseDashboard } from './components/HomeExpenseDashboard';
 import { CreditCardsSummary } from './components/CreditCardsSummary';
 import { AccountsList } from './components/AccountsList';
 import { TransactionLedger } from './components/TransactionLedger';
+import { ProjectsDashboard } from './components/ProjectsDashboard';
+import { ProjectEditorModal } from './components/ProjectEditorModal';
 import { AnalyticsView } from './components/AnalyticsView';
 import { TransactionModal } from './components/TransactionModal';
 import { RepaymentModal } from './components/RepaymentModal';
@@ -92,7 +97,7 @@ export default function App() {
   }, [themeMode]);
 
   // Active View Tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'projects' | 'analytics'>('overview');
 
   // 当切换功能 Tab 时，自动滚动回页面顶部
   useEffect(() => {
@@ -104,12 +109,19 @@ export default function App() {
   // Main Data States
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [projects, setProjects] = useState<LedgerProject[]>([]);
+
+  // Project Modals State
+  const [isProjectEditorOpen, setIsProjectEditorOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<LedgerProject | null>(null);
 
   // Modals State
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [txModalDefaultType, setTxModalDefaultType] = useState<TransactionType>('EXPENSE');
   const [txModalAccountId, setTxModalAccountId] = useState<string | undefined>(undefined);
   const [txModalDefaultDate, setTxModalDefaultDate] = useState<string | undefined>(undefined);
+  const [txModalProjectId, setTxModalProjectId] = useState<string | undefined>(undefined);
+  const [txModalRefundedTxId, setTxModalRefundedTxId] = useState<string | undefined>(undefined);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const [isRepayModalOpen, setIsRepayModalOpen] = useState(false);
@@ -136,8 +148,10 @@ export default function App() {
   const loadUserData = useCallback((uid: string) => {
     const accs = getAccounts(uid);
     const txs = getTransactions(uid);
+    const projs = getProjects(uid);
     setAccounts(accs);
     setTransactions(txs);
+    setProjects(projs);
 
     // Background fetch from server / NAS to catch multi-device updates seamlessly
     fetchLatestDataFromServer(uid).then((res) => {
@@ -252,12 +266,24 @@ export default function App() {
   const handleOpenNewTx = (
     type: string = 'EXPENSE',
     accountId?: string,
-    defaultDate?: string
+    defaultDate?: string,
+    projectId?: string
   ) => {
     setEditingTransaction(null);
     setTxModalDefaultType(type as TransactionType);
     setTxModalAccountId(accountId);
     setTxModalDefaultDate(defaultDate);
+    setTxModalProjectId(projectId);
+    setTxModalRefundedTxId(undefined);
+    setIsTxModalOpen(true);
+  };
+
+  const handleRefundExpense = (tx: Transaction) => {
+    setEditingTransaction(null);
+    setTxModalDefaultType('REFUND');
+    setTxModalRefundedTxId(tx.id);
+    setTxModalAccountId(tx.accountId);
+    setTxModalProjectId(tx.projectId);
     setIsTxModalOpen(true);
   };
 
@@ -266,6 +292,8 @@ export default function App() {
     setTxModalDefaultType(tx.type);
     setTxModalAccountId(tx.accountId);
     setTxModalDefaultDate(tx.date);
+    setTxModalProjectId(tx.projectId);
+    setTxModalRefundedTxId(tx.refundedTxId);
     setIsTxModalOpen(true);
   };
 
@@ -285,6 +313,55 @@ export default function App() {
     setEditingAccount(acc);
     setDefaultAccCategory(acc.category);
     setIsAccEditorOpen(true);
+  };
+
+  // Project CRUD handlers
+  const handleSaveProject = (
+    projectData: Omit<LedgerProject, 'id' | 'createdAt' | 'updatedAt'>,
+    existingId?: string
+  ) => {
+    if (!currentUser) return;
+    const now = new Date().toISOString();
+    let updatedProjects: LedgerProject[];
+    if (existingId) {
+      updatedProjects = projects.map((p) =>
+        p.id === existingId
+          ? { ...p, ...projectData, updatedAt: now }
+          : p
+      );
+      showToast(`项目「${projectData.name}」已更新`);
+    } else {
+      const newProj: LedgerProject = {
+        ...projectData,
+        id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      updatedProjects = [newProj, ...projects];
+      showToast(`账本项目「${projectData.name}」创建成功`);
+    }
+    setProjects(updatedProjects);
+    saveProjects(currentUser.id, updatedProjects);
+    setIsProjectEditorOpen(false);
+    setEditingProject(null);
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    if (!currentUser) return;
+    const target = projects.find((p) => p.id === projectId);
+    const updated = projects.filter((p) => p.id !== projectId);
+    setProjects(updated);
+    saveProjects(currentUser.id, updated);
+    showToast(`项目「${target?.name || '未命名'}」已删除`);
+  };
+
+  const handleDirectSaveProject = (project: LedgerProject) => {
+    if (!currentUser) return;
+    const now = new Date().toISOString();
+    const updated = projects.map((p) => (p.id === project.id ? { ...project, updatedAt: now } : p));
+    setProjects(updated);
+    saveProjects(currentUser.id, updated);
+    showToast(`项目「${project.name}」状态已更新`);
   };
 
   // Transaction submission (create or update)
@@ -376,15 +453,15 @@ export default function App() {
     importedList: Transaction[],
     syncAccountBalances: boolean
   ) => {
-    if (!currentUser || importedList.length === 0) return;
+    if (!currentUser || !Array.isArray(importedList) || importedList.length === 0) return;
 
-    let updatedAccounts = [...accounts];
+    let updatedAccounts = [...(accounts || [])];
 
     if (syncAccountBalances) {
       const accMap = new Map<string, FinancialAccount>();
-      updatedAccounts.forEach((a) => accMap.set(a.id, { ...a }));
+      (updatedAccounts || []).forEach((a) => accMap.set(a.id, { ...a }));
 
-      importedList.forEach((tx) => {
+      (importedList || []).forEach((tx) => {
         const sourceAcc = accMap.get(tx.accountId);
         const targetAcc = tx.targetAccountId ? accMap.get(tx.targetAccountId) : null;
 
@@ -575,8 +652,8 @@ export default function App() {
             {/* 🌟 Prominently Featured: Expense Command Center (今日支出/本月支出/预算进度/极速记账/最新支出明细) */}
             <HomeExpenseDashboard
               summary={summary}
-              transactions={transactions}
-              accounts={accounts}
+              transactions={transactions || []}
+              accounts={accounts || []}
               currentUser={currentUser}
               privacyMode={false}
               onQuickAddExpense={handleQuickAddExpense}
@@ -632,7 +709,7 @@ export default function App() {
 
               {/* Mini Credit Accounts Bar */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mt-4">
-                {accounts
+                {(accounts || [])
                   .filter((a) => a.category === 'CREDIT_CARD' || a.category === 'JD_BAITIAO' || a.category === 'HUABEI')
                   .slice(0, 3)
                   .map((acc) => {
@@ -684,7 +761,7 @@ export default function App() {
         {activeTab === 'credit' && (
           <div className="animate-in fade-in duration-300">
             <CreditCardsSummary
-              accounts={accounts}
+              accounts={accounts || []}
               summary={summary}
               privacyMode={privacyMode}
               onOpenRepayment={handleOpenRepayment}
@@ -698,7 +775,7 @@ export default function App() {
         {activeTab === 'accounts' && (
           <div className="animate-in fade-in duration-300">
             <AccountsList
-              accounts={accounts}
+              accounts={accounts || []}
               privacyMode={privacyMode}
               onAddAccount={handleOpenAddAccount}
               onEditAccount={handleOpenEditAccount}
@@ -717,24 +794,60 @@ export default function App() {
         {activeTab === 'transactions' && (
           <div className="animate-in fade-in duration-300">
             <TransactionLedger
-              transactions={transactions}
-              accounts={accounts}
+              transactions={transactions || []}
+              accounts={accounts || []}
+              projects={projects || []}
               privacyMode={false}
               onDeleteTransaction={handleDeleteTx}
               onEditTransaction={handleEditTransaction}
-              onOpenNewTx={(type, accId, date) => handleOpenNewTx(type || 'EXPENSE', accId, date)}
+              onOpenNewTx={(type, accId, date, projId) =>
+                handleOpenNewTx(type || 'EXPENSE', accId, date, projId)
+              }
+              onRefundTransaction={handleRefundExpense}
               onImportTransactions={handleImportTransactions}
               onShowToast={showToast}
             />
           </div>
         )}
 
-        {/* 5. ANALYTICS & CHARTS VIEW */}
+        {/* 5. LEDGER PROJECTS VIEW - 独立统计单项目支出与收入 */}
+        {activeTab === 'projects' && (
+          <div className="animate-in fade-in duration-300">
+            <ProjectsDashboard
+              projects={projects || []}
+              transactions={transactions || []}
+              accounts={accounts || []}
+              privacyMode={privacyMode}
+              onSaveProject={handleDirectSaveProject}
+              onDeleteProject={handleDeleteProject}
+              onOpenNewTx={(type, accId, date, projId) =>
+                handleOpenNewTx(type || 'EXPENSE', accId, date, projId)
+              }
+              onEditTransaction={handleEditTransaction}
+              onDeleteTransaction={handleDeleteTx}
+              onRefundTransaction={handleRefundExpense}
+              onOpenProjectEditor={(p) => {
+                setEditingProject(p || null);
+                setIsProjectEditorOpen(true);
+              }}
+              onCreateProject={() => {
+                setEditingProject(null);
+                setIsProjectEditorOpen(true);
+              }}
+              onEditProject={(p) => {
+                setEditingProject(p);
+                setIsProjectEditorOpen(true);
+              }}
+            />
+          </div>
+        )}
+
+        {/* 6. ANALYTICS & CHARTS VIEW */}
         {activeTab === 'analytics' && (
           <div className="animate-in fade-in duration-300">
             <AnalyticsView
-              accounts={accounts}
-              transactions={transactions}
+              accounts={accounts || []}
+              transactions={transactions || []}
               summary={summary}
               privacyMode={privacyMode}
               onSyncGoldAccountsValuation={handleSyncGoldAccountsValuation}
@@ -773,26 +886,61 @@ export default function App() {
         </button>
       )}
 
+      {/* Fixed Bottom-Center Floating Action Button for Projects (新建账本项目) */}
+      {activeTab === 'projects' && (
+        <button
+          id="btn-fixed-add-project"
+          onClick={() => {
+            setEditingProject(null);
+            setIsProjectEditorOpen(true);
+          }}
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-35 flex items-center gap-1.5 sm:gap-2 bg-indigo-600/95 hover:bg-indigo-700 text-white font-medium text-xs sm:text-sm px-4 py-2 sm:px-4.5 sm:py-2.5 rounded-full shadow-lg shadow-indigo-950/20 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 border border-indigo-500/50 backdrop-blur-md whitespace-nowrap"
+          title="新建专项账本项目"
+        >
+          <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-white/20 flex items-center justify-center text-white">
+            <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+          </div>
+          <span className="tracking-wide">新建项目</span>
+        </button>
+      )}
+
       {/* Modals */}
       {isTxModalOpen && (
         <TransactionModal
-          accounts={accounts}
+          accounts={accounts || []}
+          projects={projects || []}
           initialType={txModalDefaultType}
           initialAccountId={txModalAccountId}
+          initialProjectId={txModalProjectId}
+          initialRefundedTxId={txModalRefundedTxId}
           initialTransaction={editingTransaction}
           initialDate={txModalDefaultDate}
+          allTransactions={transactions || []}
           onClose={() => {
             setIsTxModalOpen(false);
             setEditingTransaction(null);
             setTxModalDefaultDate(undefined);
+            setTxModalProjectId(undefined);
+            setTxModalRefundedTxId(undefined);
           }}
           onSubmit={handleSubmitTransaction}
         />
       )}
 
+      {isProjectEditorOpen && (
+        <ProjectEditorModal
+          initialProject={editingProject}
+          onClose={() => {
+            setIsProjectEditorOpen(false);
+            setEditingProject(null);
+          }}
+          onSubmit={handleSaveProject}
+        />
+      )}
+
       {isRepayModalOpen && (
         <RepaymentModal
-          accounts={accounts}
+          accounts={accounts || []}
           targetAccountId={repayTargetAccountId}
           suggestedAmount={repaySuggestedAmount}
           onClose={() => setIsRepayModalOpen(false)}
@@ -812,7 +960,7 @@ export default function App() {
 
       {isBatchReconcileOpen && (
         <BatchReconcileModal
-          accounts={accounts}
+          accounts={accounts || []}
           onClose={() => setIsBatchReconcileOpen(false)}
           onSaveBatch={handleSaveBatchAccounts}
         />
@@ -832,8 +980,8 @@ export default function App() {
       {isSyncModalOpen && currentUser && (
         <SyncBackupModal
           currentUser={currentUser}
-          accounts={accounts}
-          transactions={transactions}
+          accounts={accounts || []}
+          transactions={transactions || []}
           onClose={() => setIsSyncModalOpen(false)}
           onRestoreData={handleRestoreData}
           onShowToast={showToast}

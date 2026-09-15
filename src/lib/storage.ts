@@ -1,5 +1,5 @@
-import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory } from '../types';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS } from './constants';
+import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats } from '../types';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './constants';
 import { sortTransactions } from './formatters';
 
 const STORAGE_KEYS = {
@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   CURRENT_USER_ID: 'asset_manager_curr_uid_v1',
   ACCOUNTS_PREFIX: 'asset_manager_accs_',
   TRANSACTIONS_PREFIX: 'asset_manager_txs_',
+  PROJECTS_PREFIX: 'asset_manager_projs_',
   IS_LOCKED: 'asset_manager_is_locked_v1',
   LAST_ACTIVITY: 'asset_manager_last_act_v1',
 };
@@ -103,14 +104,15 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
       }
       return [];
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 };
 
 export const saveAccounts = (userId: string, accounts: FinancialAccount[]) => {
-  localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(accounts));
+  localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(accounts || []));
   triggerAutoServerSync(userId);
 };
 
@@ -125,17 +127,109 @@ export const getTransactions = (userId: string): Transaction[] => {
       }
       return [];
     }
-    const parsed: Transaction[] = JSON.parse(raw);
-    return sortTransactions(parsed);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sortTransactions(parsed) : [];
   } catch {
     return [];
   }
 };
 
 export const saveTransactions = (userId: string, transactions: Transaction[]) => {
-  const sorted = sortTransactions(transactions);
+  const sorted = sortTransactions(transactions || []);
   localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sorted));
   triggerAutoServerSync(userId);
+};
+
+export const getProjects = (userId: string): LedgerProject[] => {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`);
+    if (!raw) {
+      if (userId === DEFAULT_DEMO_USER.id) {
+        localStorage.setItem(
+          `${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`,
+          JSON.stringify(INITIAL_DEMO_PROJECTS)
+        );
+        return INITIAL_DEMO_PROJECTS;
+      }
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveProjects = (userId: string, projects: LedgerProject[]) => {
+  localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(projects));
+  triggerAutoServerSync(userId);
+};
+
+export const calculateProjectStats = (
+  project: LedgerProject,
+  transactions: Transaction[] = []
+): ProjectFinancialStats => {
+  const safeTxs = transactions || [];
+  const projectTxs = safeTxs.filter(
+    (t) => t.projectId === project.id || (t.projectName && t.projectName === project.name)
+  );
+
+  let totalIncome = 0;
+  let grossExpense = 0;
+  let refundAmount = 0;
+  let incomeCount = 0;
+  let expenseCount = 0;
+  let refundCount = 0;
+
+  projectTxs.forEach((tx) => {
+    if (tx.type === 'INCOME') {
+      totalIncome += tx.amount;
+      incomeCount += 1;
+    } else if (tx.type === 'EXPENSE') {
+      grossExpense += tx.amount;
+      expenseCount += 1;
+    } else if (tx.type === 'REFUND') {
+      refundAmount += tx.amount;
+      refundCount += 1;
+    }
+  });
+
+  // 净支出 = 原始支出 - 冲红退款
+  const netExpense = Math.max(0, grossExpense - refundAmount);
+  // 净结余 = 项目收入 - 项目净支出
+  const netBalance = totalIncome - netExpense;
+
+  const budget = project.budget || 0;
+  const budgetRemaining = budget > 0 ? budget - netExpense : undefined;
+  const budgetUsagePercent =
+    budget > 0 ? Math.min(999, Math.round((netExpense / budget) * 1000) / 10) : 0;
+
+  return {
+    projectId: project.id,
+    totalIncome,
+    grossExpense,
+    refundAmount,
+    netExpense,
+    netBalance,
+    budget: project.budget,
+    budgetRemaining,
+    budgetUsagePercent,
+    transactionCount: projectTxs.length,
+    incomeCount,
+    expenseCount,
+    refundCount,
+  };
+};
+
+export const calculateAllProjectStats = (
+  projects: LedgerProject[] = [],
+  transactions: Transaction[] = []
+): Map<string, ProjectFinancialStats> => {
+  const map = new Map<string, ProjectFinancialStats>();
+  (projects || []).forEach((proj) => {
+    map.set(proj.id, calculateProjectStats(proj, transactions || []));
+  });
+  return map;
 };
 
 /**
@@ -356,7 +450,10 @@ export const fetchLatestDataFromServer = async (
 };
 
 
-export const calculateSummary = (accounts: FinancialAccount[], transactions: Transaction[]): FinancialSummary => {
+export const calculateSummary = (
+  accounts: FinancialAccount[] = [],
+  transactions: Transaction[] = []
+): FinancialSummary => {
   let liquidAssets = 0;
   let investmentAssets = 0;
   let receivables = 0;
@@ -364,7 +461,8 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
   let totalUsedCredit = 0;
   let totalPayableDebts = 0;
 
-  accounts.forEach((acc) => {
+  const safeAccounts = Array.isArray(accounts) ? accounts : [];
+  safeAccounts.forEach((acc) => {
     switch (acc.category) {
       case 'DEBIT_CARD':
       case 'ALIPAY':
@@ -408,30 +506,42 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
   // （信用卡借贷欠款与借入资金不计入净资产中，而是单独设立专区展示）
   const netWorth = liquidAssets + investmentAssets + receivables;
 
-  // Calculate current month's expenses and income
+  // Calculate current month's expenses, refunds and income
   const now = new Date();
   const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  let monthExpense = 0;
+  let monthGrossExpense = 0;
+  let monthRefund = 0;
   let monthIncome = 0;
-  let todayExpense = 0;
+  let todayGrossExpense = 0;
+  let todayRefund = 0;
 
-  transactions.forEach((tx) => {
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  safeTransactions.forEach((tx) => {
     if (tx.date) {
       if (tx.date.startsWith(currentYearMonth)) {
         if (tx.type === 'EXPENSE') {
-          monthExpense += tx.amount;
+          monthGrossExpense += tx.amount;
+        } else if (tx.type === 'REFUND') {
+          monthRefund += tx.amount;
         } else if (tx.type === 'INCOME') {
           monthIncome += tx.amount;
         }
       }
-      if (tx.date === todayStr && tx.type === 'EXPENSE') {
-        todayExpense += tx.amount;
+      if (tx.date === todayStr) {
+        if (tx.type === 'EXPENSE') {
+          todayGrossExpense += tx.amount;
+        } else if (tx.type === 'REFUND') {
+          todayRefund += tx.amount;
+        }
       }
     }
   });
 
+  // 净支出 = 原始支出 - 冲红退款
+  const monthExpense = Math.max(0, monthGrossExpense - monthRefund);
+  const todayExpense = Math.max(0, todayGrossExpense - todayRefund);
   const monthSavings = monthIncome - monthExpense;
 
   return {
@@ -448,6 +558,8 @@ export const calculateSummary = (accounts: FinancialAccount[], transactions: Tra
     totalLiabilities,
     todayExpense,
     monthExpense,
+    monthGrossExpense,
+    monthRefund,
     monthIncome,
     monthSavings,
   };
@@ -466,13 +578,110 @@ export const addTransaction = (
     createdAt: new Date().toISOString(),
   };
 
+  let updatedTransactions = [newTx, ...transactions];
+
+  // If this is a REFUND linked to an original transaction, update original transaction's refund status
+  if (newTx.type === 'REFUND' && newTx.refundedTxId) {
+    updatedTransactions = updatedTransactions.map((t) => {
+      if (t.id === newTx.refundedTxId) {
+        const newRefunded = (t.refundedAmount || 0) + newTx.amount;
+        return {
+          ...t,
+          refundedAmount: newRefunded,
+          refundStatus: newRefunded >= t.amount ? ('FULL' as const) : ('PARTIAL' as const),
+          refundIds: Array.from(new Set([...(t.refundIds || []), newTx.id])),
+        };
+      }
+      return t;
+    });
+  }
+
   const updatedAccounts = applyTransactionToAccounts(accounts, newTx, false);
-  const updatedTransactions = sortTransactions([newTx, ...transactions]);
+  const sorted = sortTransactions(updatedTransactions);
 
   saveAccounts(userId, updatedAccounts);
-  saveTransactions(userId, updatedTransactions);
+  saveTransactions(userId, sorted);
 
   return { transaction: newTx, accounts: updatedAccounts };
+};
+
+/**
+ * 平账冲红专项方法：将已支出的账单进行部分或全额冲红退费
+ */
+export const reconcileRefund = (
+  userId: string,
+  originalTxId: string,
+  refundParams: {
+    amount: number;
+    accountId: string;
+    date: string;
+    time?: string;
+    reason?: string;
+    description?: string;
+  }
+): {
+  refundTransaction: Transaction;
+  updatedTransactions: Transaction[];
+  accounts: FinancialAccount[];
+} => {
+  const accounts = getAccounts(userId);
+  const transactions = getTransactions(userId);
+  const origTx = transactions.find((t) => t.id === originalTxId);
+
+  if (!origTx) {
+    throw new Error('未找到原支出账单');
+  }
+
+  const refundId = 'tx-refund-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+  const refundTx: Transaction = {
+    id: refundId,
+    type: 'REFUND',
+    amount: refundParams.amount,
+    date: refundParams.date,
+    time: refundParams.time || new Date().toTimeString().split(' ')[0].substring(0, 5),
+    accountId: refundParams.accountId,
+    category: origTx.category || '冲红退费',
+    tag: '平账冲红',
+    description:
+      refundParams.description ||
+      `退款平账: ${origTx.description || origTx.category} (冲红)`,
+    merchant: origTx.merchant,
+    createdAt: new Date().toISOString(),
+    isRefund: true,
+    refundedTxId: origTx.id,
+    refundedTxDescription: origTx.description || origTx.category,
+    refundedTxAmount: origTx.amount,
+    refundReason: refundParams.reason || '售后退费平账',
+  };
+
+  const newRefundedTotal = (origTx.refundedAmount || 0) + refundParams.amount;
+  const newStatus = newRefundedTotal >= origTx.amount ? ('FULL' as const) : ('PARTIAL' as const);
+
+  const updatedTransactions = transactions.map((t) => {
+    if (t.id === originalTxId) {
+      return {
+        ...t,
+        refundedAmount: newRefundedTotal,
+        refundStatus: newStatus,
+        refundIds: Array.from(new Set([...(t.refundIds || []), refundId])),
+      };
+    }
+    return t;
+  });
+
+  updatedTransactions.unshift(refundTx);
+
+  const updatedAccounts = applyTransactionToAccounts(accounts, refundTx, false);
+  const sorted = sortTransactions(updatedTransactions);
+
+  saveAccounts(userId, updatedAccounts);
+  saveTransactions(userId, sorted);
+
+  return {
+    refundTransaction: refundTx,
+    updatedTransactions: sorted,
+    accounts: updatedAccounts,
+  };
 };
 
 export const updateTransaction = (
@@ -518,6 +727,16 @@ const applyTransactionToAccounts = (
           return { ...acc, usedCredit: newUsed, balance: newUsed, updatedAt: new Date().toISOString() };
         } else {
           return { ...acc, balance: (acc.balance || 0) - delta, updatedAt: new Date().toISOString() };
+        }
+      } else if (tx.type === 'REFUND') {
+        // 平账冲红 / 退费：款项退回到该账户 (支出的反向操作)
+        if (acc.category === 'CREDIT_CARD' || acc.category === 'JD_BAITIAO' || acc.category === 'HUABEI') {
+          // 信用卡/白条收到退款冲红：减少已用欠款，恢复信用额度
+          const newUsed = Math.max(0, (acc.usedCredit || 0) - delta);
+          return { ...acc, usedCredit: newUsed, balance: newUsed, updatedAt: new Date().toISOString() };
+        } else {
+          // 借记卡/支付宝/微信/现金收到退款：增加可用余额
+          return { ...acc, balance: (acc.balance || 0) + delta, updatedAt: new Date().toISOString() };
         }
       } else if (tx.type === 'INCOME') {
         return { ...acc, balance: (acc.balance || 0) + delta, updatedAt: new Date().toISOString() };
@@ -585,11 +804,47 @@ export const clearAllUserData = (userId: string) => {
   saveTransactions(userId, []);
 };
 
-export const deleteTransaction = (userId: string, txId: string): { transactions: Transaction[] } => {
+export const deleteTransaction = (
+  userId: string,
+  txId: string
+): { transactions: Transaction[]; accounts: FinancialAccount[] } => {
+  const accounts = getAccounts(userId);
   const transactions = getTransactions(userId);
-  const updated = transactions.filter((t) => t.id !== txId);
-  saveTransactions(userId, updated);
-  return { transactions: updated };
+  const targetTx = transactions.find((t) => t.id === txId);
+
+  if (!targetTx) {
+    return { transactions, accounts };
+  }
+
+  // Revert account balances
+  const updatedAccounts = applyTransactionToAccounts(accounts, targetTx, true);
+
+  // If this was a REFUND transaction linked to an original transaction, restore original transaction
+  let updatedTransactions = transactions.filter((t) => t.id !== txId);
+  if (targetTx.type === 'REFUND' && targetTx.refundedTxId) {
+    updatedTransactions = updatedTransactions.map((t) => {
+      if (t.id === targetTx.refundedTxId) {
+        const remainingRefunded = Math.max(0, (t.refundedAmount || 0) - targetTx.amount);
+        const remainingIds = (t.refundIds || []).filter((id) => id !== txId);
+        return {
+          ...t,
+          refundedAmount: remainingRefunded,
+          refundStatus:
+            remainingRefunded === 0
+              ? ('NONE' as const)
+              : remainingRefunded >= t.amount
+              ? ('FULL' as const)
+              : ('PARTIAL' as const),
+          refundIds: remainingIds,
+        };
+      }
+      return t;
+    });
+  }
+
+  saveAccounts(userId, updatedAccounts);
+  saveTransactions(userId, updatedTransactions);
+  return { transactions: updatedTransactions, accounts: updatedAccounts };
 };
 
 export const isAppLocked = (): boolean => {

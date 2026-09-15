@@ -124,7 +124,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   // Extract all available months from transactions
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
-    transactions.forEach((t) => {
+    (transactions || []).forEach((t) => {
       if (t.date && t.date.length >= 7) {
         set.add(t.date.substring(0, 7));
       }
@@ -136,7 +136,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   // Extract all dates that have transactions
   const datesWithTransactions = useMemo(() => {
     const map = new Map<string, { count: number; expense: number; income: number }>();
-    transactions.forEach((t) => {
+    (transactions || []).forEach((t) => {
       if (t.date) {
         const entry = map.get(t.date) || { count: 0, expense: 0, income: 0 };
         entry.count += 1;
@@ -211,7 +211,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const accountMap = useMemo(() => {
     const map = new Map<string, FinancialAccount>();
-    accounts.forEach((acc) => map.set(acc.id, acc));
+    (accounts || []).forEach((acc) => map.set(acc.id, acc));
     return map;
   }, [accounts]);
 
@@ -528,7 +528,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     ];
 
     // List ALL items without truncation
-    targetTransactions.forEach((t, i) => {
+    (targetTransactions || []).forEach((t, i) => {
       const acc = accountMap.get(t.accountId);
       const accName = acc?.name || '默认账户';
       const typeSign = t.type === 'EXPENSE' ? '-' : '+';

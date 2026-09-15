@@ -118,6 +118,18 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     fetchLiveGoldRate().then((rate) => setLiveGoldRate(rate));
   }, []);
 
+  // Escape key to close quick reconcile modal
+  useEffect(() => {
+    if (!reconcilingAccount) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setReconcilingAccount(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [reconcilingAccount]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -1210,153 +1222,165 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
       {/* QUICK RECONCILE POPUP MODAL */}
       {reconcilingAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setReconcilingAccount(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-hidden animate-in fade-in duration-200"
+        >
+          <div className="relative w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+            {/* Fixed Header */}
+            <div className="shrink-0 px-6 py-4 border-b border-slate-100 bg-white/95 backdrop-blur-md flex items-center justify-between z-20">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-slate-700" />
                 <span>快速校对卡片金额与账单</span>
               </h3>
               <button
                 onClick={() => setReconcilingAccount(null)}
-                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                aria-label="关闭窗口 (Esc)"
+                title="关闭窗口 (Esc)"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
-              <div className="font-bold text-slate-900 text-sm">
-                {reconcilingAccount.name}
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto modal-custom-scrollbar px-6 py-4 space-y-4">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="font-bold text-slate-900 text-sm">
+                  {reconcilingAccount.name}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {reconcilingAccount.bankName || '数字账户'}{' '}
+                  {reconcilingAccount.cardNumberLast4
+                    ? `(尾号 ${reconcilingAccount.cardNumberLast4})`
+                    : ''}
+                </div>
               </div>
-              <div className="text-xs text-slate-500 mt-0.5">
-                {reconcilingAccount.bankName || '数字账户'}{' '}
-                {reconcilingAccount.cardNumberLast4
-                  ? `(尾号 ${reconcilingAccount.cardNumberLast4})`
-                  : ''}
-              </div>
-            </div>
 
-            {/* Credit Card Used / Limit Inputs */}
-            {reconcilingAccount.category === 'CREDIT_CARD' ||
-            reconcilingAccount.category === 'JD_BAITIAO' ||
-            reconcilingAccount.category === 'HUABEI' ? (
-              <div className="space-y-3">
+              {/* Credit Card Used / Limit Inputs */}
+              {reconcilingAccount.category === 'CREDIT_CARD' ||
+              reconcilingAccount.category === 'JD_BAITIAO' ||
+              reconcilingAccount.category === 'HUABEI' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      当前已用待还金额 (¥)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={quickUsedCredit}
+                      onChange={(e) => setQuickUsedCredit(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-base font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      总授信信用额度 (¥)
+                    </label>
+                    <input
+                      type="number"
+                      step="1000"
+                      value={quickCreditLimit}
+                      onChange={(e) => setQuickCreditLimit(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              ) : reconcilingAccount.category === 'GOLD' ? (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-amber-900 block">上海金 Au9999 现货行情:</span>
+                      <span className="text-amber-700 font-mono">¥{liveGoldRate.priceRmbGram}/g · 汇率: 1 USD = {liveGoldRate.usdCnyRate} CNY</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setQuickGoldPrice(liveGoldRate.priceRmbGram.toString())}
+                      className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-xs transition-colors text-[11px]"
+                    >
+                      ⚡ 填入今日价 (¥{liveGoldRate.priceRmbGram})
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        持有克重 (g)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={quickGoldGrams}
+                        onChange={(e) => setQuickGoldGrams(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        金价单价 (¥/g)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={quickGoldPrice}
+                        onChange={(e) => setQuickGoldPrice(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm font-semibold text-amber-700"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-amber-800 font-medium flex items-center justify-between px-1">
+                    <span>折算总估值:</span>
+                    <span className="font-bold font-mono text-sm text-amber-900">
+                      ¥{((parseFloat(quickGoldGrams) || 0) * (parseFloat(quickGoldPrice) || 0)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              ) : (
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    当前已用待还金额 (¥)
+                    真实账户最新可用余额 (¥)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={quickUsedCredit}
-                    onChange={(e) => setQuickUsedCredit(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-base font-bold"
+                    value={quickBalance}
+                    onChange={(e) => setQuickBalance(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-lg font-bold"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    总授信信用额度 (¥)
-                  </label>
-                  <input
-                    type="number"
-                    step="1000"
-                    value={quickCreditLimit}
-                    onChange={(e) => setQuickCreditLimit(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm"
-                  />
-                </div>
-              </div>
-            ) : reconcilingAccount.category === 'GOLD' ? (
-              <div className="space-y-3">
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-amber-900 block">上海金 Au9999 现货行情:</span>
-                    <span className="text-amber-700 font-mono">¥{liveGoldRate.priceRmbGram}/g · 汇率: 1 USD = {liveGoldRate.usdCnyRate} CNY</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setQuickGoldPrice(liveGoldRate.priceRmbGram.toString())}
-                    className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-xs transition-colors text-[11px]"
-                  >
-                    ⚡ 填入今日价 (¥{liveGoldRate.priceRmbGram})
-                  </button>
-                </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      持有克重 (g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={quickGoldGrams}
-                      onChange={(e) => setQuickGoldGrams(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      金价单价 (¥/g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={quickGoldPrice}
-                      onChange={(e) => setQuickGoldPrice(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-sm font-semibold text-amber-700"
-                    />
-                  </div>
-                </div>
-
-                <div className="text-xs text-amber-800 font-medium flex items-center justify-between px-1">
-                  <span>折算总估值:</span>
-                  <span className="font-bold font-mono text-sm text-amber-900">
-                    ¥{((parseFloat(quickGoldGrams) || 0) * (parseFloat(quickGoldPrice) || 0)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
-            ) : (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  真实账户最新可用余额 (¥)
+                  备注备忘
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={quickBalance}
-                  onChange={(e) => setQuickBalance(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-900 font-mono text-lg font-bold"
+                  type="text"
+                  value={quickNotes}
+                  onChange={(e) => setQuickNotes(e.target.value)}
+                  placeholder="例如：工资代发卡 / 日常买菜支付卡"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                备注备忘
-              </label>
-              <input
-                type="text"
-                value={quickNotes}
-                onChange={(e) => setQuickNotes(e.target.value)}
-                placeholder="例如：工资代发卡 / 日常买菜支付卡"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            {/* Fixed Footer */}
+            <div className="shrink-0 px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2.5 z-20">
               <button
                 type="button"
                 onClick={() => setReconcilingAccount(null)}
-                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100"
+                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
               >
                 取消
               </button>
               <button
                 type="button"
                 onClick={handleSaveQuickReconcile}
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-xs"
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-xs active:scale-95 transition-all"
               >
                 保存校准
               </button>

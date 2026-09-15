@@ -78,13 +78,13 @@ export const parseBackupJson = (jsonString: string): { success: boolean; data?: 
  * 智能合并账户数据 (保留原有或更新属性，补充缺失账户)
  */
 export const mergeAccounts = (
-  existing: FinancialAccount[],
-  incoming: FinancialAccount[]
+  existing: FinancialAccount[] = [],
+  incoming: FinancialAccount[] = []
 ): FinancialAccount[] => {
   const existingMap = new Map<string, FinancialAccount>();
-  existing.forEach((a) => existingMap.set(a.id, a));
+  (existing || []).forEach((a) => existingMap.set(a.id, a));
 
-  incoming.forEach((inAcc) => {
+  (incoming || []).forEach((inAcc) => {
     if (existingMap.has(inAcc.id)) {
       // 存在相同 ID 则以最新导入为准或合并
       existingMap.set(inAcc.id, {
@@ -103,13 +103,13 @@ export const mergeAccounts = (
  * 智能合并流水明细 (去重合并)
  */
 export const mergeTransactions = (
-  existing: Transaction[],
-  incoming: Transaction[]
+  existing: Transaction[] = [],
+  incoming: Transaction[] = []
 ): Transaction[] => {
   const existingMap = new Map<string, Transaction>();
-  existing.forEach((t) => existingMap.set(t.id, t));
+  (existing || []).forEach((t) => existingMap.set(t.id, t));
 
-  incoming.forEach((inTx) => {
+  (incoming || []).forEach((inTx) => {
     existingMap.set(inTx.id, inTx);
   });
 

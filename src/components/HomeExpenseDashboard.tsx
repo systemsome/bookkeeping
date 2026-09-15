@@ -24,9 +24,9 @@ import { CategoryIcon } from './CategoryIcon';
 
 interface HomeExpenseDashboardProps {
   summary: FinancialSummary;
-  transactions: Transaction[];
-  accounts: FinancialAccount[];
-  currentUser: UserProfile;
+  transactions?: Transaction[];
+  accounts?: FinancialAccount[];
+  currentUser?: UserProfile | null;
   privacyMode: boolean;
   onQuickAddExpense: (amount: number, category: string, accountId: string, description: string) => void;
   onEditTransaction: (tx: Transaction) => void;
@@ -38,8 +38,8 @@ interface HomeExpenseDashboardProps {
 
 export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   summary,
-  transactions,
-  accounts,
+  transactions = [],
+  accounts = [],
   currentUser,
   privacyMode,
   onQuickAddExpense,
@@ -52,13 +52,13 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   // Inline Quick Add State
   const [quickAmount, setQuickAmount] = useState('');
   const [quickCategory, setQuickCategory] = useState(EXPENSE_CATEGORIES[0]?.name || '餐饮美食');
-  const [quickAccountId, setQuickAccountId] = useState(accounts[0]?.id || '');
+  const [quickAccountId, setQuickAccountId] = useState(accounts?.[0]?.id || '');
   const [quickDescription, setQuickDescription] = useState('');
   const [isQuickSuccess, setIsQuickSuccess] = useState(false);
 
   // Budget Edit State
   const [isEditingBudget, setIsEditingBudget] = useState(false);
-  const currentBudget = currentUser.monthlyBudget || 8000;
+  const currentBudget = currentUser?.monthlyBudget || 8000;
   const [budgetValue, setBudgetValue] = useState(currentBudget.toString());
 
   // Date calculations
@@ -69,14 +69,14 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   const daysRemaining = Math.max(1, daysInMonth - dayOfMonth + 1);
 
   // Expense transactions this month
-  const monthlyExpenses = transactions.filter(
+  const monthlyExpenses = (transactions || []).filter(
     (tx) => tx.type === 'EXPENSE' && tx.date && tx.date.startsWith(currentYearMonth)
   );
 
   // Category breakdown calculation
   const categoryStats = React.useMemo(() => {
     const map: { [key: string]: { total: number; count: number } } = {};
-    monthlyExpenses.forEach((tx) => {
+    (monthlyExpenses || []).forEach((tx) => {
       const cat = tx.category || '其他消费';
       if (!map[cat]) {
         map[cat] = { total: 0, count: 0 };

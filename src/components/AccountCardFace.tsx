@@ -27,6 +27,7 @@ interface AccountCardFaceProps {
   onOpenNewTx?: (defaultType: string, accountId: string) => void;
   onAutoRegenColor?: (accountId: string) => void;
   compact?: boolean;
+  hideActionRow?: boolean;
   // Drag & Reorder Props
   isReorderMode?: boolean;
   reorderIndex?: number;
@@ -47,6 +48,7 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
   onOpenNewTx,
   onAutoRegenColor,
   compact = false,
+  hideActionRow = false,
   isReorderMode = false,
   reorderIndex,
   totalCount,
@@ -142,13 +144,15 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
               {isBankCard && <ContactlessIcon className="text-white/80" />}
               <CardNetworkBadge network={cardNetwork} size={compact ? 'sm' : 'md'} />
               {/* Drag Handle firmly fixed at the absolute top-right position */}
-              <div
-                {...dragHandleProps}
-                className="cursor-grab active:cursor-grabbing p-1 sm:p-1.5 rounded-lg bg-black/25 hover:bg-black/45 backdrop-blur-md text-white/80 hover:text-white transition-all shadow-2xs border border-white/10 shrink-0"
-                title="⠿ 按住可拖拽排版此卡片"
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </div>
+              {dragHandleProps && !hideActionRow && (
+                <div
+                  {...dragHandleProps}
+                  className="cursor-grab active:cursor-grabbing p-1 sm:p-1.5 rounded-lg bg-black/25 hover:bg-black/45 backdrop-blur-md text-white/80 hover:text-white transition-all shadow-2xs border border-white/10 shrink-0"
+                  title="⠿ 按住可拖拽排版此卡片"
+                >
+                  <GripVertical className="w-3.5 h-3.5" />
+                </div>
+              )}
             </div>
           </div>
 
@@ -331,118 +335,120 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
       </div>
 
       {/* ================= 4. QUICK ACTION BAR UNDER THE PHYSICAL CARD ================= */}
-      <div className="mt-2.5 flex items-center justify-between gap-1.5 px-0.5">
-        {isReorderMode ? (
-          /* Reorder mode action bar */
-          <div className="w-full flex items-center gap-1.5 bg-purple-50/80 p-1 rounded-xl border border-purple-200/80">
-            <button
-              onClick={onMoveTop}
-              disabled={reorderIndex === 0}
-              className="flex-1 py-1.5 px-2 rounded-lg bg-white hover:bg-purple-100 disabled:opacity-40 disabled:hover:bg-white text-purple-800 text-xs font-semibold border border-purple-200 shadow-2xs transition-all flex items-center justify-center gap-1"
-              title="置顶到第一位"
-            >
-              <ArrowUpToLine className="w-3.5 h-3.5" />
-              <span>置顶</span>
-            </button>
-            <button
-              onClick={onMoveUp}
-              disabled={reorderIndex === 0}
-              className="flex-1 py-1.5 px-2 rounded-lg bg-white hover:bg-purple-100 disabled:opacity-40 disabled:hover:bg-white text-purple-800 text-xs font-semibold border border-purple-200 shadow-2xs transition-all flex items-center justify-center gap-1"
-              title="往前移一位"
-            >
-              <ChevronUp className="w-3.5 h-3.5" />
-              <span>前移</span>
-            </button>
-            <button
-              onClick={onMoveDown}
-              disabled={totalCount !== undefined && reorderIndex !== undefined && reorderIndex >= totalCount - 1}
-              className="flex-1 py-1.5 px-2 rounded-lg bg-white hover:bg-purple-100 disabled:opacity-40 disabled:hover:bg-white text-purple-800 text-xs font-semibold border border-purple-200 shadow-2xs transition-all flex items-center justify-center gap-1"
-              title="往后移一位"
-            >
-              <ChevronDown className="w-3.5 h-3.5" />
-              <span>后移</span>
-            </button>
-          </div>
-        ) : isCredit ? (
-          <>
-            <button
-              onClick={() => onOpenRepayment?.(account.id, usedCredit)}
-              className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs text-center shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1"
-            >
-              <ReceiptText className="w-3.5 h-3.5 text-rose-400" />
-              <span>快速还款</span>
-            </button>
-            <button
-              onClick={() => onOpenNewTx?.('EXPENSE', account.id)}
-              className="flex-1 py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs text-center border border-slate-200 shadow-2xs transition-colors flex items-center justify-center gap-1"
-            >
-              <ArrowUpRight className="w-3.5 h-3.5 text-rose-500" />
-              <span>刷卡记账</span>
-            </button>
-            <button
-              onClick={() => onQuickReconcile?.(account)}
-              className="p-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-900 border border-slate-200 shadow-2xs transition-colors"
-              title="校对欠款/额度"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-            </button>
-          </>
-        ) : isLend ? (
-          <>
-            <button
-              onClick={() => onOpenNewTx?.('COLLECT_LENT', account.id)}
-              className="flex-1 py-1.5 px-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-semibold text-xs text-center shadow-xs transition-colors"
-            >
-              收回借款
-            </button>
-            <button
-              onClick={() => onQuickReconcile?.(account)}
-              className="py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors"
-            >
-              改金额
-            </button>
-          </>
-        ) : isBorrow ? (
-          <>
-            <button
-              onClick={() => onOpenNewTx?.('PAY_BORROW', account.id)}
-              className="flex-1 py-1.5 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs text-center shadow-xs transition-colors"
-            >
-              归还借款
-            </button>
-            <button
-              onClick={() => onQuickReconcile?.(account)}
-              className="py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors"
-            >
-              改金额
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => onOpenNewTx?.('EXPENSE', account.id)}
-              className="flex-1 py-1.5 px-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-semibold text-xs text-center border border-rose-200/80 shadow-2xs transition-colors flex items-center justify-center gap-1"
-            >
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>支出</span>
-            </button>
-            <button
-              onClick={() => onOpenNewTx?.('INCOME', account.id)}
-              className="flex-1 py-1.5 px-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 font-semibold text-xs text-center border border-emerald-200/80 shadow-2xs transition-colors flex items-center justify-center gap-1"
-            >
-              <ArrowDownLeft className="w-3.5 h-3.5" />
-              <span>收入</span>
-            </button>
-            <button
-              onClick={() => onQuickReconcile?.(account)}
-              className="py-1.5 px-2 rounded-xl bg-white hover:bg-slate-100 text-slate-600 text-xs font-medium border border-slate-200 transition-colors"
-              title="修改余额"
-            >
-              改余额
-            </button>
-          </>
-        )}
-      </div>
+      {!hideActionRow && (
+        <div className="mt-2.5 flex items-center justify-between gap-1.5 px-0.5">
+          {isReorderMode ? (
+            /* Reorder mode action bar */
+            <div className="w-full flex items-center gap-1.5 bg-purple-50/80 p-1 rounded-xl border border-purple-200/80">
+              <button
+                onClick={onMoveTop}
+                disabled={reorderIndex === 0}
+                className="flex-1 py-1.5 px-2 rounded-lg bg-white hover:bg-purple-100 disabled:opacity-40 disabled:hover:bg-white text-purple-800 text-xs font-semibold border border-purple-200 shadow-2xs transition-all flex items-center justify-center gap-1"
+                title="置顶到第一位"
+              >
+                <ArrowUpToLine className="w-3.5 h-3.5" />
+                <span>置顶</span>
+              </button>
+              <button
+                onClick={onMoveUp}
+                disabled={reorderIndex === 0}
+                className="flex-1 py-1.5 px-2 rounded-lg bg-white hover:bg-purple-100 disabled:opacity-40 disabled:hover:bg-white text-purple-800 text-xs font-semibold border border-purple-200 shadow-2xs transition-all flex items-center justify-center gap-1"
+                title="往前移一位"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+                <span>前移</span>
+              </button>
+              <button
+                onClick={onMoveDown}
+                disabled={totalCount !== undefined && reorderIndex !== undefined && reorderIndex >= totalCount - 1}
+                className="flex-1 py-1.5 px-2 rounded-lg bg-white hover:bg-purple-100 disabled:opacity-40 disabled:hover:bg-white text-purple-800 text-xs font-semibold border border-purple-200 shadow-2xs transition-all flex items-center justify-center gap-1"
+                title="往后移一位"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+                <span>后移</span>
+              </button>
+            </div>
+          ) : isCredit ? (
+            <>
+              <button
+                onClick={() => onOpenRepayment?.(account.id, usedCredit)}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs text-center shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1"
+              >
+                <ReceiptText className="w-3.5 h-3.5 text-rose-400" />
+                <span>快速还款</span>
+              </button>
+              <button
+                onClick={() => onOpenNewTx?.('EXPENSE', account.id)}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs text-center border border-slate-200 shadow-2xs transition-colors flex items-center justify-center gap-1"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5 text-rose-500" />
+                <span>刷卡记账</span>
+              </button>
+              <button
+                onClick={() => onQuickReconcile?.(account)}
+                className="p-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-900 border border-slate-200 shadow-2xs transition-colors"
+                title="校对欠款/额度"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+              </button>
+            </>
+          ) : isLend ? (
+            <>
+              <button
+                onClick={() => onOpenNewTx?.('COLLECT_LENT', account.id)}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-semibold text-xs text-center shadow-xs transition-colors"
+              >
+                收回借款
+              </button>
+              <button
+                onClick={() => onQuickReconcile?.(account)}
+                className="py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors"
+              >
+                改金额
+              </button>
+            </>
+          ) : isBorrow ? (
+            <>
+              <button
+                onClick={() => onOpenNewTx?.('PAY_BORROW', account.id)}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs text-center shadow-xs transition-colors"
+              >
+                归还借款
+              </button>
+              <button
+                onClick={() => onQuickReconcile?.(account)}
+                className="py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors"
+              >
+                改金额
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => onOpenNewTx?.('EXPENSE', account.id)}
+                className="flex-1 py-1.5 px-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-semibold text-xs text-center border border-rose-200/80 shadow-2xs transition-colors flex items-center justify-center gap-1"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                <span>支出</span>
+              </button>
+              <button
+                onClick={() => onOpenNewTx?.('INCOME', account.id)}
+                className="flex-1 py-1.5 px-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 font-semibold text-xs text-center border border-emerald-200/80 shadow-2xs transition-colors flex items-center justify-center gap-1"
+              >
+                <ArrowDownLeft className="w-3.5 h-3.5" />
+                <span>收入</span>
+              </button>
+              <button
+                onClick={() => onQuickReconcile?.(account)}
+                className="py-1.5 px-2 rounded-xl bg-white hover:bg-slate-100 text-slate-600 text-xs font-medium border border-slate-200 transition-colors"
+                title="修改余额"
+              >
+                改余额
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

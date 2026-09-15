@@ -79,10 +79,10 @@ const dateStrOnly = (d: Date) => {
  * then Time (HH:mm) descending, then createdAt descending.
  */
 export const sortTransactions = <T extends { date: string; time?: string; createdAt?: string }>(
-  transactions: T[],
+  transactions: T[] = [],
   order: 'desc' | 'asc' = 'desc'
 ): T[] => {
-  return [...transactions].sort((a, b) => {
+  return [...(transactions || [])].sort((a, b) => {
     // 1. Compare Date YYYY-MM-DD
     const dateA = a.date || '';
     const dateB = b.date || '';

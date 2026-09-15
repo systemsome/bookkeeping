@@ -36,16 +36,16 @@ import {
 import { CategoryIcon } from './CategoryIcon';
 
 interface AnalyticsViewProps {
-  accounts: FinancialAccount[];
-  transactions: Transaction[];
+  accounts?: FinancialAccount[];
+  transactions?: Transaction[];
   summary: FinancialSummary;
   privacyMode: boolean;
   onSyncGoldAccountsValuation?: (newPrice: number) => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
-  accounts,
-  transactions,
+  accounts = [],
+  transactions = [],
   summary,
   privacyMode,
   onSyncGoldAccountsValuation,
@@ -86,18 +86,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // Actual User Gold Accounts
   const userGoldAccounts = useMemo(() => {
-    return accounts.filter((a) => a.category === 'GOLD');
+    return (accounts || []).filter((a) => a.category === 'GOLD');
   }, [accounts]);
 
   const userTotalGoldGrams = useMemo(() => {
-    return userGoldAccounts.reduce((acc, a) => {
+    return (userGoldAccounts || []).reduce((acc, a) => {
       const g = a.goldGrams || (a.balance && a.goldUnitPrice ? a.balance / a.goldUnitPrice : 0) || 0;
       return acc + g;
     }, 0);
   }, [userGoldAccounts]);
 
   const userTotalGoldBalance = useMemo(() => {
-    return userGoldAccounts.reduce((acc, a) => acc + (a.balance || 0), 0);
+    return (userGoldAccounts || []).reduce((acc, a) => acc + (a.balance || 0), 0);
   }, [userGoldAccounts]);
 
   // 1. Asset Distribution Data for Pie Chart
@@ -110,7 +110,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     let jdFinance = 0;
     let receivables = 0;
 
-    accounts.forEach((acc) => {
+    (accounts || []).forEach((acc) => {
       const bal = acc.balance || 0;
       if (acc.category === 'DEBIT_CARD' || acc.category === 'CASH') {
         debitAndCash += bal;
@@ -145,7 +145,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     const map: Record<string, number> = {};
     let total = 0;
 
-    transactions.forEach((tx) => {
+    (transactions || []).forEach((tx) => {
       if (tx.type === 'EXPENSE') {
         map[tx.category] = (map[tx.category] || 0) + tx.amount;
         total += tx.amount;
@@ -168,7 +168,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const monthlyTrends = React.useMemo(() => {
     const monthMap: Record<string, { month: string; expense: number; income: number }> = {};
 
-    transactions.forEach((tx) => {
+    (transactions || []).forEach((tx) => {
       const m = tx.date ? tx.date.substring(0, 7) : '未知';
       if (!monthMap[m]) {
         monthMap[m] = { month: m, expense: 0, income: 0 };

@@ -44,6 +44,8 @@ export const getTransactionTypeLabel = (type: TransactionType): string => {
       return '支出';
     case 'INCOME':
       return '收入';
+    case 'REFUND':
+      return '平账冲红 (退款)';
     case 'TRANSFER':
       return '转账';
     case 'REPAYMENT':
@@ -67,6 +69,9 @@ export const getTransactionTypeLabel = (type: TransactionType): string => {
 export const parseTransactionTypeFromLabel = (label: string): TransactionType => {
   if (!label) return 'EXPENSE';
   const clean = label.trim();
+  if (clean.includes('冲红') || clean.includes('退款') || clean.includes('退费') || clean.includes('平账')) {
+    return 'REFUND';
+  }
   if (clean.includes('收') || clean.includes('入账') || clean.includes('工资') || clean === '收入') {
     return 'INCOME';
   }
@@ -95,12 +100,12 @@ export const parseTransactionTypeFromLabel = (label: string): TransactionType =>
  * 导出流水为 CSV / XLSX / JSON
  */
 export const exportTransactions = (
-  transactions: Transaction[],
-  accounts: FinancialAccount[],
+  transactions: Transaction[] = [],
+  accounts: FinancialAccount[] = [],
   options: TransactionExportOptions
 ): void => {
   const accountMap = new Map<string, FinancialAccount>();
-  accounts.forEach((a) => accountMap.set(a.id, a));
+  (accounts || []).forEach((a) => accountMap.set(a.id, a));
 
   const now = new Date();
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(

@@ -21,6 +21,7 @@ import {
   Check,
   Github,
   ExternalLink,
+  FolderKanban,
 } from 'lucide-react';
 import { UserProfile, FinancialSummary } from '../types';
 import { formatCurrency } from '../lib/formatters';
@@ -29,8 +30,8 @@ import { ThemeMode } from '../lib/theme';
 interface NavbarProps {
   currentUser: UserProfile | null;
   summary: FinancialSummary;
-  activeTab: 'overview' | 'accounts' | 'credit' | 'transactions' | 'analytics';
-  setActiveTab: (tab: 'overview' | 'accounts' | 'credit' | 'transactions' | 'analytics') => void;
+  activeTab: 'overview' | 'accounts' | 'credit' | 'transactions' | 'projects' | 'analytics';
+  setActiveTab: (tab: 'overview' | 'accounts' | 'credit' | 'transactions' | 'projects' | 'analytics') => void;
   privacyMode: boolean;
   setPrivacyMode: (val: boolean) => void;
   themeMode: ThemeMode;
@@ -134,6 +135,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <ListOrdered className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               记账本
+            </button>
+            <button
+              id="nav-tab-projects"
+              onClick={() => setActiveTab('projects')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'projects'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+              }`}
+            >
+              <FolderKanban className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              账本项目
             </button>
             <button
               id="nav-tab-analytics"
@@ -448,6 +461,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ListOrdered className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">记账本</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
+              activeTab === 'projects'
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'projects' ? 'scale-110 bg-indigo-50 dark:bg-indigo-950/60' : ''}`}>
+              <FolderKanban className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">项目</span>
           </button>
 
           <button

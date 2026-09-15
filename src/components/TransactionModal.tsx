@@ -24,8 +24,9 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Settings2,
+  FolderKanban,
 } from 'lucide-react';
-import { FinancialAccount, TransactionType, Transaction, ExpenseCategory, IncomeCategory } from '../types';
+import { FinancialAccount, TransactionType, Transaction, ExpenseCategory, IncomeCategory, LedgerProject } from '../types';
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
@@ -52,10 +53,14 @@ import {
 
 interface TransactionModalProps {
   accounts: FinancialAccount[];
+  projects?: LedgerProject[];
   initialType?: TransactionType;
   initialAccountId?: string;
+  initialProjectId?: string;
+  initialRefundedTxId?: string;
   initialTransaction?: Transaction | null;
   initialDate?: string;
+  allTransactions?: Transaction[];
   onClose: () => void;
   onSubmit: (tx: Omit<Transaction, 'id' | 'createdAt'>, existingId?: string) => void;
 }
@@ -65,10 +70,14 @@ const DEFAULT_PRESET_TAGS = ['日常必要', '改善娱乐', '境外海淘', '�
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   accounts,
+  projects = [],
   initialType = 'EXPENSE',
   initialAccountId,
+  initialProjectId,
+  initialRefundedTxId,
   initialTransaction,
   initialDate,
+  allTransactions = [],
   onClose,
   onSubmit,
 }) => {
@@ -78,7 +87,45 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     initialTransaction?.type || initialType
   );
 
-  // Currency & Forex State
+  // Refund Reconcile Linking State
+  const [refundedTxId, setRefundedTxId] = useState<string>(
+    initialTransaction?.refundedTxId || initialRefundedTxId || ''
+  );
+  const [refundReason, setRefundReason] = useState<string>(
+    initialTransaction?.refundReason || '售后退费平账'
+  );
+
+  // Ledger Project Assignment State
+  const [projectId, setProjectId] = useState<string>(
+    initialTransaction?.projectId || initialProjectId || ''
+  );
+
+  const refundableExpenses = useMemo(() => {
+    return (allTransactions || []).filter((t) => t.type === 'EXPENSE');
+  }, [allTransactions]);
+
+  const selectedRefundExpense = useMemo(() => {
+    return refundableExpenses.find((t) => t.id === refundedTxId);
+  }, [refundableExpenses, refundedTxId]);
+
+  // Auto-prefill refund when initialRefundedTxId is provided
+  useEffect(() => {
+    if (initialRefundedTxId && !initialTransaction) {
+      setType('REFUND');
+      setRefundedTxId(initialRefundedTxId);
+      const chosen = (allTransactions || []).find((t) => t.id === initialRefundedTxId);
+      if (chosen) {
+        const already = chosen.refundedAmount || 0;
+        const rem = Math.max(0, chosen.amount - already);
+        setAmount(rem.toString());
+        setCategory(chosen.category);
+        if (chosen.merchant) setMerchant(chosen.merchant);
+        if (chosen.accountId) setAccountId(chosen.accountId);
+        if (chosen.projectId) setProjectId(chosen.projectId);
+        setDescription(`退款平账: ${chosen.description || chosen.category} (冲红)`);
+      }
+    }
+  }, [initialRefundedTxId, allTransactions, initialTransaction]);
   const initialCurrency = initialTransaction?.currency || 'CNY';
   const [currency, setCurrency] = useState<string>(initialCurrency);
   const [forexRates, setForexRates] = useState<ForexRatesResponse>(() => getCachedForexRates());
@@ -185,6 +232,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   // Fetch live exchange rates on mount
   useEffect(() => {
@@ -456,6 +514,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const isForeign = currency !== 'CNY';
     const finalAmountInCny = isForeign ? calculatedCnyAmount : rawNumAmount;
 
+    const chosenProj = projects.find((p) => p.id === projectId);
+    const finalProjectId =
+      projectId ||
+      (type === 'REFUND' && selectedRefundExpense?.projectId
+        ? selectedRefundExpense.projectId
+        : undefined);
+    const finalProjectName =
+      chosenProj?.name ||
+      (type === 'REFUND' && selectedRefundExpense?.projectName
+        ? selectedRefundExpense.projectName
+        : undefined);
+
     onSubmit(
       {
         type,
@@ -470,11 +540,30 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           ['TRANSFER', 'REPAYMENT', 'LEND_OUT', 'COLLECT_LENT', 'BORROW_IN', 'PAY_BORROW'].includes(type)
             ? targetAccountId
             : undefined,
-        category,
-        tag: tag.trim() || undefined,
-        description: description.trim() || (isForeign ? `${currentCurrencyInfo.name}交易 (${currentCurrencyInfo.symbol}${rawNumAmount})` : category),
+        category: type === 'REFUND' && !category ? '平账冲红' : category,
+        tag: tag.trim() || (type === 'REFUND' ? '平账冲红' : undefined),
+        projectId: finalProjectId,
+        projectName: finalProjectName,
+        description:
+          description.trim() ||
+          (type === 'REFUND'
+            ? selectedRefundExpense
+              ? `退款平账: ${selectedRefundExpense.description || selectedRefundExpense.category} (冲红)`
+              : '支出退款平账 (冲红)'
+            : isForeign
+            ? `${currentCurrencyInfo.name}交易 (${currentCurrencyInfo.symbol}${rawNumAmount})`
+            : category),
         counterparty: counterparty.trim() || undefined,
-        merchant: merchant.trim() || undefined,
+        merchant: merchant.trim() || selectedRefundExpense?.merchant || undefined,
+        isRefund: type === 'REFUND',
+        refundedTxId: type === 'REFUND' && refundedTxId ? refundedTxId : undefined,
+        refundedTxDescription:
+          type === 'REFUND' && selectedRefundExpense
+            ? selectedRefundExpense.description || selectedRefundExpense.category
+            : undefined,
+        refundedTxAmount:
+          type === 'REFUND' && selectedRefundExpense ? selectedRefundExpense.amount : undefined,
+        refundReason: type === 'REFUND' ? refundReason : undefined,
       },
       initialTransaction?.id
     );
@@ -494,77 +583,241 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   }, [accounts, targetAccountId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl my-auto max-h-[92vh] overflow-y-auto text-slate-900 dark:text-white">
-        {/* Header with Close */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-              <Sparkles className="w-4 h-4" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-5 overflow-hidden"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="relative w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden text-slate-900 dark:text-white my-auto animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Fixed Header with Close */}
+        <div className="shrink-0 px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md flex items-center justify-between z-20">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`p-2 rounded-xl border shadow-2xs shrink-0 ${
+                type === 'EXPENSE'
+                  ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200/70 dark:border-rose-800/60'
+                  : type === 'INCOME'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200/70 dark:border-emerald-800/60'
+                  : type === 'TRANSFER'
+                  ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border-blue-200/70 dark:border-blue-800/60'
+                  : type === 'REPAYMENT'
+                  ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border-purple-200/70 dark:border-purple-800/60'
+                  : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200/70 dark:border-rose-800/60'
+              }`}
+            >
+              {type === 'EXPENSE' ? (
+                <Sparkles className="w-4 h-4" />
+              ) : type === 'INCOME' ? (
+                <Wallet className="w-4 h-4" />
+              ) : type === 'TRANSFER' ? (
+                <ArrowRightLeft className="w-4 h-4" />
+              ) : type === 'REPAYMENT' ? (
+                <CreditCard className="w-4 h-4" />
+              ) : (
+                <RotateCcw className="w-4 h-4" />
+              )}
             </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                {isEditing ? '编辑流水账目明细' : '记一笔流水账目'}
-              </h2>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                  {isEditing ? '编辑流水账目明细' : '记一笔流水账目'}
+                </h2>
+                <span
+                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
+                    type === 'EXPENSE'
+                      ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/80'
+                      : type === 'INCOME'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/80'
+                      : type === 'TRANSFER'
+                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border-blue-200/80 dark:border-blue-800/80'
+                      : type === 'REPAYMENT'
+                      ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border-purple-200/80 dark:border-purple-800/80'
+                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200/80 dark:border-rose-800/80'
+                  }`}
+                >
+                  {type === 'EXPENSE'
+                    ? '支出单'
+                    : type === 'INCOME'
+                    ? '收入单'
+                    : type === 'TRANSFER'
+                    ? '转账单'
+                    : type === 'REPAYMENT'
+                    ? '还款单'
+                    : '平账冲红'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block truncate mt-0.5">
+                清晰记录每一笔资金流动，实时同步联动资产与待还额度
+              </p>
             </div>
           </div>
+
+          {/* Fixed Close Button - Always visible at top right */}
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            aria-label="关闭记账窗口"
+            title="关闭窗口 (Esc)"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 ml-2 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:focus:ring-slate-700"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Transaction Type Tabs */}
-        <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700 my-3.5">
-          <button
-            type="button"
-            onClick={() => setType('EXPENSE')}
-            className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-              type === 'EXPENSE'
-                ? 'bg-rose-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            支出
-          </button>
-          <button
-            type="button"
-            onClick={() => setType('INCOME')}
-            className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-              type === 'INCOME'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            收入
-          </button>
-          <button
-            type="button"
-            onClick={() => setType('TRANSFER')}
-            className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-              type === 'TRANSFER'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            转账
-          </button>
-          <button
-            type="button"
-            onClick={() => setType('REPAYMENT')}
-            className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-              type === 'REPAYMENT'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            还款
-          </button>
-        </div>
+        {/* Scrollable Form Body with Clean Floating Scrollbar */}
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 sm:py-5 modal-custom-scrollbar">
+          <form id="transaction-form" onSubmit={handleSubmit} className="space-y-4">
+            {/* Transaction Type Tabs */}
+            <div className="grid grid-cols-5 gap-1 p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setType('EXPENSE')}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                  type === 'EXPENSE'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                支出
+              </button>
+              <button
+                type="button"
+                onClick={() => setType('INCOME')}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                  type === 'INCOME'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                收入
+              </button>
+              <button
+                type="button"
+                onClick={() => setType('TRANSFER')}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                  type === 'TRANSFER'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                转账
+              </button>
+              <button
+                type="button"
+                onClick={() => setType('REPAYMENT')}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                  type === 'REPAYMENT'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                还款
+              </button>
+              <button
+                type="button"
+                onClick={() => setType('REFUND')}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                  type === 'REFUND'
+                    ? 'bg-rose-700 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                平账冲红
+              </button>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Dedicated Refund Callout & Link Picker */}
+            {type === 'REFUND' && (
+              <div className="p-3.5 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/50 space-y-2.5">
+                <div className="flex items-start gap-2.5">
+                  <RotateCcw className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <span className="font-bold text-rose-900 dark:text-rose-200">
+                      平账冲红功能 (支出退费冲账)
+                    </span>
+                    <p className="text-rose-700 dark:text-rose-300 mt-0.5 leading-relaxed">
+                      花出去的钱后续被退费时（例如之前花了100，过了许久被退回90），冲红冲减原支出并入账退回资金，不虚增收入，保持实际支出与账户余额绝对准确。
+                    </p>
+                  </div>
+                </div>
+
+                {/* Historical Expense Bill Picker */}
+                {refundableExpenses.length > 0 && (
+                  <div className="pt-2 border-t border-rose-200/60 dark:border-rose-900/40">
+                    <label className="block text-xs font-bold text-rose-900 dark:text-rose-200 mb-1">
+                      关联历史原支出账单 (选定后自动匹配分类商户与限额)
+                    </label>
+                    <select
+                      value={refundedTxId}
+                      onChange={(e) => {
+                        const chosenId = e.target.value;
+                        setRefundedTxId(chosenId);
+                        const chosen = refundableExpenses.find((t) => t.id === chosenId);
+                        if (chosen) {
+                          const already = chosen.refundedAmount || 0;
+                          const rem = Math.max(0, chosen.amount - already);
+                          setAmount(rem.toString());
+                          setCategory(chosen.category);
+                          if (chosen.merchant) setMerchant(chosen.merchant);
+                          if (chosen.accountId) setAccountId(chosen.accountId);
+                          setDescription(`退款平账: ${chosen.description || chosen.category} (冲红)`);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    >
+                      <option value="">-- 作为独立冲红单记账 (不强制关联具体单据) --</option>
+                      {refundableExpenses.map((t) => {
+                        const already = t.refundedAmount || 0;
+                        const rem = Math.max(0, t.amount - already);
+                        return (
+                          <option key={t.id} value={t.id}>
+                            [{t.date}] {t.description || t.category} · 原支出 ¥{t.amount.toFixed(2)} (已退: ¥{already.toFixed(2)} | 剩可退: ¥{rem.toFixed(2)})
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {selectedRefundExpense && (
+                      <div className="mt-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 flex items-center justify-between text-xs">
+                        <div className="font-mono text-slate-600 dark:text-slate-300">
+                          原单: <span className="font-bold text-slate-900 dark:text-white">¥{selectedRefundExpense.amount.toFixed(2)}</span>
+                          {' · '}
+                          剩余可冲红: <span className="font-bold text-emerald-600">¥{Math.max(0, selectedRefundExpense.amount - (selectedRefundExpense.refundedAmount || 0)).toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rem = Math.max(0, selectedRefundExpense.amount - (selectedRefundExpense.refundedAmount || 0));
+                              setAmount(rem.toString());
+                            }}
+                            className="px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[10px] font-bold"
+                          >
+                            全额退
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rem = Math.max(0, selectedRefundExpense.amount - (selectedRefundExpense.refundedAmount || 0));
+                              setAmount((Math.round(rem * 0.9 * 100) / 100).toString());
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-semibold"
+                          >
+                            退90%
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           {/* Currency Selector Bar */}
           <div className="relative" ref={currencyDropdownRef}>
             <div className="flex items-center justify-between">
@@ -639,7 +892,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   />
                 </div>
 
-                <div className="max-h-56 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-0.5">
+                <div className="max-h-56 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-0.5 modal-custom-scrollbar">
                   {filteredCurrencies.map((cur) => {
                     const isSelected = currency === cur.code;
                     const liveRate = forexRates.ratesToCny[cur.code] || cur.defaultRate;
@@ -829,10 +1082,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           )}
 
           {/* Account Selection (支付/扣款账户及目标账户) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${['TRANSFER', 'REPAYMENT', 'LEND_OUT', 'COLLECT_LENT', 'BORROW_IN', 'PAY_BORROW'].includes(type) ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
             <div>
               <label htmlFor="tx-select-account" className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
-                {type === 'INCOME'
+                {type === 'REFUND'
+                  ? '退款接收入账账户 (资金退回到哪里)'
+                  : type === 'INCOME'
                   ? '收款入账账户'
                   : type === 'TRANSFER' || type === 'REPAYMENT'
                   ? '支付/扣款转出账户'
@@ -1035,7 +1290,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-rose-100 dark:border-rose-900/40">
+                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-rose-100 dark:border-rose-900/40 modal-custom-scrollbar">
                         {filteredPaletteIcons.map((item) => {
                           const IconComp = item.icon;
                           const isPicked = predictedIcon === item.id;
@@ -1063,7 +1318,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
 
               {/* Expense Category Grid - All categories deletable and customizable */}
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 modal-custom-scrollbar">
                 {expenseCategories.map((c) => {
                   const isSelected = category === c.name;
                   return (
@@ -1241,7 +1496,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-100 dark:border-emerald-900/40 modal-custom-scrollbar">
                         {filteredPaletteIcons.map((item) => {
                           const IconComp = item.icon;
                           const isPicked = predictedIcon === item.id;
@@ -1269,7 +1524,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
 
               {/* Income Category Grid */}
-              <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 modal-custom-scrollbar">
                 {incomeCategories.map((c) => {
                   const isSelected = category === c.name;
                   return (
@@ -1379,7 +1634,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
 
               {/* Tags Badges with Delete support */}
-              <div className="flex items-center gap-1.5 flex-wrap max-h-24 overflow-y-auto p-0.5">
+              <div className="flex items-center gap-1.5 flex-wrap max-h-24 overflow-y-auto p-0.5 modal-custom-scrollbar">
                 {availableTags.map((t) => {
                   const isSelected = tag === t;
                   const isCustom = !DEFAULT_PRESET_TAGS.includes(t);
@@ -1416,37 +1671,95 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
-              备注说明 / 商家对手方
-            </label>
-            <input
-              id="tx-input-description"
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={isForeign ? `例如: 海外购物、Apple Store、Steam游戏、${currentCurrencyInfo.name}转账...` : "例如: 超市买菜、工作餐、房租转账..."}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:border-slate-400 focus:bg-white dark:focus:bg-slate-800"
-            />
+          {/* 归属账本项目关联 (方便统计单项目支出与收入、独立核算结余) */}
+          <div className="p-3 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <FolderKanban className="w-3.5 h-3.5 text-indigo-500" />
+                <span>归属账本项目 (专项支出/收入/结余统计)</span>
+              </label>
+              {projectId && (
+                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800/60">
+                  已关联专项
+                </span>
+              )}
+            </div>
+
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">-- 日常通用个人账目 (不归入特定项目) --</option>
+              {projects.map((proj) => (
+                <option key={proj.id} value={proj.id}>
+                  📁 [{proj.category}] {proj.name} {proj.budget ? `(预算: ¥${proj.budget})` : ''} {proj.status === 'COMPLETED' ? '【已结项】' : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Submit Button */}
-          <div className="pt-2">
-            <button
-              id="btn-submit-transaction"
-              type="submit"
-              className="w-full py-3.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all"
-            >
-              <Check className="w-4 h-4 text-emerald-400" />
-              <span>
-                {isForeign
-                  ? `确认入账 (原币 ${currentCurrencyInfo.symbol}${parseFloat(amount) || 0} ➔ 折合 ¥${calculatedCnyAmount.toFixed(2)})`
-                  : '确认记账并更新资产与额度'}
-              </span>
-            </button>
+          {/* Notes & Merchant Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="tx-input-description" className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
+                备注说明
+              </label>
+              <input
+                id="tx-input-description"
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={isForeign ? `例如: 海外购物、Apple Store、${currentCurrencyInfo.name}转账...` : "例如: 超市买菜、工作餐、房租转账..."}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-slate-800 transition-colors"
+              />
+            </div>
+            <div>
+              <label htmlFor="tx-input-merchant" className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">
+                商家 / 交易对手方 (选填)
+              </label>
+              <input
+                id="tx-input-merchant"
+                type="text"
+                value={merchant || counterparty}
+                onChange={(e) => {
+                  setMerchant(e.target.value);
+                  setCounterparty(e.target.value);
+                }}
+                placeholder="例如: 盒马鲜生、山姆会员店、星巴克..."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-slate-800 transition-colors"
+              />
+            </div>
           </div>
         </form>
       </div>
+
+      {/* Fixed Footer with Cancel & Submit Actions - Always visible regardless of scrolling */}
+      <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-900/95 backdrop-blur-md flex items-center justify-between gap-3 z-20">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium text-xs sm:text-sm transition-colors"
+        >
+          取消
+        </button>
+        <button
+          id="btn-submit-transaction"
+          type="submit"
+          form="transaction-form"
+          className="flex-1 py-2.5 sm:py-3 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] transition-all"
+        >
+          <Check className="w-4 h-4 text-emerald-400 dark:text-white" />
+          <span>
+            {isForeign
+              ? `确认入账 (${currentCurrencyInfo.symbol}${parseFloat(amount) || 0} ➔ 折合 ¥${calculatedCnyAmount.toFixed(2)})`
+              : isEditing
+              ? '保存修改并更新流水'
+              : '确认记账并更新资产与额度'}
+          </span>
+        </button>
+      </div>
     </div>
-  );
+  </div>
+);
 };

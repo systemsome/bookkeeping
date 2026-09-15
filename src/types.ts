@@ -66,6 +66,7 @@ export type TransactionType =
   | 'INCOME'      // 收入
   | 'TRANSFER'    // 账户转账
   | 'REPAYMENT'   // 还款 (信用卡/白条/借款)
+  | 'REFUND'      // 平账冲红 / 退费冲销 (支出退费、红字冲账)
   | 'LEND_OUT'    // 借出款项
   | 'COLLECT_LENT'// 收回借出款
   | 'BORROW_IN'   // 借入资金
@@ -94,7 +95,7 @@ export interface Transaction {
   exchangeRate?: number; // 记账汇率 (1 外币 = X 人民币)
   date: string; // YYYY-MM-DD
   time?: string; // HH:mm
-  accountId: string; // 扣款/入账/支出账户
+  accountId: string; // 扣款/入账/支出账户 (冲红退款时为接收退款的入账账户)
   targetAccountId?: string; // 转账/还款目标账户
   category: string; // 分类名，如 "餐饮美食", "工资薪酬", "还信用卡"
   subCategory?: string;
@@ -103,6 +104,20 @@ export interface Transaction {
   merchant?: string; // 商家/交易对手
   counterparty?: string; // 借还款人
   createdAt: string;
+
+  // 账本项目 (Ledger Project) 关联
+  projectId?: string; // 所属账本项目 ID (如 "proj-renovation-2026")
+  projectName?: string; // 所属账本项目名称 (如 "房屋精简装修")
+
+  // 平账冲红 (Red-ink Reversal & Refund Offset) 专用字段
+  isRefund?: boolean; // 是否为冲红退款单 (红字冲销)
+  refundedTxId?: string; // 冲红凭证关联的原支出账单 ID
+  refundedTxDescription?: string; // 关联的原支出账单标题/商户简要
+  refundedTxAmount?: number; // 关联的原支出账单金额 (如 100)
+  refundReason?: string; // 冲红原因 (如 "商家售后退费", "活动押金退还", "AA制平账", "记错冲销")
+  refundedAmount?: number; // 原账单上已被冲红退款的累计金额 (例如原花费100，被退回90，则此值为90)
+  refundStatus?: 'NONE' | 'PARTIAL' | 'FULL'; // 原支出账单的冲红状态：未退款 / 部分冲红 / 全额冲红
+  refundIds?: string[]; // 原支出账单关联的所有冲红凭证 ID 列表
 }
 
 export interface UserProfile {
@@ -133,10 +148,12 @@ export interface FinancialSummary {
   totalPayableDebts: number; // 借入待还金额
   totalLiabilities: number; // 全部借贷负债 = 信用卡已用 + 白条已用 + 借入待还
   
-  todayExpense: number; // 今日总支出
-  monthExpense: number; // 本月总支出
+  todayExpense: number; // 今日净支出 (已扣除今日冲红)
+  monthExpense: number; // 本月实际净支出 (原始支出 - 冲红退费)
+  monthGrossExpense: number; // 本月原始支出总额 (未冲红前)
+  monthRefund: number; // 本月累计冲红退费总额 (红字冲销款)
   monthIncome: number; // 本月总收入
-  monthSavings: number; // 本月结余
+  monthSavings: number; // 本月结余 (收入 - 净支出)
 }
 
 export interface WebDavConfig {
@@ -164,5 +181,44 @@ export interface BackupPackage {
   user: UserProfile;
   accounts: FinancialAccount[];
   transactions: Transaction[];
+  projects?: LedgerProject[];
   webDavConfig?: Partial<WebDavConfig>;
 }
+
+// ==========================================
+// 账本项目 (Ledger Project) 专项管理与统计类型
+// ==========================================
+
+export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+
+export interface LedgerProject {
+  id: string;
+  name: string; // 项目名称，如 "房屋装修", "日本秋季旅行", "独立开发副业"
+  description?: string; // 项目描述与目标
+  category: string; // 分类: "旅行度假" | "家装工程" | "副业经营" | "婚礼筹备" | "商务差旅" | "车辆维护" | "专项学习" | "其他"
+  icon?: string; // 图标名称或标识
+  color?: string; // 主题色 hex
+  budget?: number; // 专项预算金额 (元)
+  status: ProjectStatus; // 状态：进行中 / 已结项 / 归档
+  startDate?: string; // 开始日期 YYYY-MM-DD
+  endDate?: string; // 结束日期 YYYY-MM-DD
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProjectFinancialStats {
+  projectId: string;
+  totalIncome: number; // 单项目收入总额
+  grossExpense: number; // 单项目原始支出总额
+  refundAmount: number; // 单项目冲红退费总额
+  netExpense: number; // 单项目实际净支出 (grossExpense - refundAmount)
+  netBalance: number; // 单项目净结余 (totalIncome - netExpense)
+  budget?: number;
+  budgetRemaining?: number;
+  budgetUsagePercent: number; // 预算消耗比例 (0-100+)
+  transactionCount: number; // 账单总笔数
+  incomeCount: number;
+  expenseCount: number;
+  refundCount: number;
+}
+

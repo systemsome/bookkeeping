@@ -112,7 +112,7 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
   // Account lookup map
   const accountMap = useMemo(() => {
     const map = new Map<string, FinancialAccount>();
-    accounts.forEach((a) => map.set(a.id, a));
+    (accounts || []).forEach((a) => map.set(a.id, a));
     return map;
   }, [accounts]);
 
@@ -236,7 +236,7 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
   const handleInvertSelection = () => {
     setSelectedTxIds((prev) => {
       const next = new Set<string>();
-      filteredCandidates.forEach((t) => {
+      (filteredCandidates || []).forEach((t) => {
         if (!prev.has(t.id)) {
           next.add(t.id);
         }

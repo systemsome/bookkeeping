@@ -63,6 +63,17 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
     }
   }, [selectedTargetId, targetAcc]);
 
+  // Escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleFullRepay = () => {
     if (targetAcc) {
       const debt = targetAcc.usedCredit !== undefined ? targetAcc.usedCredit : targetAcc.balance || 0;
@@ -87,28 +98,41 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-7 shadow-2xl my-auto">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-hidden animate-in fade-in duration-200"
+    >
+      <div className="relative w-full max-w-lg bg-white border border-slate-200/80 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+        {/* Fixed Header */}
+        <div className="shrink-0 px-6 py-4 border-b border-slate-100 bg-white/95 backdrop-blur-md flex items-center justify-between z-20">
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
               <ReceiptText className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
                 信用卡与信贷快速还款
               </h2>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="关闭窗口 (Esc)"
+            title="关闭窗口 (Esc)"
             className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        {/* Scrollable Body */}
+        <form
+          id="repayment-form"
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto modal-custom-scrollbar px-6 py-5 space-y-4"
+        >
           {/* Target Account to repay (待还款信用卡/白条/借款) */}
           <div>
             <label htmlFor="repay-target-select" className="block text-xs font-medium text-slate-600 mb-1.5">
@@ -209,18 +233,27 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
               </div>
             </div>
           )}
-
-          <div className="pt-2">
-            <button
-              id="btn-confirm-repayment"
-              type="submit"
-              className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>确认还款并恢复可用额度</span>
-            </button>
-          </div>
         </form>
+
+        {/* Fixed Footer */}
+        <div className="shrink-0 px-6 py-3.5 border-t border-slate-100 bg-slate-50/95 backdrop-blur-md flex items-center justify-end gap-2.5 z-20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            取消
+          </button>
+          <button
+            id="btn-confirm-repayment"
+            type="submit"
+            form="repayment-form"
+            className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-sm active:scale-[0.98] transition-all"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>确认还款并恢复可用额度</span>
+          </button>
+        </div>
       </div>
     </div>
   );
