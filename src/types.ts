@@ -193,6 +193,7 @@ export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 
 export interface LedgerProject {
   id: string;
+  userId?: string; // 归属用户唯一ID，保障账号多端多域名的专属绑定
   name: string; // 项目名称，如 "房屋装修", "日本秋季旅行", "独立开发副业"
   description?: string; // 项目描述与目标
   category: string; // 分类: "旅行度假" | "家装工程" | "副业经营" | "婚礼筹备" | "商务差旅" | "车辆维护" | "专项学习" | "其他"
@@ -221,4 +222,6 @@ export interface ProjectFinancialStats {
   expenseCount: number;
   refundCount: number;
 }
+
+export type CloudSyncStatus = 'syncing' | 'synced' | 'error' | 'offline';
 

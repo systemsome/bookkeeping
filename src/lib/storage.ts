@@ -1,6 +1,9 @@
 import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats } from '../types';
 import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './constants';
 import { sortTransactions } from './formatters';
+import { mergeAccounts, mergeTransactions, mergeProjects } from './backup';
+import { getStoredCloudflareConfig, saveCloudflareConfig, syncWithCloudflare } from './cloudflareSync';
+import { getStoredWebDavConfig, saveWebDavConfig, uploadToWebDav } from './webdav';
 
 const STORAGE_KEYS = {
   USERS: 'asset_manager_users_v1',
@@ -66,18 +69,144 @@ export const getCurrentUser = (): UserProfile | null => {
   return users.find((u) => u.id === uid) || null;
 };
 
-// Debounce timer for auto-syncing with server
+// Debounce timer for auto-syncing with server and cloud storage
 let syncTimeout: any = null;
-export const triggerAutoServerSync = (userId: string) => {
+export const triggerAutoServerSync = (userId: string, immediate = false) => {
   if (!userId) return;
   if (syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(() => {
+
+  const executeSync = async () => {
     const accounts = getAccounts(userId);
     const transactions = getTransactions(userId);
     const projects = getProjects(userId);
-    const user = getCurrentUser();
-    syncDataToServer(userId, accounts, transactions, projects, user || undefined).catch(() => {});
-  }, 1000);
+    const user: UserProfile = getCurrentUser() || getStoredUsers().find((u) => u.id === userId) || {
+      id: userId,
+      username: 'user',
+      displayName: 'User',
+      passwordHash: '',
+      autoLockMinutes: 15,
+      privacyMode: false,
+      lastLoginTime: new Date().toISOString(),
+    };
+
+    // 1. 同步至 Express / NAS 服务端持久化文件存储
+    try {
+      await syncDataToServer(userId, accounts, transactions, projects, user);
+    } catch (e) {
+      console.warn('Server sync attempt:', e);
+    }
+
+    // 2. 如果开启了 Cloudflare 自动同步，静默推送到云端 D1
+    try {
+      const cfConfig = getStoredCloudflareConfig(userId);
+      if (cfConfig.enabled && cfConfig.autoSync && cfConfig.apiUrl?.trim()) {
+        const cfRes = await syncWithCloudflare(
+          cfConfig,
+          user,
+          accounts,
+          transactions,
+          projects
+        );
+        if (cfRes.success) {
+          saveCloudflareConfig(userId, { ...cfConfig, lastSyncTime: cfRes.timestamp, status: 'synced' });
+        }
+      }
+    } catch {
+      // 静默处理边缘同步异常
+    }
+
+    // 3. 如果开启了 WebDAV 实时自动备份，静默备份到 WebDAV 网盘
+    try {
+      const webDavConfig = getStoredWebDavConfig(userId);
+      if (webDavConfig.enabled && webDavConfig.autoSyncOnSave && webDavConfig.serverUrl?.trim()) {
+        const wdRes = await uploadToWebDav(
+          webDavConfig,
+          user,
+          accounts,
+          transactions,
+          projects
+        );
+        if (wdRes.success) {
+          saveWebDavConfig(userId, { ...webDavConfig, lastSyncTime: wdRes.timestamp });
+        }
+      }
+    } catch {
+      // 静默处理 WebDAV 异常
+    }
+  };
+
+  if (immediate) {
+    executeSync();
+  } else {
+    syncTimeout = setTimeout(executeSync, 400);
+  }
+};
+
+/**
+ * 手动触发全量双向同步 (拉取服务端无损合并 + 回写本地全部资产/流水/项目 + 联动 Cloudflare D1 / WebDAV)
+ */
+export const executeFullCloudSync = async (
+  userId: string
+): Promise<{ success: boolean; message?: string; timestamp?: string }> => {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { success: false, message: '网络已断开，当前处于离线模式' };
+  }
+
+  const user: UserProfile = getCurrentUser() || getStoredUsers().find((u) => u.id === userId) || {
+    id: userId,
+    username: 'user',
+    displayName: 'User',
+    passwordHash: '',
+    autoLockMinutes: 15,
+    privacyMode: false,
+    lastLoginTime: new Date().toISOString(),
+  };
+
+  try {
+    // 1. 先从服务端拉取并无损合并两端数据
+    const fetchRes = await fetchLatestDataFromServer(userId);
+    const accounts = fetchRes.success && fetchRes.accounts ? fetchRes.accounts : getAccounts(userId);
+    const transactions = fetchRes.success && fetchRes.transactions ? fetchRes.transactions : getTransactions(userId);
+    const projects = fetchRes.success && fetchRes.projects ? fetchRes.projects : getProjects(userId);
+
+    // 2. 将合并后的全量数据持久化推送至服务端/NAS
+    const serverRes = await syncDataToServer(userId, accounts, transactions, projects, user);
+
+    const nowIso = new Date().toISOString();
+
+    // 3. 联动 Cloudflare D1
+    try {
+      const cfConfig = getStoredCloudflareConfig(userId);
+      if (cfConfig.enabled && cfConfig.apiUrl?.trim()) {
+        const cfRes = await syncWithCloudflare(cfConfig, user, accounts, transactions, projects);
+        if (cfRes.success) {
+          saveCloudflareConfig(userId, { ...cfConfig, lastSyncTime: cfRes.timestamp, status: 'synced' });
+        }
+      }
+    } catch {
+      // 静默处理异常
+    }
+
+    // 4. 联动 WebDAV
+    try {
+      const webDavConfig = getStoredWebDavConfig(userId);
+      if (webDavConfig.enabled && webDavConfig.serverUrl?.trim()) {
+        const wdRes = await uploadToWebDav(webDavConfig, user, accounts, transactions, projects);
+        if (wdRes.success) {
+          saveWebDavConfig(userId, { ...webDavConfig, lastSyncTime: wdRes.timestamp });
+        }
+      }
+    } catch {
+      // 静默处理异常
+    }
+
+    if (serverRes.success) {
+      return { success: true, message: '全量云端数据已成功双向同步', timestamp: nowIso };
+    }
+    return { success: false, message: serverRes.message || '服务端同步返回错误' };
+  } catch (e: any) {
+    return { success: false, message: e.message || '网络连接异常，同步中断' };
+  }
 };
 
 export const updateCurrentUser = (updates: Partial<UserProfile>): UserProfile | null => {
@@ -430,31 +559,32 @@ export const fetchLatestDataFromServer = async (
     if (!res.ok) return { success: false };
     const data = await res.json();
     if (data && data.success) {
-      // If server returned 'No synced data yet' or empty, but client has existing local items, push local to server automatically!
-      if (data.message === 'No synced data yet' || (!data.accounts?.length && !data.transactions?.length && !data.projects?.length)) {
-        const localAccs = getAccounts(userId);
-        const localTxs = getTransactions(userId);
-        const localProjs = getProjects(userId);
-        if (localAccs.length > 0 || localTxs.length > 0 || localProjs.length > 0) {
-          syncDataToServer(userId, localAccs, localTxs, localProjs, getCurrentUser() || undefined).catch(() => {});
-          return {
-            success: true,
-            accounts: localAccs,
-            transactions: localTxs,
-            projects: localProjs,
-          };
-        }
+      const localAccs = getAccounts(userId);
+      const localTxs = getTransactions(userId);
+      const localProjs = getProjects(userId);
+
+      // 双向智能合并，防止本地刚创建的项目被服务端空数组覆盖冲刷
+      const serverAccs = Array.isArray(data.accounts) ? data.accounts : [];
+      const serverTxs = Array.isArray(data.transactions) ? data.transactions : [];
+      const serverProjs = Array.isArray(data.projects) ? data.projects : [];
+
+      const finalAccs = mergeAccounts(localAccs, serverAccs);
+      const finalTxs = mergeTransactions(localTxs, serverTxs);
+      const finalProjs = mergeProjects(localProjs, serverProjs);
+
+      localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(finalAccs));
+      localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(finalTxs));
+      localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(finalProjs));
+
+      // 若本地有云端尚无的新项目或数据，立即回写同步至服务端，确保云端永远保有全量
+      if (
+        finalProjs.length > serverProjs.length ||
+        finalAccs.length > serverAccs.length ||
+        finalTxs.length > serverTxs.length
+      ) {
+        syncDataToServer(userId, finalAccs, finalTxs, finalProjs, getCurrentUser() || undefined).catch(() => {});
       }
 
-      if (Array.isArray(data.accounts)) {
-        localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(data.accounts));
-      }
-      if (Array.isArray(data.transactions)) {
-        localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(data.transactions));
-      }
-      if (Array.isArray(data.projects)) {
-        localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(data.projects));
-      }
       if (data.user) {
         const users = getStoredUsers();
         const idx = users.findIndex((u) => u.id === userId || u.username.toLowerCase() === data.user.username?.toLowerCase());
@@ -467,9 +597,9 @@ export const fetchLatestDataFromServer = async (
       }
       return {
         success: true,
-        accounts: data.accounts,
-        transactions: data.transactions,
-        projects: data.projects,
+        accounts: finalAccs,
+        transactions: finalTxs,
+        projects: finalProjs,
         user: data.user,
       };
     }

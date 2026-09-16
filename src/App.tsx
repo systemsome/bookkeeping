@@ -23,6 +23,8 @@ import {
   fetchLatestDataFromServer,
   getProjects,
   saveProjects,
+  triggerAutoServerSync,
+  executeFullCloudSync,
 } from './lib/storage';
 import {
   UserProfile,
@@ -32,6 +34,7 @@ import {
   AccountCategory,
   TransactionType,
   LedgerProject,
+  CloudSyncStatus,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
@@ -137,6 +140,10 @@ export default function App() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Real-time Cloud Sync Status (连接中、已同步、同步失败、离线模式)
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('synced');
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -153,15 +160,105 @@ export default function App() {
     setTransactions(txs);
     setProjects(projs);
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+      return;
+    }
+
+    setSyncStatus('syncing');
+
     // Background fetch from server / NAS to catch multi-device updates seamlessly
     fetchLatestDataFromServer(uid).then((res) => {
       if (res.success) {
         if (res.accounts) setAccounts(res.accounts);
         if (res.transactions) setTransactions(res.transactions);
         if (res.projects) setProjects(res.projects);
+        setSyncStatus('synced');
+        setLastSyncTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
+      } else {
+        setSyncStatus('error');
       }
-    }).catch(() => {});
+    }).catch(() => {
+      setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error');
+    });
   }, []);
+
+  // 手动触发全量双向同步
+  const handleTriggerFullSync = useCallback(async () => {
+    if (!currentUser) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+      showToast('当前处于离线模式，数据已暂存本地，请检查网络连接');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    showToast('正在触发全量云端双向同步...');
+
+    try {
+      const res = await executeFullCloudSync(currentUser.id);
+      if (res.success) {
+        // 重新拉取同步并合并后的本地完整数据集
+        const accs = getAccounts(currentUser.id);
+        const txs = getTransactions(currentUser.id);
+        const projs = getProjects(currentUser.id);
+        setAccounts(accs);
+        setTransactions(txs);
+        setProjects(projs);
+        setSyncStatus('synced');
+        const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        setLastSyncTime(timeStr);
+        showToast(`全量云端同步完成（${timeStr}）`);
+      } else {
+        setSyncStatus('error');
+        showToast(res.message || '云端同步失败，请检查网络或后端服务');
+      }
+    } catch {
+      setSyncStatus('error');
+      showToast('云端同步异常，请稍后重试');
+    }
+  }, [currentUser, showToast]);
+
+  // 监听网络状态变更（在线 / 离线自动切换）
+  useEffect(() => {
+    const handleOnline = () => {
+      setSyncStatus('syncing');
+      showToast('网络已重新连接，正在自动同步云端数据...');
+      if (currentUser) {
+        executeFullCloudSync(currentUser.id).then((res) => {
+          if (res.success) {
+            const accs = getAccounts(currentUser.id);
+            const txs = getTransactions(currentUser.id);
+            const projs = getProjects(currentUser.id);
+            setAccounts(accs);
+            setTransactions(txs);
+            setProjects(projs);
+            setSyncStatus('synced');
+            setLastSyncTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
+          } else {
+            setSyncStatus('error');
+          }
+        }).catch(() => setSyncStatus('error'));
+      }
+    };
+
+    const handleOffline = () => {
+      setSyncStatus('offline');
+      showToast('网络连接已断开，已无缝切换至离线模式（数据安全保存在本地）');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [currentUser, showToast]);
 
   // Restore/Merge data from Cloudflare / WebDAV / JSON Backup
   const handleRestoreData = useCallback(
@@ -339,22 +436,25 @@ export default function App() {
     if (existingId) {
       updatedProjects = projects.map((p) =>
         p.id === existingId
-          ? { ...p, ...projectData, updatedAt: now }
+          ? { ...p, ...projectData, userId: currentUser.id, updatedAt: now }
           : p
       );
-      showToast(`项目「${projectData.name}」已更新`);
+      showToast(`项目「${projectData.name}」已更新并同步到账号`);
     } else {
       const newProj: LedgerProject = {
         ...projectData,
         id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userId: currentUser.id, // 明确绑定当前用户账号ID
         createdAt: now,
         updatedAt: now,
       };
       updatedProjects = [newProj, ...projects];
-      showToast(`账本项目「${projectData.name}」创建成功`);
+      showToast(`账本项目「${projectData.name}」已创建并同步至云端账号`);
     }
     setProjects(updatedProjects);
     saveProjects(currentUser.id, updatedProjects);
+    // 立即向服务端与云端发起全量持久化同步，无需等待
+    triggerAutoServerSync(currentUser.id, true);
     setIsProjectEditorOpen(false);
     setEditingProject(null);
   };
@@ -365,16 +465,18 @@ export default function App() {
     const updated = projects.filter((p) => p.id !== projectId);
     setProjects(updated);
     saveProjects(currentUser.id, updated);
-    showToast(`项目「${target?.name || '未命名'}」已删除`);
+    triggerAutoServerSync(currentUser.id, true);
+    showToast(`项目「${target?.name || '未命名'}」已删除并同步云端`);
   };
 
   const handleDirectSaveProject = (project: LedgerProject) => {
     if (!currentUser) return;
     const now = new Date().toISOString();
-    const updated = projects.map((p) => (p.id === project.id ? { ...project, updatedAt: now } : p));
+    const updated = projects.map((p) => (p.id === project.id ? { ...project, userId: currentUser.id, updatedAt: now } : p));
     setProjects(updated);
     saveProjects(currentUser.id, updated);
-    showToast(`项目「${project.name}」状态已更新`);
+    triggerAutoServerSync(currentUser.id, true);
+    showToast(`项目「${project.name}」状态已更新并同步云端`);
   };
 
   // Transaction submission (create or update)
@@ -647,6 +749,9 @@ export default function App() {
         onLogout={handleLogout}
         onOpenSecuritySettings={() => setIsSecurityModalOpen(true)}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        syncStatus={syncStatus}
+        lastSyncTime={lastSyncTime}
+        onTriggerFullSync={handleTriggerFullSync}
       />
 
       {/* Main Content Area */}
@@ -832,6 +937,12 @@ export default function App() {
               transactions={transactions || []}
               accounts={accounts || []}
               privacyMode={privacyMode}
+              currentUser={currentUser}
+              onTriggerSync={async () => {
+                if (!currentUser) return;
+                triggerAutoServerSync(currentUser.id, true);
+                showToast('已同步最新项目与流水到云端账号');
+              }}
               onSaveProject={handleDirectSaveProject}
               onDeleteProject={handleDeleteProject}
               onOpenNewTx={(type, accId, date, projId) =>
@@ -944,6 +1055,7 @@ export default function App() {
       {isProjectEditorOpen && (
         <ProjectEditorModal
           initialProject={editingProject}
+          currentUser={currentUser}
           onClose={() => {
             setIsProjectEditorOpen(false);
             setEditingProject(null);

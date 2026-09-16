@@ -13,10 +13,11 @@ import {
   Archive,
   Palette,
 } from 'lucide-react';
-import { LedgerProject, ProjectStatus } from '../types';
+import { LedgerProject, ProjectStatus, UserProfile } from '../types';
 
 interface ProjectEditorModalProps {
   initialProject?: LedgerProject | null;
+  currentUser?: UserProfile | null;
   onClose: () => void;
   onSave?: (project: LedgerProject) => void;
   onSubmit?: (
@@ -54,6 +55,7 @@ const PRESET_COLORS = [
 
 export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
   initialProject,
+  currentUser,
   onClose,
   onSave,
   onSubmit,
@@ -118,11 +120,20 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
               <FolderKanban className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                {isEditing ? '编辑账本项目' : '新增账本项目'}
-              </h3>
-              <p className="text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {isEditing ? '编辑账本项目' : '新增账本项目'}
+                </h3>
+                {currentUser && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
+                    <Check className="w-3 h-3 stroke-[3]" />
+                    账号云端同步
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
                 用于专项核算装修、旅行、副业等特定事项的独立收支与结余
+                {currentUser ? `，将与账号「${currentUser.displayName || currentUser.username}」自动实时云端同步保存` : ''}
               </p>
             </div>
           </div>
@@ -310,8 +321,8 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
                 type="submit"
                 className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5"
               >
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>{isEditing ? '保存修改' : '立即创建项目'}</span>
+                <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                <span>{isEditing ? '保存修改并同步云端' : '立即创建并同步到账号'}</span>
               </button>
             </div>
           </div>

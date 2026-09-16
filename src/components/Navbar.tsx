@@ -22,8 +22,12 @@ import {
   Github,
   ExternalLink,
   FolderKanban,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  WifiOff,
 } from 'lucide-react';
-import { UserProfile, FinancialSummary } from '../types';
+import { UserProfile, FinancialSummary, CloudSyncStatus } from '../types';
 import { formatCurrency } from '../lib/formatters';
 import { ThemeMode } from '../lib/theme';
 
@@ -41,6 +45,9 @@ interface NavbarProps {
   onLogout: () => void;
   onOpenSecuritySettings: () => void;
   onOpenSyncModal: () => void;
+  syncStatus?: CloudSyncStatus;
+  lastSyncTime?: string;
+  onTriggerFullSync?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -57,6 +64,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onOpenSecuritySettings,
   onOpenSyncModal,
+  syncStatus = 'synced',
+  lastSyncTime,
+  onTriggerFullSync,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
@@ -164,6 +174,55 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Tools */}
           <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Real-time Cloud Sync Status Indicator & Manual Trigger (仅图标纯净按钮，与右侧按钮尺寸、样式完全对齐一致) */}
+            <button
+              id="btn-cloud-sync-status"
+              onClick={onTriggerFullSync}
+              disabled={syncStatus === 'syncing'}
+              title={
+                syncStatus === 'syncing'
+                  ? '云端数据同步中，正在传输...'
+                  : syncStatus === 'synced'
+                  ? `云端已同步${lastSyncTime ? ` (${lastSyncTime})` : ''} · 点击立即手动触发全量同步`
+                  : syncStatus === 'error'
+                  ? '云端同步失败，连接异常 · 点击立即重新全量同步'
+                  : '当前处于离线模式（数据保存在本地，点击尝试重连云端）'
+              }
+              aria-label="手动全量云端同步"
+              className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
+            >
+              <RefreshCw
+                className={`w-4 h-4 transition-transform duration-300 ${
+                  syncStatus === 'syncing'
+                    ? 'animate-spin text-indigo-600 dark:text-indigo-400'
+                    : syncStatus === 'error'
+                    ? 'text-rose-500 group-hover:rotate-180'
+                    : syncStatus === 'offline'
+                    ? 'text-slate-400'
+                    : 'text-slate-600 dark:text-slate-300 group-hover:rotate-180 group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
+                }`}
+              />
+
+              {/* Status indicator dot */}
+              {syncStatus === 'syncing' && (
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+              )}
+              {syncStatus === 'synced' && (
+                <span className="absolute top-1.5 right-1.5 flex h-1.5 w-1.5">
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                </span>
+              )}
+              {syncStatus === 'error' && (
+                <span className="absolute top-1.5 right-1.5 flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500" />
+                </span>
+              )}
+              {syncStatus === 'offline' && (
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-slate-400" />
+              )}
+            </button>
+
             {/* Theme Switcher Button (明亮 / 暗黑 / 跟随系统) */}
             <div className="relative">
               <button

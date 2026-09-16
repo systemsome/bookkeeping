@@ -27,6 +27,9 @@ import {
   PieChart as PieChartIcon,
   X,
   Wallet,
+  Cloud,
+  RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   LedgerProject,
@@ -35,6 +38,7 @@ import {
   ProjectFinancialStats,
   ProjectStatus,
   TransactionType,
+  UserProfile,
 } from '../types';
 import { calculateProjectStats } from '../lib/storage';
 import { formatCurrency } from '../lib/formatters';
@@ -45,6 +49,7 @@ interface ProjectsDashboardProps {
   transactions?: Transaction[];
   accounts?: FinancialAccount[];
   privacyMode?: boolean;
+  currentUser?: UserProfile | null;
   onSaveProject?: (project: LedgerProject) => void;
   onDeleteProject?: (projectId: string) => void;
   onOpenNewTx?: (type?: TransactionType, accountId?: string, defaultDate?: string, projectId?: string) => void;
@@ -54,6 +59,7 @@ interface ProjectsDashboardProps {
   onOpenProjectEditor?: (project?: LedgerProject | null) => void;
   onCreateProject?: () => void;
   onEditProject?: (project: LedgerProject) => void;
+  onTriggerSync?: () => Promise<void>;
 }
 
 export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
@@ -61,6 +67,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   transactions = [],
   accounts = [],
   privacyMode = false,
+  currentUser,
   onSaveProject,
   onDeleteProject,
   onOpenNewTx,
@@ -70,7 +77,21 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   onOpenProjectEditor,
   onCreateProject,
   onEditProject,
+  onTriggerSync,
 }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      if (onTriggerSync) {
+        await onTriggerSync();
+      }
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
   // Safe helper to open project editor modal
   const handleOpenEditor = (proj?: LedgerProject | null) => {
     if (onOpenProjectEditor) {
@@ -814,13 +835,19 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               <FolderKanban className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                   账本项目管理
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
                   共 {projects.length} 个专项项目
                 </span>
+                {currentUser && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>已与账号「{currentUser.displayName || currentUser.username}」实时同步</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                 用于装修、旅行、副业、婚礼等特定事项的独立核算，方便统计单项目支出、收入、冲红与净结余
@@ -828,13 +855,27 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => handleOpenEditor(null)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
-            <span>新增账本项目</span>
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {onTriggerSync && (
+              <button
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                title="立即同步最新项目与流水到云端服务器"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
+                <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => handleOpenEditor(null)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
+              <span>新增账本项目</span>
+            </button>
+          </div>
         </div>
 
         {/* Aggregate Stats Across All Projects */}
