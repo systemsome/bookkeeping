@@ -1,4 +1,4 @@
-import { WebDavConfig, BackupPackage, UserProfile, FinancialAccount, Transaction } from '../types';
+import { WebDavConfig, BackupPackage, UserProfile, FinancialAccount, Transaction, LedgerProject } from '../types';
 import { APP_BACKUP_VERSION } from './backup';
 
 const WEBDAV_CONFIG_STORAGE_KEY = 'finance_webdav_config_';
@@ -111,7 +111,8 @@ export const uploadToWebDav = async (
   config: WebDavConfig,
   user: UserProfile,
   accounts: FinancialAccount[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  projects: LedgerProject[] = []
 ): Promise<{ success: boolean; message: string; timestamp?: string }> => {
   if (!config.enabled || !config.serverUrl || !config.username || !config.password) {
     return { success: false, message: 'WebDAV 配置未启用或信息不完整' };
@@ -124,6 +125,7 @@ export const uploadToWebDav = async (
     user,
     accounts,
     transactions,
+    projects: projects || [],
   };
 
   try {

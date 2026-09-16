@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS user_sync (
   user_data TEXT,
   accounts_data TEXT,
   transactions_data TEXT,
+  projects_data TEXT,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

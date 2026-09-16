@@ -44,12 +44,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           user_data TEXT,
           accounts_data TEXT,
           transactions_data TEXT,
+          projects_data TEXT,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `).catch(() => {});
 
       const result = await env.DB.prepare(
-        'SELECT user_data, accounts_data, transactions_data, updated_at FROM user_sync WHERE user_id = ?'
+        'SELECT user_data, accounts_data, transactions_data, projects_data, updated_at FROM user_sync WHERE user_id = ?'
       )
         .bind(userId)
         .first();
@@ -61,6 +62,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             user: JSON.parse(result.user_data || '{}'),
             accounts: JSON.parse(result.accounts_data || '[]'),
             transactions: JSON.parse(result.transactions_data || '[]'),
+            projects: JSON.parse(result.projects_data || '[]'),
             lastUpdated: result.updated_at,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -83,6 +85,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         success: true,
         accounts: [],
         transactions: [],
+        projects: [],
         message: '暂无云端数据记录',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -104,7 +107,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body: any = await request.json();
-    const { userId, user, accounts, transactions, clientTimestamp } = body;
+    const { userId, user, accounts, transactions, projects, clientTimestamp } = body;
 
     if (!userId) {
       return new Response(JSON.stringify({ error: 'userId 参数必填' }), {
@@ -115,6 +118,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const accountsJson = JSON.stringify(accounts || []);
     const transactionsJson = JSON.stringify(transactions || []);
+    const projectsJson = JSON.stringify(projects || []);
     const userJson = JSON.stringify(user || {});
     const nowIso = new Date().toISOString();
 
@@ -126,20 +130,22 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           user_data TEXT,
           accounts_data TEXT,
           transactions_data TEXT,
+          projects_data TEXT,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `).catch(() => {});
 
       await env.DB.prepare(`
-        INSERT INTO user_sync (user_id, user_data, accounts_data, transactions_data, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO user_sync (user_id, user_data, accounts_data, transactions_data, projects_data, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
           user_data = excluded.user_data,
           accounts_data = excluded.accounts_data,
           transactions_data = excluded.transactions_data,
+          projects_data = excluded.projects_data,
           updated_at = excluded.updated_at
       `)
-        .bind(userId, userJson, accountsJson, transactionsJson, nowIso)
+        .bind(userId, userJson, accountsJson, transactionsJson, projectsJson, nowIso)
         .run();
     }
 
@@ -152,6 +158,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           user,
           accounts,
           transactions,
+          projects,
           lastUpdated: nowIso,
         })
       );
@@ -163,6 +170,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         message: '数据已成功同步至 Cloudflare D1 云数据库',
         accounts,
         transactions,
+        projects,
         updatedAt: nowIso,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

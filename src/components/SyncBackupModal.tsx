@@ -18,8 +18,8 @@ import {
   FolderSync,
   HelpCircle,
 } from 'lucide-react';
-import { UserProfile, FinancialAccount, Transaction, WebDavConfig, CloudflareSyncConfig, BackupPackage } from '../types';
-import { exportDataToJsonFile, parseBackupJson, mergeAccounts, mergeTransactions } from '../lib/backup';
+import { UserProfile, FinancialAccount, Transaction, LedgerProject, WebDavConfig, CloudflareSyncConfig, BackupPackage } from '../types';
+import { exportDataToJsonFile, parseBackupJson, mergeAccounts, mergeTransactions, mergeProjects } from '../lib/backup';
 import {
   getStoredWebDavConfig,
   saveWebDavConfig,
@@ -39,8 +39,9 @@ interface SyncBackupModalProps {
   currentUser: UserProfile;
   accounts: FinancialAccount[];
   transactions: Transaction[];
+  projects?: LedgerProject[];
   onClose: () => void;
-  onRestoreData: (newAccounts: FinancialAccount[], newTransactions: Transaction[], isMerge: boolean) => void;
+  onRestoreData: (newAccounts: FinancialAccount[], newTransactions: Transaction[], isMerge: boolean, newProjects?: LedgerProject[]) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -48,6 +49,7 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
   currentUser,
   accounts,
   transactions,
+  projects = [],
   onClose,
   onRestoreData,
   onShowToast,
@@ -99,14 +101,14 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
   const handleSyncCloudflare = async () => {
     setCfSyncing(true);
     setCfTestResult(null);
-    const res = await syncWithCloudflare(cfConfig, currentUser, accounts, transactions);
+    const res = await syncWithCloudflare(cfConfig, currentUser, accounts, transactions, projects);
     setCfSyncing(false);
     if (res.success) {
       const updated = { ...cfConfig, lastSyncTime: res.timestamp, status: 'synced' as const };
       handleSaveCfConfig(updated);
       onShowToast('✨ ' + res.message);
       if (res.mergedAccounts && res.mergedTransactions) {
-        onRestoreData(res.mergedAccounts, res.mergedTransactions, true);
+        onRestoreData(res.mergedAccounts, res.mergedTransactions, true, res.mergedProjects);
       }
     } else {
       setCfTestResult({ success: false, message: res.message });
@@ -127,7 +129,7 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
   const handleUploadWebDav = async () => {
     setWebDavSyncing(true);
     setWebDavResult(null);
-    const res = await uploadToWebDav(webDavConfig, currentUser, accounts, transactions);
+    const res = await uploadToWebDav(webDavConfig, currentUser, accounts, transactions, projects);
     setWebDavSyncing(false);
     if (res.success) {
       const updated = { ...webDavConfig, lastSyncTime: res.timestamp };
@@ -147,8 +149,11 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
     const res = await downloadFromWebDav(webDavConfig);
     setWebDavDownloading(false);
     if (res.success && res.data) {
-      onRestoreData(res.data.accounts, res.data.transactions, isMerge);
-      setWebDavResult({ success: true, message: `成功同步恢复 ${res.data.accounts.length} 个账户和 ${res.data.transactions.length} 条流水` });
+      onRestoreData(res.data.accounts, res.data.transactions, isMerge, res.data.projects);
+      setWebDavResult({
+        success: true,
+        message: `成功同步恢复 ${res.data.accounts.length} 个账户、${res.data.transactions.length} 条流水以及 ${res.data.projects?.length || 0} 个项目`,
+      });
       onShowToast('✨ WebDAV 数据恢复成功！');
     } else {
       setWebDavResult({ success: false, message: res.message });
@@ -179,8 +184,8 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
   // Apply JSON Restore
   const handleApplyJsonRestore = (isMerge: boolean) => {
     if (!importedBackup) return;
-    onRestoreData(importedBackup.accounts, importedBackup.transactions, isMerge);
-    onShowToast(`✨ 成功${isMerge ? '合并' : '覆盖'}导入 ${importedBackup.accounts.length} 个账户，${importedBackup.transactions.length} 条记账流水！`);
+    onRestoreData(importedBackup.accounts, importedBackup.transactions, isMerge, importedBackup.projects);
+    onShowToast(`✨ 成功${isMerge ? '合并' : '覆盖'}导入 ${importedBackup.accounts.length} 个账户，${importedBackup.transactions.length} 条记账流水${importedBackup.projects?.length ? `，${importedBackup.projects.length} 个项目` : ''}！`);
     onClose();
   };
 
@@ -541,7 +546,7 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
 
                   <button
                     onClick={() => {
-                      exportDataToJsonFile(currentUser, accounts, transactions, webDavConfig);
+                      exportDataToJsonFile(currentUser, accounts, transactions, projects, webDavConfig);
                       onShowToast('✨ 备份文件已成功生成并开始下载！');
                     }}
                     className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-xs active:scale-95 transition-all flex items-center gap-1.5"
@@ -551,9 +556,10 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
                   </button>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs text-slate-500 pt-2 border-t border-slate-200/60">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-2 border-t border-slate-200/60">
                   <span>有效资产卡片: <strong>{accounts.length}</strong></span>
                   <span>记账流水条数: <strong>{transactions.length}</strong></span>
+                  <span>专项账本: <strong>{projects.length}</strong></span>
                   <span>格式: 标准 UTF-8 JSON</span>
                 </div>
               </div>
@@ -588,7 +594,7 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
                       <span className="text-[11px] text-purple-700">导出时间: {new Date(importedBackup.exportedAt).toLocaleString()}</span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-purple-900">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-purple-900">
                       <div className="bg-white p-2 rounded-lg border border-purple-100">
                         <span className="text-slate-500 text-[11px] block">备份用户</span>
                         <strong className="truncate block">{importedBackup.user?.displayName || '默认'}</strong>
@@ -600,6 +606,10 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
                       <div className="bg-white p-2 rounded-lg border border-purple-100">
                         <span className="text-slate-500 text-[11px] block">包含记账流水</span>
                         <strong>{importedBackup.transactions.length} 笔</strong>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-purple-100">
+                        <span className="text-slate-500 text-[11px] block">包含专项账本</span>
+                        <strong>{importedBackup.projects?.length || 0} 个</strong>
                       </div>
                     </div>
 

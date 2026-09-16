@@ -1,4 +1,4 @@
-import { CloudflareSyncConfig, UserProfile, FinancialAccount, Transaction, BackupPackage } from '../types';
+import { CloudflareSyncConfig, UserProfile, FinancialAccount, Transaction, LedgerProject, BackupPackage } from '../types';
 
 const CF_CONFIG_STORAGE_KEY = 'finance_cf_sync_config_';
 
@@ -92,12 +92,14 @@ export const syncWithCloudflare = async (
   config: CloudflareSyncConfig,
   user: UserProfile,
   accounts: FinancialAccount[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  projects: LedgerProject[] = []
 ): Promise<{
   success: boolean;
   message: string;
   mergedAccounts?: FinancialAccount[];
   mergedTransactions?: Transaction[];
+  mergedProjects?: LedgerProject[];
   timestamp?: string;
 }> => {
   try {
@@ -107,6 +109,7 @@ export const syncWithCloudflare = async (
       user,
       accounts,
       transactions,
+      projects: projects || [],
       clientTimestamp: new Date().toISOString(),
     };
 
@@ -140,6 +143,7 @@ export const syncWithCloudflare = async (
       message: result.message || '已成功与 Cloudflare D1 云数据库完成双向同步',
       mergedAccounts: result.accounts || accounts,
       mergedTransactions: result.transactions || transactions,
+      mergedProjects: result.projects || projects,
       timestamp: nowStr,
     };
   } catch (err: any) {
@@ -163,6 +167,7 @@ export const fetchFromCloudflare = async (
     user?: UserProfile;
     accounts?: FinancialAccount[];
     transactions?: Transaction[];
+    projects?: LedgerProject[];
     lastUpdated?: string;
   };
 }> => {

@@ -12,11 +12,16 @@ import {
   Loader2,
   Server,
 } from 'lucide-react';
-import { UserProfile, FinancialAccount, Transaction } from '../types';
+import { UserProfile, FinancialAccount, Transaction, LedgerProject } from '../types';
 import { getStoredUsers, saveUsers, loginUserOnline, registerUserOnline } from '../lib/storage';
 
 interface AuthModalProps {
-  onLoginSuccess: (user: UserProfile, accounts?: FinancialAccount[], transactions?: Transaction[]) => void;
+  onLoginSuccess: (
+    user: UserProfile,
+    accounts?: FinancialAccount[],
+    transactions?: Transaction[],
+    projects?: LedgerProject[]
+  ) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
@@ -36,7 +41,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
     const res = await loginUserOnline('demo', 'demo123456');
     setIsLoading(false);
     if (res.success && res.user) {
-      onLoginSuccess(res.user, res.accounts, res.transactions);
+      onLoginSuccess(res.user, res.accounts, res.transactions, res.projects);
     } else {
       // Fallback
       const users = getStoredUsers();
@@ -96,7 +101,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
         return;
       }
 
-      onLoginSuccess(res.user, res.accounts, res.transactions);
+      onLoginSuccess(res.user, res.accounts, res.transactions, res.projects);
     } else {
       // Login mode with online verification across any device
       setIsLoading(true);
@@ -108,7 +113,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
         return;
       }
 
-      onLoginSuccess(res.user, res.accounts, res.transactions);
+      onLoginSuccess(res.user, res.accounts, res.transactions, res.projects);
     }
   };
 

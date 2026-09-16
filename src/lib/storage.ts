@@ -74,8 +74,9 @@ export const triggerAutoServerSync = (userId: string) => {
   syncTimeout = setTimeout(() => {
     const accounts = getAccounts(userId);
     const transactions = getTransactions(userId);
+    const projects = getProjects(userId);
     const user = getCurrentUser();
-    syncDataToServer(userId, accounts, transactions, user || undefined).catch(() => {});
+    syncDataToServer(userId, accounts, transactions, projects, user || undefined).catch(() => {});
   }, 1000);
 };
 
@@ -240,7 +241,7 @@ export const registerUserOnline = async (
   displayName: string,
   password: string,
   pinCode: string
-): Promise<{ success: boolean; user?: UserProfile; accounts?: FinancialAccount[]; transactions?: Transaction[]; error?: string }> => {
+): Promise<{ success: boolean; user?: UserProfile; accounts?: FinancialAccount[]; transactions?: Transaction[]; projects?: LedgerProject[]; error?: string }> => {
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
@@ -269,6 +270,7 @@ export const registerUserOnline = async (
     saveUsers(users);
     saveAccounts(newUser.id, data.accounts || []);
     saveTransactions(newUser.id, data.transactions || []);
+    saveProjects(newUser.id, data.projects || []);
     setCurrentUserId(newUser.id);
 
     return {
@@ -276,6 +278,7 @@ export const registerUserOnline = async (
       user: newUser,
       accounts: data.accounts || [],
       transactions: data.transactions || [],
+      projects: data.projects || [],
     };
   } catch (err: any) {
     console.warn('[Auth] Server unavailable, falling back to local registration:', err);
@@ -299,9 +302,10 @@ export const registerUserOnline = async (
     saveUsers([...users, newUser]);
     saveAccounts(newUser.id, []);
     saveTransactions(newUser.id, []);
+    saveProjects(newUser.id, []);
     setCurrentUserId(newUser.id);
 
-    return { success: true, user: newUser, accounts: [], transactions: [] };
+    return { success: true, user: newUser, accounts: [], transactions: [], projects: [] };
   }
 };
 
@@ -311,7 +315,7 @@ export const registerUserOnline = async (
 export const loginUserOnline = async (
   username: string,
   password: string
-): Promise<{ success: boolean; user?: UserProfile; accounts?: FinancialAccount[]; transactions?: Transaction[]; error?: string }> => {
+): Promise<{ success: boolean; user?: UserProfile; accounts?: FinancialAccount[]; transactions?: Transaction[]; projects?: LedgerProject[]; error?: string }> => {
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -339,10 +343,12 @@ export const loginUserOnline = async (
 
     const accounts: FinancialAccount[] = data.accounts || [];
     const transactions: Transaction[] = data.transactions || [];
+    const projects: LedgerProject[] = data.projects || [];
 
     // Cache to localStorage
     localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${user.id}`, JSON.stringify(accounts));
     localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${user.id}`, JSON.stringify(transactions));
+    localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${user.id}`, JSON.stringify(projects));
     setCurrentUserId(user.id);
 
     return {
@@ -350,6 +356,7 @@ export const loginUserOnline = async (
       user,
       accounts,
       transactions,
+      projects,
     };
   } catch (err: any) {
     console.warn('[Auth] Server unavailable, falling back to local verification:', err);
@@ -362,7 +369,8 @@ export const loginUserOnline = async (
     setCurrentUserId(foundUser.id);
     const accs = getAccounts(foundUser.id);
     const txs = getTransactions(foundUser.id);
-    return { success: true, user: foundUser, accounts: accs, transactions: txs };
+    const projs = getProjects(foundUser.id);
+    return { success: true, user: foundUser, accounts: accs, transactions: txs, projects: projs };
   }
 };
 
@@ -389,6 +397,7 @@ export const syncDataToServer = async (
   userId: string,
   accounts: FinancialAccount[],
   transactions: Transaction[],
+  projects: LedgerProject[] = [],
   user?: UserProfile
 ): Promise<{ success: boolean; message?: string }> => {
   try {
@@ -400,6 +409,7 @@ export const syncDataToServer = async (
         user: user || getCurrentUser(),
         accounts,
         transactions,
+        projects,
       }),
     });
     const data = await res.json();
@@ -414,17 +424,36 @@ export const syncDataToServer = async (
  */
 export const fetchLatestDataFromServer = async (
   userId: string
-): Promise<{ success: boolean; accounts?: FinancialAccount[]; transactions?: Transaction[]; user?: UserProfile }> => {
+): Promise<{ success: boolean; accounts?: FinancialAccount[]; transactions?: Transaction[]; projects?: LedgerProject[]; user?: UserProfile }> => {
   try {
     const res = await fetch(`/api/sync?userId=${encodeURIComponent(userId)}`);
     if (!res.ok) return { success: false };
     const data = await res.json();
     if (data && data.success) {
+      // If server returned 'No synced data yet' or empty, but client has existing local items, push local to server automatically!
+      if (data.message === 'No synced data yet' || (!data.accounts?.length && !data.transactions?.length && !data.projects?.length)) {
+        const localAccs = getAccounts(userId);
+        const localTxs = getTransactions(userId);
+        const localProjs = getProjects(userId);
+        if (localAccs.length > 0 || localTxs.length > 0 || localProjs.length > 0) {
+          syncDataToServer(userId, localAccs, localTxs, localProjs, getCurrentUser() || undefined).catch(() => {});
+          return {
+            success: true,
+            accounts: localAccs,
+            transactions: localTxs,
+            projects: localProjs,
+          };
+        }
+      }
+
       if (Array.isArray(data.accounts)) {
         localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(data.accounts));
       }
       if (Array.isArray(data.transactions)) {
         localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(data.transactions));
+      }
+      if (Array.isArray(data.projects)) {
+        localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(data.projects));
       }
       if (data.user) {
         const users = getStoredUsers();
@@ -440,6 +469,7 @@ export const fetchLatestDataFromServer = async (
         success: true,
         accounts: data.accounts,
         transactions: data.transactions,
+        projects: data.projects,
         user: data.user,
       };
     }

@@ -50,7 +50,7 @@ import { AccountEditorModal } from './components/AccountEditorModal';
 import { BatchReconcileModal } from './components/BatchReconcileModal';
 import { SecuritySettingsModal } from './components/SecuritySettingsModal';
 import { SyncBackupModal } from './components/SyncBackupModal';
-import { mergeAccounts, mergeTransactions } from './lib/backup';
+import { mergeAccounts, mergeTransactions, mergeProjects } from './lib/backup';
 import { updateAccountsWithGoldPrice } from './lib/goldRates';
 import {
   ThemeMode,
@@ -158,28 +158,37 @@ export default function App() {
       if (res.success) {
         if (res.accounts) setAccounts(res.accounts);
         if (res.transactions) setTransactions(res.transactions);
+        if (res.projects) setProjects(res.projects);
       }
     }).catch(() => {});
   }, []);
 
   // Restore/Merge data from Cloudflare / WebDAV / JSON Backup
   const handleRestoreData = useCallback(
-    (newAccounts: FinancialAccount[], newTransactions: Transaction[], isMerge: boolean) => {
+    (newAccounts: FinancialAccount[], newTransactions: Transaction[], isMerge: boolean, newProjects?: LedgerProject[]) => {
       if (!currentUser) return;
       let finalAccs = newAccounts;
       let finalTxs = newTransactions;
+      let finalProjects = newProjects || [];
 
       if (isMerge) {
         finalAccs = mergeAccounts(accounts, newAccounts);
         finalTxs = mergeTransactions(transactions, newTransactions);
+        if (newProjects && newProjects.length > 0) {
+          finalProjects = mergeProjects(projects, newProjects);
+        } else {
+          finalProjects = projects;
+        }
       }
 
       setAccounts(finalAccs);
       setTransactions(finalTxs);
+      setProjects(finalProjects);
       saveAccounts(currentUser.id, finalAccs);
       saveTransactions(currentUser.id, finalTxs);
+      saveProjects(currentUser.id, finalProjects);
     },
-    [currentUser, accounts, transactions]
+    [currentUser, accounts, transactions, projects]
   );
 
   useEffect(() => {
@@ -222,7 +231,8 @@ export default function App() {
   const handleLoginSuccess = (
     user: UserProfile,
     onlineAccounts?: FinancialAccount[],
-    onlineTransactions?: Transaction[]
+    onlineTransactions?: Transaction[],
+    onlineProjects?: LedgerProject[]
   ) => {
     setCurrentUserId(user.id);
     setCurrentUser(user);
@@ -232,8 +242,11 @@ export default function App() {
     if (onlineAccounts !== undefined && onlineTransactions !== undefined) {
       setAccounts(onlineAccounts);
       setTransactions(onlineTransactions);
+      const projs = onlineProjects || [];
+      setProjects(projs);
       saveAccounts(user.id, onlineAccounts);
       saveTransactions(user.id, onlineTransactions);
+      saveProjects(user.id, projs);
     } else {
       loadUserData(user.id);
     }
@@ -566,6 +579,7 @@ export default function App() {
     clearAllUserData(currentUser.id);
     setAccounts([]);
     setTransactions([]);
+    setProjects([]);
   };
 
   // Delete Account
@@ -982,6 +996,7 @@ export default function App() {
           currentUser={currentUser}
           accounts={accounts || []}
           transactions={transactions || []}
+          projects={projects || []}
           onClose={() => setIsSyncModalOpen(false)}
           onRestoreData={handleRestoreData}
           onShowToast={showToast}

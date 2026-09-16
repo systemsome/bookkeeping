@@ -68,13 +68,19 @@ function loadPersistedStores() {
       localUsersStore.set('demo', DEFAULT_DEMO_USER);
     }
 
-    // Load sync accounts & transactions
+    // Load sync accounts, transactions & projects
     if (fs.existsSync(SYNC_FILE_PATH)) {
       const raw = fs.readFileSync(SYNC_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         Object.entries(parsed).forEach(([uid, val]: [string, any]) => {
-          localSyncStore.set(uid, val);
+          localSyncStore.set(uid, {
+            user: val?.user,
+            accounts: Array.isArray(val?.accounts) ? val.accounts : [],
+            transactions: Array.isArray(val?.transactions) ? val.transactions : [],
+            projects: Array.isArray(val?.projects) ? val.projects : [],
+            lastUpdated: val?.lastUpdated || new Date().toISOString(),
+          });
           // If user info exists in sync record, also index user
           if (val && val.user && val.user.username) {
             const uKey = val.user.username.toLowerCase();
@@ -389,6 +395,7 @@ async function startServer() {
       user: newUser,
       accounts: [],
       transactions: [],
+      projects: [],
       lastUpdated: new Date().toISOString(),
     });
 
@@ -399,6 +406,7 @@ async function startServer() {
       user: newUser,
       accounts: [],
       transactions: [],
+      projects: [],
       message: '注册成功并已安全持久化到服务端',
     });
   });
@@ -437,7 +445,7 @@ async function startServer() {
     localUsersStore.set(key, user);
 
     // Retrieve ledger
-    const syncData = localSyncStore.get(user.id) || { accounts: [], transactions: [] };
+    const syncData = localSyncStore.get(user.id) || { accounts: [], transactions: [], projects: [] };
     savePersistedStores();
 
     return res.json({
@@ -445,6 +453,7 @@ async function startServer() {
       user,
       accounts: syncData.accounts || [],
       transactions: syncData.transactions || [],
+      projects: syncData.projects || [],
       message: '登录成功，已同步云端账本数据',
     });
   });
@@ -504,28 +513,35 @@ async function startServer() {
     if (data) {
       return res.json({
         success: true,
-        ...data,
+        user: data.user,
+        accounts: Array.isArray(data.accounts) ? data.accounts : [],
+        transactions: Array.isArray(data.transactions) ? data.transactions : [],
+        projects: Array.isArray(data.projects) ? data.projects : [],
+        lastUpdated: data.lastUpdated,
       });
     }
     return res.json({
       success: true,
       accounts: [],
       transactions: [],
+      projects: [],
       message: 'No synced data yet',
     });
   });
 
   // Sync Post
   app.post('/api/sync', (req, res) => {
-    const { userId, user, accounts, transactions } = req.body || {};
+    const { userId, user, accounts, transactions, projects } = req.body || {};
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
     const nowIso = new Date().toISOString();
+    const existing = localSyncStore.get(userId) || {};
     const payload = {
-      user: user || localSyncStore.get(userId)?.user,
-      accounts: accounts || [],
-      transactions: transactions || [],
+      user: user || existing.user,
+      accounts: Array.isArray(accounts) ? accounts : (existing.accounts || []),
+      transactions: Array.isArray(transactions) ? transactions : (existing.transactions || []),
+      projects: Array.isArray(projects) ? projects : (existing.projects || []),
       lastUpdated: nowIso,
     };
     localSyncStore.set(userId, payload);
@@ -539,9 +555,10 @@ async function startServer() {
 
     return res.json({
       success: true,
-      message: '已成功与 NAS 本地数据库完成持久化同步',
+      message: '已成功与 NAS / 服务端持久化数据库完成双向同步',
       accounts: payload.accounts,
       transactions: payload.transactions,
+      projects: payload.projects,
       updatedAt: nowIso,
     });
   });

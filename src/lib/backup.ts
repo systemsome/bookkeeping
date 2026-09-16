@@ -1,4 +1,4 @@
-import { UserProfile, FinancialAccount, Transaction, WebDavConfig, BackupPackage } from '../types';
+import { UserProfile, FinancialAccount, Transaction, LedgerProject, WebDavConfig, BackupPackage } from '../types';
 
 export const APP_BACKUP_VERSION = '1.0.0';
 
@@ -9,6 +9,7 @@ export const exportDataToJsonFile = (
   user: UserProfile,
   accounts: FinancialAccount[],
   transactions: Transaction[],
+  projects: LedgerProject[] = [],
   webDavConfig?: WebDavConfig
 ): void => {
   const backup: BackupPackage = {
@@ -18,6 +19,7 @@ export const exportDataToJsonFile = (
     user,
     accounts,
     transactions,
+    projects: projects || [],
     webDavConfig: webDavConfig
       ? {
           enabled: webDavConfig.enabled,
@@ -63,6 +65,11 @@ export const parseBackupJson = (jsonString: string): { success: boolean; data?: 
 
     if (!Array.isArray(parsed.accounts) || !Array.isArray(parsed.transactions)) {
       return { success: false, error: '备份文件中缺少必要的账户或流水记录数据结构' };
+    }
+
+    // 确保 projects 是数组
+    if (parsed.projects && !Array.isArray(parsed.projects)) {
+      parsed.projects = [];
     }
 
     return {
@@ -120,3 +127,28 @@ export const mergeTransactions = (
     return timeB.localeCompare(timeA);
   });
 };
+
+/**
+ * 智能合并专项账本项目 (去重合并)
+ */
+export const mergeProjects = (
+  existing: LedgerProject[] = [],
+  incoming: LedgerProject[] = []
+): LedgerProject[] => {
+  const existingMap = new Map<string, LedgerProject>();
+  (existing || []).forEach((p) => existingMap.set(p.id, p));
+
+  (incoming || []).forEach((inProj) => {
+    if (existingMap.has(inProj.id)) {
+      existingMap.set(inProj.id, {
+        ...existingMap.get(inProj.id)!,
+        ...inProj,
+      });
+    } else {
+      existingMap.set(inProj.id, inProj);
+    }
+  });
+
+  return Array.from(existingMap.values());
+};
+

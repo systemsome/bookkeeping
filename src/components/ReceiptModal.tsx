@@ -451,6 +451,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       const dataUrl = await toPng(el, {
         cacheBust: true,
         pixelRatio: 3,
+        skipFonts: true,
         backgroundColor: bgColor,
         style: {
           transform: 'none',
@@ -492,6 +493,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       const blob = await toBlob(el, {
         cacheBust: true,
         pixelRatio: 3,
+        skipFonts: true,
         backgroundColor: bgColor,
         style: {
           transform: 'none',
