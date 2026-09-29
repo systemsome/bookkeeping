@@ -38,14 +38,19 @@ export interface FinancialAccount {
   notes?: string;
   updatedAt: string;
   
-  // Card Face Customization fields
+  // Card Face Customization fields (inspired by Apple Pay & no2ac/Cardentify)
   holderName?: string; // 持卡人姓名 (如 "张伟" / "ZHANG WEI")
   cardNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'; // 卡组织 (银联 / VISA / 万事达 / 美国运通 / JCB / 无)
   cardTier?: string; // 卡片等级 (如 "金卡", "白金卡", "金葵花", "黑金卡", "钻石卡")
   cardSkin?: string; // 卡面主题皮肤 (如 "classic-cmb", "icbc-red", "platinum-dark", "custom")
   cardBgColor?: string; // 自定义卡面底色 (HEX 颜色或渐变底色)
   cardTexture?: string; // 卡面纹理 (none, metallic, carbon, shimmer, leather, waves)
+  cardPattern?: string; // Apple Pay / Cardentify 高精纹理 (waves, mesh, geometric, radial-sheen, silk-stripes, circuit, dots)
+  cardTextColor?: 'light' | 'dark'; // 卡面文字颜色模式 (light 为优雅哑光白金，dark 为极简石墨暗黑，针对浅色卡如 Apple Card)
+  cardImageUrl?: string; // 自定义高清卡面图像 URL 或 Base64 (支持用户上传或导入 Apple Pay 卡面)
+  cardPresetId?: string; // 关联的 Cardentify 官方卡面模板 ID
   cardExpiry?: string; // 有效期 (如 "08/29")
+  showBrandLogo?: boolean; // 是否在卡面显示专属银行LOGO (默认 false，仅显示银行名称)
   
   // Specific fields for Fund
   fundCode?: string;

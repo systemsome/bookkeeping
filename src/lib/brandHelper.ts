@@ -996,106 +996,178 @@ export function getRandomCardBackground(excludeId?: string): LuxuryPalette {
 }
 
 /**
- * Helper to auto-match brand logo and card skin by account name or bankName
+ * Match a BankBrandInfo by keyword in a given string
  */
-export function detectBrandInfo(accountName: string, bankName?: string, category?: AccountCategory): BankBrandInfo {
-  const text = `${accountName} ${bankName || ''}`.toLowerCase();
+function matchBrandByKeyword(rawText: string, category?: AccountCategory): BankBrandInfo | null {
+  if (!rawText || !rawText.trim()) return null;
+  const text = rawText.toLowerCase().trim();
 
-  // Explicit check for major brands & internet banks
+  // 1. Digital Wallets & Consumer Credit
+  if (text.includes('支付宝') || text.includes('alipay')) {
+    return BANK_BRANDS.find((b) => b.id === 'ALIPAY') || null;
+  }
+  if (text.includes('微信') || text.includes('wechat') || text.includes('财付通') || text.includes('零钱通')) {
+    return BANK_BRANDS.find((b) => b.id === 'WECHAT') || null;
+  }
+  if (text.includes('花呗') || text.includes('huabei') || text.includes('蚂蚁花呗')) {
+    return BANK_BRANDS.find((b) => b.id === 'HUABEI') || null;
+  }
+  if (text.includes('白条') || text.includes('baitiao') || text.includes('京东白条')) {
+    return BANK_BRANDS.find((b) => b.id === 'JD_BAITIAO') || null;
+  }
+  if (text.includes('余额宝') || text.includes('yuebao')) {
+    return BANK_BRANDS.find((b) => b.id === 'YUEBAO') || null;
+  }
+  if (text.includes('小金库') || text.includes('京东金融') || text.includes('jd finance') || text.includes('jd_finance')) {
+    return BANK_BRANDS.find((b) => b.id === 'JD_FINANCE') || null;
+  }
+  if (text.includes('apple pay') || text.includes('applepay') || text.includes('苹果支付') || text.includes('apple wallet')) {
+    return BANK_BRANDS.find((b) => b.id === 'APPLEPAY') || null;
+  }
+
+  // 2. Internet & FinTech Banks
   if (text.includes('网商') || text.includes('mybank') || text.includes('浙江网商')) {
-    return BANK_BRANDS.find((b) => b.id === 'MYBANK')!;
+    return BANK_BRANDS.find((b) => b.id === 'MYBANK') || null;
   }
   if (text.includes('微众') || text.includes('webank') || text.includes('微粒贷') || text.includes('前海微众')) {
-    return BANK_BRANDS.find((b) => b.id === 'WEBANK')!;
+    return BANK_BRANDS.find((b) => b.id === 'WEBANK') || null;
   }
   if (text.includes('百信') || text.includes('aibank')) {
-    return BANK_BRANDS.find((b) => b.id === 'AIBANK')!;
+    return BANK_BRANDS.find((b) => b.id === 'AIBANK') || null;
+  }
+
+  // 3. City Commercial Banks
+  if (text.includes('宁波银行') || text.includes('宁银') || text.includes('nbcb') || text.includes('宁波')) {
+    return BANK_BRANDS.find((b) => b.id === 'NBCB') || null;
   }
   if (text.includes('北京银行') || text.includes('京行') || text.includes('bob')) {
-    return BANK_BRANDS.find((b) => b.id === 'BOB')!;
-  }
-  if (text.includes('宁波银行') || text.includes('宁银') || text.includes('nbcb')) {
-    return BANK_BRANDS.find((b) => b.id === 'NBCB')!;
+    return BANK_BRANDS.find((b) => b.id === 'BOB') || null;
   }
   if (text.includes('上海银行') || text.includes('上行') || text.includes('bos')) {
-    return BANK_BRANDS.find((b) => b.id === 'BOS')!;
+    return BANK_BRANDS.find((b) => b.id === 'BOS') || null;
   }
-  if (text.includes('招商') || text.includes('招行') || text.includes('cmb')) {
-    const brand = BANK_BRANDS.find((b) => b.id === 'CMB')!;
-    return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '经典白金信用卡' } : brand;
-  }
+
+  // 4. Joint-stock and National Commercial Banks (State-owned and Major Commercial)
   if (text.includes('工商') || text.includes('工行') || text.includes('icbc') || text.includes('牡丹')) {
-    const brand = BANK_BRANDS.find((b) => b.id === 'ICBC')!;
+    const brand = BANK_BRANDS.find((b) => b.id === 'ICBC');
+    if (!brand) return null;
     return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '牡丹白金信用卡' } : brand;
   }
   if (text.includes('建设') || text.includes('建行') || text.includes('ccb') || text.includes('龙卡')) {
-    const brand = BANK_BRANDS.find((b) => b.id === 'CCB')!;
+    const brand = BANK_BRANDS.find((b) => b.id === 'CCB');
+    if (!brand) return null;
     return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '龙卡全球支付白金卡' } : brand;
   }
   if (text.includes('农业') || text.includes('农行') || text.includes('abc') || text.includes('金穗')) {
-    const brand = BANK_BRANDS.find((b) => b.id === 'ABC')!;
+    const brand = BANK_BRANDS.find((b) => b.id === 'ABC');
+    if (!brand) return null;
     return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '金穗悠游白金卡' } : brand;
   }
-  if (text.includes('中国银行') || text.includes('中行') || text.includes('boc') || text.includes('长城')) {
-    const brand = BANK_BRANDS.find((b) => b.id === 'BOC')!;
+  if (
+    text.includes('中行') ||
+    text.includes('boc') ||
+    text.includes('长城卡') ||
+    text.includes('长城借记') ||
+    text.includes('长城信用卡') ||
+    (text.includes('中国银行') && !text.includes('工商') && !text.includes('建设') && !text.includes('农业') && !text.includes('光大') && !text.includes('民生') && !text.includes('邮政'))
+  ) {
+    const brand = BANK_BRANDS.find((b) => b.id === 'BOC');
+    if (!brand) return null;
     return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '长城卓隽白金卡' } : brand;
   }
   if (text.includes('交通') || text.includes('交行') || text.includes('bocom') || text.includes('白麒麟')) {
-    const brand = BANK_BRANDS.find((b) => b.id === 'BOCOM')!;
+    const brand = BANK_BRANDS.find((b) => b.id === 'BOCOM');
+    if (!brand) return null;
     return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '白麒麟白金信用卡' } : brand;
   }
+  if (text.includes('招商') || text.includes('招行') || text.includes('cmb') || text.includes('金葵花') || text.includes('掌上生活')) {
+    const brand = BANK_BRANDS.find((b) => b.id === 'CMB');
+    if (!brand) return null;
+    return category === 'CREDIT_CARD' ? { ...brand, defaultTier: '经典白金信用卡' } : brand;
+  }
   if (text.includes('中信') || text.includes('citic')) {
-    return BANK_BRANDS.find((b) => b.id === 'CITIC')!;
+    return BANK_BRANDS.find((b) => b.id === 'CITIC') || null;
   }
-  if (text.includes('平安') || text.includes('pingan')) {
-    return BANK_BRANDS.find((b) => b.id === 'PINGAN')!;
+  if (text.includes('平安') || text.includes('pingan') || text.includes('ping an')) {
+    return BANK_BRANDS.find((b) => b.id === 'PINGAN') || null;
   }
-  if (text.includes('浦发') || text.includes('spdb')) {
-    return BANK_BRANDS.find((b) => b.id === 'SPDB')!;
+  if (text.includes('浦发') || text.includes('浦东发展') || text.includes('spdb')) {
+    return BANK_BRANDS.find((b) => b.id === 'SPDB') || null;
   }
   if (text.includes('邮政') || text.includes('邮储') || text.includes('psbc')) {
-    return BANK_BRANDS.find((b) => b.id === 'PSBC')!;
+    return BANK_BRANDS.find((b) => b.id === 'PSBC') || null;
   }
   if (text.includes('民生') || text.includes('cmbc')) {
-    return BANK_BRANDS.find((b) => b.id === 'CMBC')!;
+    return BANK_BRANDS.find((b) => b.id === 'CMBC') || null;
   }
-  if (text.includes('白条') || text.includes('baitiao') || category === 'JD_BAITIAO') {
-    return BANK_BRANDS.find((b) => b.id === 'JD_BAITIAO')!;
+  if (text.includes('光大') || text.includes('ceb') || text.includes('阳光卡')) {
+    return BANK_BRANDS.find((b) => b.id === 'CEB') || null;
   }
-  if (text.includes('花呗') || text.includes('huabei') || category === 'HUABEI') {
-    return BANK_BRANDS.find((b) => b.id === 'HUABEI')!;
+  if (text.includes('兴业') || text.includes('cib') || text.includes('自然人生')) {
+    return BANK_BRANDS.find((b) => b.id === 'CIB') || null;
   }
-  if (text.includes('京东') || text.includes('小金库') || category === 'JD_FINANCE') {
-    return BANK_BRANDS.find((b) => b.id === 'JD_FINANCE')!;
+  if (text.includes('广发') || text.includes('cgb') || text.includes('臻尚')) {
+    return BANK_BRANDS.find((b) => b.id === 'CGB') || null;
   }
-  if (text.includes('余额宝') || category === 'YUEBAO') {
-    return BANK_BRANDS.find((b) => b.id === 'YUEBAO')!;
-  }
-  if (text.includes('微信') || text.includes('wechat') || category === 'WECHAT') {
-    return BANK_BRANDS.find((b) => b.id === 'WECHAT')!;
-  }
-  if (text.includes('支付宝') || text.includes('alipay') || category === 'ALIPAY') {
-    return BANK_BRANDS.find((b) => b.id === 'ALIPAY')!;
-  }
-  if (text.includes('黄金') || text.includes('金条') || text.includes('积存') || category === 'GOLD') {
-    return BANK_BRANDS.find((b) => b.id === 'GOLD')!;
-  }
-  if (text.includes('基金') || text.includes('理财') || category === 'FUND') {
-    return BANK_BRANDS.find((b) => b.id === 'FUND')!;
-  }
-  if (text.includes('现金') || text.includes('备用金') || category === 'CASH') {
-    return BANK_BRANDS.find((b) => b.id === 'CASH')!;
-  }
-  if (text.includes('借出') || category === 'RECEIVABLE') {
-    return BANK_BRANDS.find((b) => b.id === 'RECEIVABLE')!;
-  }
-  if (text.includes('借入') || category === 'PAYABLE') {
-    return BANK_BRANDS.find((b) => b.id === 'PAYABLE')!;
+  if (text.includes('华夏') || text.includes('hxb')) {
+    return BANK_BRANDS.find((b) => b.id === 'HXB') || null;
   }
 
-  // Fallback by category
-  const matched = BANK_BRANDS.find((b) => b.category === category);
-  return matched || BANK_BRANDS[0];
+  // 5. Special asset categories
+  if (text.includes('黄金') || text.includes('金条') || text.includes('积存') || text.includes('足金')) {
+    return BANK_BRANDS.find((b) => b.id === 'GOLD') || null;
+  }
+  if (text.includes('基金') || text.includes('理财') || text.includes('公募') || text.includes('etf')) {
+    return BANK_BRANDS.find((b) => b.id === 'FUND') || null;
+  }
+  if (text.includes('现金') || text.includes('备用金') || text.includes('零钱') || text.includes('纸币')) {
+    return BANK_BRANDS.find((b) => b.id === 'CASH') || null;
+  }
+  if (text.includes('借出') || text.includes('债权') || text.includes('待收')) {
+    return BANK_BRANDS.find((b) => b.id === 'RECEIVABLE') || null;
+  }
+  if (text.includes('借入') || text.includes('债务') || text.includes('待还') || text.includes('欠款')) {
+    return BANK_BRANDS.find((b) => b.id === 'PAYABLE') || null;
+  }
+
+  return null;
+}
+
+/**
+ * Helper to auto-match brand logo and card skin by account name or bankName.
+ * BankName has absolute priority over generic accountName.
+ */
+export function detectBrandInfo(accountName: string = '', bankName?: string, category?: AccountCategory): BankBrandInfo {
+  // 1. Explicitly designated bankName has FIRST PRIORITY
+  if (bankName && bankName.trim()) {
+    const matchedFromBank = matchBrandByKeyword(bankName, category);
+    if (matchedFromBank) return matchedFromBank;
+  }
+
+  // 2. Check accountName if bankName was not provided or inconclusive
+  if (accountName && accountName.trim()) {
+    const matchedFromName = matchBrandByKeyword(accountName, category);
+    if (matchedFromName) return matchedFromName;
+  }
+
+  // 3. Category-based fallback
+  if (category) {
+    if (category === 'JD_BAITIAO') return BANK_BRANDS.find((b) => b.id === 'JD_BAITIAO')!;
+    if (category === 'HUABEI') return BANK_BRANDS.find((b) => b.id === 'HUABEI')!;
+    if (category === 'JD_FINANCE') return BANK_BRANDS.find((b) => b.id === 'JD_FINANCE')!;
+    if (category === 'YUEBAO') return BANK_BRANDS.find((b) => b.id === 'YUEBAO')!;
+    if (category === 'WECHAT') return BANK_BRANDS.find((b) => b.id === 'WECHAT')!;
+    if (category === 'ALIPAY') return BANK_BRANDS.find((b) => b.id === 'ALIPAY')!;
+    if (category === 'GOLD') return BANK_BRANDS.find((b) => b.id === 'GOLD')!;
+    if (category === 'FUND') return BANK_BRANDS.find((b) => b.id === 'FUND')!;
+    if (category === 'CASH') return BANK_BRANDS.find((b) => b.id === 'CASH')!;
+    if (category === 'RECEIVABLE') return BANK_BRANDS.find((b) => b.id === 'RECEIVABLE')!;
+    if (category === 'PAYABLE') return BANK_BRANDS.find((b) => b.id === 'PAYABLE')!;
+    const matched = BANK_BRANDS.find((b) => b.category === category);
+    if (matched) return matched;
+  }
+
+  return BANK_BRANDS[0];
 }
 
 /**
@@ -1311,3 +1383,366 @@ export const CARD_SKINS: {
     solidColor: '#059669',
   },
 ];
+
+/**
+ * CardArt.cc official bank issuer mapping and direct make maker URLs
+ */
+export interface CardartIssuerMeta {
+  slug: string;
+  name: string;
+  shortName: string;
+  english: string;
+  hasMakerAsset: boolean;
+  makeUrl: string;
+}
+
+export const CARDART_ISSUER_MAP: Record<string, CardartIssuerMeta> = {
+  CMB: {
+    slug: 'cmb',
+    name: '招商银行',
+    shortName: '招行',
+    english: 'China Merchants Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  ICBC: {
+    slug: 'icbc',
+    name: '中国工商银行',
+    shortName: '工行',
+    english: 'Industrial & Commercial Bank of China',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  CCB: {
+    slug: 'ccb',
+    name: '中国建设银行',
+    shortName: '建行',
+    english: 'China Construction Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  ABC: {
+    slug: 'abc',
+    name: '中国农业银行',
+    shortName: '农行',
+    english: 'Agricultural Bank of China',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  BOC: {
+    slug: 'boc',
+    name: '中国银行',
+    shortName: '中行',
+    english: 'Bank of China',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  BOCOM: {
+    slug: 'bocom',
+    name: '交通银行',
+    shortName: '交行',
+    english: 'Bank of Communications',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  CITIC: {
+    slug: 'citic-bank',
+    name: '中信银行',
+    shortName: '中信',
+    english: 'China CITIC Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  SPDB: {
+    slug: 'spdb',
+    name: '上海浦东发展银行',
+    shortName: '浦发',
+    english: 'Shanghai Pudong Development Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  PSBC: {
+    slug: 'psbc',
+    name: '中国邮政储蓄银行',
+    shortName: '邮储',
+    english: 'Postal Savings Bank of China',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  CEB: {
+    slug: 'ceb',
+    name: '中国光大银行',
+    shortName: '光大',
+    english: 'China Everbright Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  CMBC: {
+    slug: 'cmbc',
+    name: '中国民生银行',
+    shortName: '民生',
+    english: 'China Minsheng Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  CIB: {
+    slug: 'cib',
+    name: '兴业银行',
+    shortName: '兴业',
+    english: 'Industrial Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  CGB: {
+    slug: 'cgb',
+    name: '广发银行',
+    shortName: '广发',
+    english: 'China Guangfa Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  PINGAN: {
+    slug: 'pingan',
+    name: '平安银行',
+    shortName: '平安',
+    english: 'Ping An Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  HXB: {
+    slug: 'hxb',
+    name: '华夏银行',
+    shortName: '华夏',
+    english: 'Hua Xia Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  BOB: {
+    slug: 'bob',
+    name: '北京银行',
+    shortName: '北京银行',
+    english: 'Bank of Beijing',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+  BOS: {
+    slug: 'bos',
+    name: '上海银行',
+    shortName: '上海银行',
+    english: 'Bank of Shanghai',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  },
+};
+
+/**
+ * Identify CardArt maker metadata by brand / bank name
+ */
+export function identifyCardartBankAsset(bankName: string = '', brandId: string = ''): CardartIssuerMeta {
+  if (brandId && CARDART_ISSUER_MAP[brandId]) {
+    return CARDART_ISSUER_MAP[brandId];
+  }
+  const matched = Object.values(CARDART_ISSUER_MAP).find(
+    (m) =>
+      (bankName && (m.name.includes(bankName) || bankName.includes(m.name) || bankName.includes(m.shortName))) ||
+      (m.slug && bankName.toLowerCase().includes(m.slug))
+  );
+  if (matched) return matched;
+
+  return {
+    slug: 'generic',
+    name: bankName || '商业银行',
+    shortName: bankName || '银行',
+    english: 'Commercial Bank',
+    hasMakerAsset: true,
+    makeUrl: 'https://cardart.cc/make?lang=zh',
+  };
+}
+
+/**
+ * Intelligently deduplicate bank brand name to guarantee ONLY ONE bank brand name is shown!
+ */
+export function getCleanSingleBrandCardTitle(
+  rawName: string = '',
+  bankName: string = '',
+  shortName: string = '',
+  hasCardImage: boolean = false
+): {
+  primaryBankTitle: string;
+  distinctiveProductTitle: string;
+  shouldHideProductTitle: boolean;
+} {
+  const cleanBank = (bankName || '').trim();
+  const cleanName = (rawName || '').trim();
+  const cleanShort = (shortName || '').trim();
+
+  if (!cleanName && !cleanBank) {
+    return { primaryBankTitle: '银行账户', distinctiveProductTitle: '', shouldHideProductTitle: true };
+  }
+
+  // If card has custom image: the image itself is hero, so distinctive title is cleanName without duplicate suffixes
+  if (hasCardImage) {
+    let clean = cleanName || cleanBank;
+    // Remove duplicate trailing "· 银行名" if user typed it or if it was appended
+    if (cleanBank && clean.endsWith(`· ${cleanBank}`)) {
+      clean = clean.slice(0, -(`· ${cleanBank}`).length).trim();
+    }
+    return {
+      primaryBankTitle: cleanBank || clean,
+      distinctiveProductTitle: clean,
+      shouldHideProductTitle: false,
+    };
+  }
+
+  // If card has NO custom image (top row already displays primaryBankTitle prominently):
+  const primaryBank = cleanBank || cleanName;
+
+  // If the card name is identical to the bank name, we don't need a secondary pill at all!
+  if (
+    !cleanName ||
+    cleanName.toLowerCase() === primaryBank.toLowerCase() ||
+    (cleanShort && cleanName.toLowerCase() === cleanShort.toLowerCase())
+  ) {
+    return {
+      primaryBankTitle: primaryBank,
+      distinctiveProductTitle: '',
+      shouldHideProductTitle: true,
+    };
+  }
+
+  // Strip leading bank name / shortName prefix so the bank name is NOT duplicated
+  let product = cleanName;
+  if (cleanBank && product.startsWith(cleanBank)) {
+    product = product.slice(cleanBank.length).replace(/^[\s·\-_—]+/, '').trim();
+  } else if (cleanShort && product.startsWith(cleanShort)) {
+    product = product.slice(cleanShort.length).replace(/^[\s·\-_—]+/, '').trim();
+  }
+
+  // If after stripping nothing is left, hide secondary
+  if (!product) {
+    return {
+      primaryBankTitle: primaryBank,
+      distinctiveProductTitle: '',
+      shouldHideProductTitle: true,
+    };
+  }
+
+  return {
+    primaryBankTitle: primaryBank,
+    distinctiveProductTitle: product,
+    shouldHideProductTitle: false,
+  };
+}
+
+/**
+ * COMMON CARD TIERS AND PRESETS
+ */
+export interface CardTierDefinition {
+  id: string;
+  label: string;
+  value: string;
+  badgeClass: string;
+}
+
+export const COMMON_CARD_TIERS: CardTierDefinition[] = [
+  { id: 'STANDARD', label: '普卡 / 标准卡', value: '标准卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { id: 'GOLD', label: '金卡', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { id: 'PLATINUM', label: '白金卡', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  { id: 'DIAMOND', label: '钻石卡', value: '钻石卡', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { id: 'BLACK', label: '黑金卡 / 无限卡', value: '黑金卡', badgeClass: 'bg-zinc-900 text-amber-300 border-zinc-700' },
+  { id: 'VIP', label: '贵宾理财卡', value: '贵宾理财卡', badgeClass: 'bg-rose-50 text-rose-700 border-rose-200' },
+];
+
+export interface CardTierTheme {
+  cardSkin: string;
+  cardBgColor: string;
+  cardPattern: string;
+  cardTextColor: 'light' | 'dark';
+  cardNetwork: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE';
+  description: string;
+}
+
+/**
+ * Intelligently derive card visual theme based on the card tier level
+ */
+export function getTierTheme(tier: string = '', brand?: BankBrandInfo): CardTierTheme {
+  const t = (tier || '').toLowerCase();
+
+  // 1. Black / Centurion / Infinite
+  if (
+    t.includes('黑金') ||
+    t.includes('百夫长') ||
+    t.includes('无限') ||
+    t.includes('黑卡') ||
+    t.includes('centurion') ||
+    t.includes('world elite') ||
+    t.includes('infinite')
+  ) {
+    return {
+      cardSkin: 'platinum-dark',
+      cardBgColor: 'linear-gradient(135deg, #18181b 0%, #09090b 55%, #000000 100%)',
+      cardPattern: 'mesh',
+      cardTextColor: 'light',
+      cardNetwork: 'AMEX',
+      description: '尊爵黑金 / 百夫长纯黑暗纹',
+    };
+  }
+
+  // 2. Diamond / Sapphire
+  if (t.includes('钻石') || t.includes('diamond')) {
+    return {
+      cardSkin: 'midnight-navy',
+      cardBgColor: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 45%, #0f172a 100%)',
+      cardPattern: 'geometric',
+      cardTextColor: 'light',
+      cardNetwork: 'UNIONPAY',
+      description: '皇家蓝钻 / 晶辉微光',
+    };
+  }
+
+  // 3. Platinum (白金卡)
+  if (t.includes('白金') || t.includes('platinum')) {
+    return {
+      cardSkin: 'platinum-dark',
+      cardBgColor: 'linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%)',
+      cardPattern: 'radial-sheen',
+      cardTextColor: 'light',
+      cardNetwork: 'UNIONPAY',
+      description: '曜石钛黑 / 白金高定高光',
+    };
+  }
+
+  // 4. Gold (金卡)
+  if (t.includes('金卡') || t.includes('gold')) {
+    return {
+      cardSkin: 'gold-metallic',
+      cardBgColor: 'linear-gradient(135deg, #f59e0b 0%, #d97706 45%, #78350f 100%)',
+      cardPattern: 'waves',
+      cardTextColor: 'dark',
+      cardNetwork: 'UNIONPAY',
+      description: '24K璀璨纯金 / 流金波浪',
+    };
+  }
+
+  // 5. VIP / Sunflower / Wealth (贵宾理财 / 金葵花)
+  if (t.includes('金葵花') || t.includes('理财金') || t.includes('沃德') || t.includes('财富') || t.includes('贵宾')) {
+    return {
+      cardSkin: 'gold-metallic',
+      cardBgColor: 'linear-gradient(135deg, #78350f 0%, #451a03 50%, #1c0a00 100%)',
+      cardPattern: 'radial-sheen',
+      cardTextColor: 'light',
+      cardNetwork: 'UNIONPAY',
+      description: '尊贵私行 / 金葵花专属贵宾',
+    };
+  }
+
+  // 6. Standard / Young / Default
+  return {
+    cardSkin: brand?.cardSkin || 'classic-cmb',
+    cardBgColor: '',
+    cardPattern: 'radial-sheen',
+    cardTextColor: 'light',
+    cardNetwork: brand?.cardNetwork || 'UNIONPAY',
+    description: '官方标准品牌卡面',
+  };
+}

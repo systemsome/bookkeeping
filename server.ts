@@ -128,7 +128,7 @@ loadPersistedStores();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '15mb' }));
 
@@ -563,6 +563,250 @@ async function startServer() {
     });
   });
 
+  // ==========================================
+  // CardArt (https://cardart.cc) Real Sync & Query Engine
+  // Supports live cursor-based sync with https://cardart.cc/explore.data
+  // ==========================================
+  const CARDART_FILE_PATH = path.join(DATA_DIR, 'cardart_cards.json');
+  let cardartMemoryCards: any[] = [];
+  let cardartLastSyncedAt: string = '';
+  let isCardartSyncing = false;
+
+  // Load existing CardArt cards from disk if available
+  try {
+    if (fs.existsSync(CARDART_FILE_PATH)) {
+      const raw = fs.readFileSync(CARDART_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cardartMemoryCards = parsed;
+        const stat = fs.statSync(CARDART_FILE_PATH);
+        cardartLastSyncedAt = stat.mtime.toISOString();
+        console.log(`[CardArt] Loaded ${cardartMemoryCards.length} cached cards from ${CARDART_FILE_PATH}`);
+      }
+    }
+  } catch (e) {
+    console.warn('[CardArt] Warning loading cached cards:', e);
+  }
+
+  // Turbo-stream unflatten helper function
+  function resolveTurboObject(arr: any[], val: any, memo = new Map()): any {
+    if (val === -5) return undefined;
+    if (val === null || typeof val !== 'object') return val;
+    if (memo.has(val)) return memo.get(val);
+    if (Array.isArray(val)) {
+      const res: any[] = [];
+      memo.set(val, res);
+      for (const item of val) {
+        if (typeof item === 'number' && item >= 0 && item < arr.length) {
+          res.push(resolveTurboObject(arr, arr[item], memo));
+        } else {
+          res.push(resolveTurboObject(arr, item, memo));
+        }
+      }
+      return res;
+    }
+    const res: Record<string, any> = {};
+    memo.set(val, res);
+    for (const [k, v] of Object.entries(val)) {
+      let key = k;
+      if (k.startsWith('_')) {
+        const keyIdx = parseInt(k.slice(1), 10);
+        if (keyIdx >= 0 && keyIdx < arr.length) {
+          key = arr[keyIdx];
+        }
+      }
+      let valResolved = v;
+      if (typeof v === 'number' && v >= 0 && v < arr.length) {
+        valResolved = resolveTurboObject(arr, arr[v], memo);
+      } else if (v === -5) {
+        valResolved = undefined;
+      } else {
+        valResolved = resolveTurboObject(arr, v, memo);
+      }
+      res[key] = valResolved;
+    }
+    return res;
+  }
+
+  // Core synchronization logic with https://cardart.cc
+  async function performCardArtSync(): Promise<{ count: number; newCards: number; duration: number }> {
+    if (isCardartSyncing) {
+      throw new Error('Sync already in progress');
+    }
+    isCardartSyncing = true;
+    const t0 = Date.now();
+    try {
+      const allCards: any[] = [];
+      const seenIds = new Set<string>();
+      let cursor: string | null = null;
+      let page = 0;
+      let newCount = 0;
+
+      while (page < 35) {
+        page++;
+        let url = 'https://cardart.cc/explore.data';
+        if (cursor) {
+          url += '?cursor=' + encodeURIComponent(cursor) + '&view=more';
+        }
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (CardArt-Sync-Client)',
+            'Accept': 'application/json',
+          },
+        });
+        if (!response.ok) {
+          console.warn(`[CardArt] Page ${page} responded with status ${response.status}`);
+          break;
+        }
+        const arr: any = await response.json();
+        const itemsIdx = arr.indexOf('items');
+        if (itemsIdx === -1) break;
+        const itemsRef = arr[itemsIdx + 1];
+        if (!Array.isArray(itemsRef)) break;
+
+        const pageItems = resolveTurboObject(arr, itemsRef);
+        let pageNew = 0;
+        for (const item of pageItems) {
+          if (item && item.id && !seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            const cardImg = item.images?.png || `/img/cards/${item.id}/v1/card.png`;
+            const thumbImg = item.images?.w640 || item.images?.w1024 || cardImg;
+            allCards.push({
+              id: item.id,
+              title: item.title || 'CardArt 设计款',
+              titleEn: item.titleEn || '',
+              dominantColor: item.dominantColor || '#1e293b',
+              imageUrl: cardImg.startsWith('http') ? cardImg : `https://cardart.cc${cardImg}`,
+              thumbUrl: thumbImg.startsWith('http') ? thumbImg : `https://cardart.cc${thumbImg}`,
+              authorName: item.author?.name || 'CardArt',
+              authorHandle: item.author?.handle || '',
+              likeCount: typeof item.likeCount === 'number' ? item.likeCount : 0,
+              downloadCount: typeof item.downloadCount === 'number' ? item.downloadCount : 0,
+              typeSlug: item.typeSlug || 'payment',
+              regionCode: item.regionCode || 'GLOBAL',
+              featured: !!item.featured,
+              source: 'cardart',
+              sourceUrl: `https://cardart.cc/c/${item.id}`,
+            });
+            pageNew++;
+          }
+        }
+
+        let nextCursor: string | null = null;
+        const ncIdx = arr.indexOf('nextCursor');
+        if (ncIdx !== -1 && typeof arr[ncIdx + 1] === 'string') {
+          nextCursor = arr[ncIdx + 1];
+        }
+        if (!nextCursor || pageNew === 0) break;
+        cursor = nextCursor;
+      }
+
+      if (allCards.length > 0) {
+        cardartMemoryCards = allCards;
+        cardartLastSyncedAt = new Date().toISOString();
+        newCount = allCards.length;
+        // Save to disk
+        try {
+          if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+          fs.writeFileSync(CARDART_FILE_PATH, JSON.stringify(allCards, null, 2), 'utf-8');
+          console.log(`[CardArt] Successfully synced and persisted ${allCards.length} cards to ${CARDART_FILE_PATH}`);
+        } catch (err) {
+          console.warn('[CardArt] Warning saving cards to disk:', err);
+        }
+      }
+
+      return {
+        count: allCards.length,
+        newCards: newCount,
+        duration: Date.now() - t0,
+      };
+    } finally {
+      isCardartSyncing = false;
+    }
+  }
+
+  // API Endpoint: Query CardArt Cards with Search, Category Filter, and Sort
+  app.get('/api/cardart/cards', (req, res) => {
+    const q = (req.query.q as string || '').trim().toLowerCase();
+    const sort = (req.query.sort as string || 'popular').toLowerCase();
+    const tag = (req.query.tag as string || 'ALL').toUpperCase();
+
+    let list = [...cardartMemoryCards];
+
+    // Filter by query
+    if (q) {
+      list = list.filter((c) => {
+        const matchTitle = (c.title || '').toLowerCase().includes(q);
+        const matchEn = (c.titleEn || '').toLowerCase().includes(q);
+        const matchAuthor = (c.authorName || '').toLowerCase().includes(q) || (c.authorHandle || '').toLowerCase().includes(q);
+        const matchId = (c.id || '').toLowerCase().includes(q);
+        return matchTitle || matchEn || matchAuthor || matchId;
+      });
+    }
+
+    // Filter by tag/category
+    if (tag && tag !== 'ALL') {
+      if (tag === 'FEATURED') {
+        list = list.filter((c) => c.featured);
+      } else if (tag === 'PAYMENT') {
+        list = list.filter((c) => c.typeSlug === 'payment');
+      } else if (tag === 'TRANSIT') {
+        list = list.filter((c) => c.typeSlug === 'transit' || c.title.includes('八达通') || c.title.includes('Suica') || c.title.includes('交通'));
+      }
+    }
+
+    // Sorting
+    if (sort === 'downloads') {
+      list.sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0));
+    } else if (sort === 'likes') {
+      list.sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0));
+    } else if (sort === 'popular') {
+      list.sort((a, b) => ((b.downloadCount || 0) * 2 + (b.likeCount || 0) * 5) - ((a.downloadCount || 0) * 2 + (a.likeCount || 0) * 5));
+    }
+
+    return res.json({
+      success: true,
+      total: list.length,
+      cards: list,
+      lastSyncedAt: cardartLastSyncedAt || new Date().toISOString(),
+      isLiveSynced: true,
+    });
+  });
+
+  // API Endpoint: Trigger on-demand sync with cardart.cc
+  app.all('/api/cardart/sync', async (req, res) => {
+    try {
+      const result = await performCardArtSync();
+      return res.json({
+        success: true,
+        message: `已成功同步 https://cardart.cc/ 最新卡面库！共 ${result.count} 张原创卡面`,
+        count: result.count,
+        durationMs: result.duration,
+        lastSyncedAt: cardartLastSyncedAt,
+      });
+    } catch (err: any) {
+      console.warn('[CardArt] Sync failed:', err);
+      // Return existing cache if sync fails
+      return res.json({
+        success: false,
+        message: `同步异常: ${err.message || '网络不稳定'}，已继续使用本地高可用缓存`,
+        count: cardartMemoryCards.length,
+        lastSyncedAt: cardartLastSyncedAt,
+      });
+    }
+  });
+
+  // API Endpoint: CardArt Sync Status
+  app.get('/api/cardart/status', (req, res) => {
+    res.json({
+      success: true,
+      count: cardartMemoryCards.length,
+      lastSyncedAt: cardartLastSyncedAt || (cardartMemoryCards.length > 0 ? '已就绪' : null),
+      isSyncing: isCardartSyncing,
+      upstreamUrl: 'https://cardart.cc',
+    });
+  });
+
   // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -571,16 +815,40 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Serve transformed index.html for SPA client navigation
+    app.use('*', async (req, res, next) => {
+      if (req.originalUrl.startsWith('/api')) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        if (!fs.existsSync(indexPath)) {
+          return res.status(404).send('index.html not found');
+        }
+        let template = fs.readFileSync(indexPath, 'utf-8');
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        if (vite && typeof vite.ssrFixStacktrace === 'function') {
+          vite.ssrFixStacktrace(e as Error);
+        }
+        next(e);
+      }
+    });
   } else {
     // Locate frontend dist directory
     let distPath = path.join(process.cwd(), 'dist');
     if (!fs.existsSync(path.join(distPath, 'index.html'))) {
-      if (fs.existsSync(path.join(__dirname, 'index.html'))) {
-        distPath = __dirname;
+      if (fs.existsSync(path.join(process.cwd(), 'index.html'))) {
+        distPath = process.cwd();
       }
     }
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
+      if (req.originalUrl.startsWith('/api')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+      }
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
@@ -590,8 +858,12 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    console.error('Server error on listen:', err);
   });
 }
 

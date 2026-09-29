@@ -17,6 +17,9 @@ interface CreditCardsSummaryProps {
   onOpenRepayment: (targetAccountId?: string, suggestedAmount?: number) => void;
   onAddAccount: (category: 'CREDIT_CARD' | 'JD_BAITIAO' | 'HUABEI') => void;
   onEditAccount: (account: FinancialAccount) => void;
+  onOpenNewTx?: (defaultType?: string, accountId?: string) => void;
+  onQuickReconcile?: (account: FinancialAccount) => void;
+  onOpenCardentifyGallery?: (account: FinancialAccount) => void;
 }
 
 export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
@@ -26,6 +29,9 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
   onOpenRepayment,
   onAddAccount,
   onEditAccount,
+  onOpenNewTx,
+  onQuickReconcile,
+  onOpenCardentifyGallery,
 }) => {
   const creditAccounts = accounts.filter(
     (acc) => acc.category === 'CREDIT_CARD' || acc.category === 'JD_BAITIAO' || acc.category === 'HUABEI'
@@ -94,17 +100,20 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
       </div>
 
       {/* Credit Cards & JD Baitiao List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
         {creditAccounts.map((acc) => {
           const used = acc.usedCredit !== undefined ? acc.usedCredit : acc.balance || 0;
 
           return (
-            <div key={acc.id} className="h-full">
+            <div key={acc.id} className="transition-all duration-200 rounded-3xl">
               <AccountCardFace
                 account={acc}
                 privacyMode={privacyMode}
                 onEditAccount={onEditAccount}
                 onOpenRepayment={(accountId, amount) => onOpenRepayment(accountId, amount || used)}
+                onOpenNewTx={onOpenNewTx}
+                onQuickReconcile={onQuickReconcile}
+                onOpenCardentifyGallery={onOpenCardentifyGallery}
               />
             </div>
           );

@@ -886,6 +886,8 @@ export default function App() {
               onOpenRepayment={handleOpenRepayment}
               onAddAccount={handleOpenAddAccount}
               onEditAccount={handleOpenEditAccount}
+              onOpenNewTx={handleOpenNewTx}
+              onQuickReconcile={(acc) => handleOpenEditAccount(acc)}
             />
           </div>
         )}

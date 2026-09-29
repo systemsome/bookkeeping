@@ -119,3 +119,28 @@ input[type="number"] {
   }
 }
 
+/* Cardentify & Apple Pay Card Physical Shape (ISO/IEC 7810 ID-1 standard from cards.no2.ac) */
+.card-image {
+  aspect-ratio: 85.6 / 53.98;
+}
+
+.bank-card-shape {
+  border-radius: 3.72% / 5.89%;
+  overflow: hidden;
+}
+
+.card-gloss-sheen {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.08) 25%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.04) 75%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+}
+
+.card-shadow-wallet {
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.25), 0 6px 12px -4px rgba(0, 0, 0, 0.15);
+}
+

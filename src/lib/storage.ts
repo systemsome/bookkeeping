@@ -1,5 +1,6 @@
 import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats } from '../types';
 import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './constants';
+import { matchBestCardentifyPreset, matchBestCardentifyCard } from './cardentifyPresets';
 import { sortTransactions } from './formatters';
 import { mergeAccounts, mergeTransactions, mergeProjects } from './backup';
 import { getStoredCloudflareConfig, saveCloudflareConfig, syncWithCloudflare } from './cloudflareSync';
@@ -235,7 +236,61 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
       return [];
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    // Intelligently auto-populate Cardentify lossless Apple Pay card faces for accounts without cardImageUrl
+    let needsResave = false;
+    const enriched = parsed.map((acc: FinancialAccount) => {
+      let updatedAcc = { ...acc };
+
+      if (!updatedAcc.cardImageUrl) {
+        const matched = matchBestCardentifyCard(updatedAcc.name, updatedAcc.bankName, updatedAcc.category);
+        if (matched) {
+          needsResave = true;
+          let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+          const bUp = (matched.brand || '').toUpperCase();
+          if (bUp.includes('VISA')) net = 'VISA';
+          else if (bUp.includes('MASTER')) net = 'MASTERCARD';
+          else if (bUp.includes('AMEX')) net = 'AMEX';
+          else if (bUp.includes('JCB')) net = 'JCB';
+
+          updatedAcc = {
+            ...updatedAcc,
+            cardImageUrl: matched.imageUrl,
+            cardPresetId: updatedAcc.cardPresetId || `cardentify-${matched.id}`,
+            cardNetwork: updatedAcc.cardNetwork && updatedAcc.cardNetwork !== 'NONE' ? updatedAcc.cardNetwork : net,
+            bankName: updatedAcc.bankName || matched.issuerName,
+            cardTier: updatedAcc.cardTier || (matched.name.includes('白金') ? '白金卡' : matched.name.includes('金卡') ? '金卡' : '标准卡'),
+          };
+        }
+      }
+
+      if (!updatedAcc.cardPresetId || !updatedAcc.cardPattern) {
+        const preset = matchBestCardentifyPreset(updatedAcc.name, updatedAcc.bankName);
+        if (preset) {
+          needsResave = true;
+          updatedAcc = {
+            ...updatedAcc,
+            cardPresetId: updatedAcc.cardPresetId || preset.id,
+            cardPattern: updatedAcc.cardPattern || preset.cardStyle.patternType || 'radial-sheen',
+            cardTextColor: updatedAcc.cardTextColor || preset.textColorMode,
+            cardBgColor: updatedAcc.cardBgColor || preset.cardStyle.background,
+            cardTier: updatedAcc.cardTier || preset.cardTier,
+            cardNetwork: updatedAcc.cardNetwork || preset.cardNetwork,
+          };
+        }
+      }
+
+      return updatedAcc;
+    });
+
+    if (needsResave) {
+      try {
+        localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(enriched));
+      } catch {}
+    }
+
+    return enriched;
   } catch {
     return [];
   }

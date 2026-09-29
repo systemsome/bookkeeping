@@ -1,391 +1,549 @@
 import React from 'react';
 
-interface BrandLogoProps {
+export interface BrandLogoProps {
   type: string;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
-  variant?: 'solid' | 'transparent' | 'card-emboss';
 }
 
+/**
+ * 官方标准级银行与金融机构正版矢量LOGO
+ * 同步收录自 Cardentify (github.com/no2ac/Cardentify), cards.no2.ac 与 cardart.cc
+ */
 export const BrandLogo: React.FC<BrandLogoProps> = ({
   type,
   size = 'md',
   className = '',
 }) => {
   const sizeMap = {
-    xs: 'w-4 h-4 text-[9px]',
-    sm: 'w-6 h-6 text-xs',
-    md: 'w-8 h-8 text-sm',
-    lg: 'w-10 h-10 text-base',
-    xl: 'w-14 h-14 text-xl',
+    xs: 'w-4 h-4',
+    sm: 'w-5 h-5 sm:w-6 sm:h-6',
+    md: 'w-7 h-7 sm:w-8 sm:h-8',
+    lg: 'w-9 h-9 sm:w-10 sm:h-10',
+    xl: 'w-12 h-12 sm:w-14 sm:h-14',
   };
 
   const currentSize = sizeMap[size] || sizeMap.md;
+  const brandKey = (type || '').toLowerCase().trim();
 
-  switch (type.toLowerCase()) {
+  switch (brandKey) {
+    // 1. 招商银行 (CMB) - 招商银行经典C-M-B飞帆标
     case 'cmb':
-      // China Merchants Bank (招商银行 - 招牌红葵花/几何LOGO)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-red-600 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#E11922] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="招商银行 China Merchants Bank"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c3.87 0 7 3.13 7 7s-3.13 7-7 7-7-3.13-7-7 3.13-7 7-7zm-4 4v6h2.5v-3.5L12 13l1.5-1.5V15H16V9h-2.5l-1.5 2-1.5-2H8z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+            {/* 招行标志性外圈C形环弧 */}
+            <path
+              d="M 79 25 A 39 39 0 1 0 79 75"
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth="8"
+              strokeLinecap="round"
+            />
+            {/* 招行稳健M字双峰造型 */}
+            <path
+              d="M 27 68 L 38 30 L 50 48 L 62 30 L 73 68"
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* 基底横线（与M结合构成B字寓意） */}
+            <line
+              x1="20"
+              y1="70"
+              x2="80"
+              y2="70"
+              stroke="#FFFFFF"
+              strokeWidth="8"
+              strokeLinecap="round"
+            />
+            {/* 底部速度平行射线 */}
+            <line
+              x1="32"
+              y1="80"
+              x2="68"
+              y2="80"
+              stroke="#FFFFFF"
+              strokeWidth="5"
+              strokeLinecap="round"
+            />
           </svg>
         </div>
       );
 
+    // 2. 中国工商银行 (ICBC) - 工字方圆古钱标
     case 'icbc':
-      // Industrial and Commercial Bank of China (中国工商银行 - 经典圆钱工字标)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-red-700 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#C7000B] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="中国工商银行 ICBC"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M7 8h10v2.5H7zm0 5.5h10V16H7zm3.5-3.5h3v3.5h-3z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M50 8C26.8 8 8 26.8 8 50s18.8 42 42 42 42-18.8 42-42S73.2 8 50 8zm0 8c18.78 0 34 15.22 34 34S68.78 84 50 84 16 68.78 16 50s15.22-34 34-34zm-22 17v8h44v-8H28zm14 13v12h16V46H42zm-14 17v8h44v-8H28z" />
           </svg>
         </div>
       );
 
+    // 3. 中国建设银行 (CCB) - 双C飞白龙鼎标
     case 'ccb':
-      // China Construction Bank (中国建设银行 - 双C飞白标)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-blue-700 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#0054A6] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="中国建设银行 CCB"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M12 6a6 6 0 0 0-6 6c0 3.31 2.69 6 6 6 2.2 0 4.12-1.19 5.16-2.95l-1.84-.9A3.98 3.98 0 0 1 12 16a4 4 0 0 1-4-4 4 4 0 0 1 4-4c1.47 0 2.74.8 3.32 1.95l1.84-.9A5.96 5.96 0 0 0 12 6z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M50 25c-13.8 0-25 11.2-25 25s11.2 25 25 25c9.2 0 17.2-5 21.5-12.3l-7.7-3.8C60.4 63.8 55.6 67 50 67c-9.4 0-17-7.6-17-17s7.6-17 17-17c5.6 0 10.4 3.2 13.8 8.1l7.7-3.8C67.2 30 59.2 25 50 25z" />
           </svg>
         </div>
       );
 
+    // 4. 中国农业银行 (ABC) - 麦穗铜钱标
     case 'abc':
-      // Agricultural Bank of China (中国农业银行 - 麦穗铜钱标)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#00897B] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="中国农业银行 ABC"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M12 5v14M8.5 8.5l3.5-3.5 3.5 3.5M7.5 12l4.5-4.5 4.5 4.5M6.5 15.5l5.5-5.5 5.5 5.5" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <svg viewBox="0 0 100 100" className="w-full h-full stroke-white fill-none stroke-[7]" strokeLinecap="round">
+            <circle cx="50" cy="50" r="41" strokeWidth="8" />
+            <line x1="50" y1="20" x2="50" y2="80" strokeWidth="8" />
+            <path d="M35 35 L50 20 L65 35" strokeWidth="7" />
+            <path d="M30 50 L50 35 L70 50" strokeWidth="7" />
+            <path d="M26 65 L50 50 L74 65" strokeWidth="7" />
           </svg>
         </div>
       );
 
+    // 5. 中国银行 (BOC) - 天圆地方古钱标
     case 'boc':
-      // Bank of China (中国银行 - 天圆地方古钱标)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-red-700 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#B20015] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="中国银行 Bank of China"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="2" />
-            <rect x="9" y="9" width="6" height="6" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M12 2.5v6.5M12 15v6.5" stroke="currentColor" strokeWidth="2.2" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <rect x="36" y="36" width="28" height="28" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <line x1="50" y1="8" x2="50" y2="36" stroke="#FFFFFF" strokeWidth="9" />
+            <line x1="50" y1="64" x2="50" y2="92" stroke="#FFFFFF" strokeWidth="9" />
           </svg>
         </div>
       );
 
+    // 6. 交通银行 (BOCOM) - 经典立体交标
     case 'bocom':
-      // Bank of Communications (交通银行 - 经典交行立体标)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-blue-900 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#002B66] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="交通银行 BOCOM"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <path d="M12 3L3 9v12h18V9L12 3zm0 3.5l6 4v7.5H6v-7.5l6-4zm-3 7h6v2H9v-2z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M50 12 L14 36 L14 84 L86 84 L86 36 Z M50 28 L72 44 L72 72 L28 72 L28 44 Z M38 52 L62 52 L62 62 L38 62 Z" />
           </svg>
         </div>
       );
 
-    case 'mybank':
-      // MYbank (网商银行 - 阿里巴巴蚂蚁集团旗下)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-[#0066cc] flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="网商银行 MYbank"
-        >
-          <div className="flex flex-col items-center justify-center leading-none">
-            <span className="font-black text-[9px] sm:text-[10px] tracking-tighter text-[#ff7a00]">MY</span>
-            <span className="font-extrabold text-[7px] sm:text-[8px] tracking-tight">bank</span>
-          </div>
-        </div>
-      );
-
-    case 'webank':
-      // WeBank (微众银行 - 腾讯旗下互联网银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-[#0052d9] flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="微众银行 WeBank"
-        >
-          <div className="flex flex-col items-center justify-center leading-none">
-            <span className="font-black text-[8px] sm:text-[9px] tracking-tight text-white">We</span>
-            <span className="font-extrabold text-[7px] sm:text-[8px] tracking-tight text-sky-200">Bank</span>
-          </div>
-        </div>
-      );
-
-    case 'aibank':
-      // aiBank (百信银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-gradient-to-r from-red-600 to-rose-700 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="百信银行 aiBank"
-        >
-          <span className="font-black tracking-tighter text-[9px] sm:text-[10px] leading-none">aiBank</span>
-        </div>
-      );
-
-    case 'bob':
-      // Bank of Beijing (北京银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-[#c8102e] flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="北京银行 Bank of Beijing"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">京行</span>
-        </div>
-      );
-
-    case 'nbcb':
-      // Bank of Ningbo (宁波银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="宁波银行 Bank of Ningbo"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">宁银</span>
-        </div>
-      );
-
-    case 'bos':
-      // Bank of Shanghai (上海银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-[#004b97] flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="上海银行 Bank of Shanghai"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">上行</span>
-        </div>
-      );
-
-    case 'hxb':
-      // Hua Xia Bank (华夏银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-red-700 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="华夏银行 HXB"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">华夏</span>
-        </div>
-      );
-
-    case 'citic':
-      // China CITIC Bank (中信银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-red-600 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="中信银行 CITIC"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">中信</span>
-        </div>
-      );
-
-    case 'pingan':
-      // Ping An Bank (平安银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="平安银行 Ping An"
-        >
-          <span className="font-black text-[10px] sm:text-[11px] leading-none">平安</span>
-        </div>
-      );
-
-    case 'spdb':
-      // SPDB (浦发银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-blue-800 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="浦发银行 SPDB"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">浦发</span>
-        </div>
-      );
-
+    // 7. 中国邮政储蓄银行 (PSBC) - 绿色经典邮雁标
     case 'psbc':
-      // Postal Savings Bank of China (中国邮政储蓄银行)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-green-700 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#007A3D] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="中国邮政储蓄银行 PSBC"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <path d="M3 5h18v14H3V5zm9 8.5L5.5 8h13L12 13.5zm-6.5-.5V17h13v-4l-6.5 4-6.5-4z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M22 34 L78 34 L50 56 Z M20 40 L48 62 L20 74 Z M80 40 L52 62 L80 74 Z M26 76 L74 76 L50 65 Z" />
           </svg>
         </div>
       );
 
-    case 'cmbc':
-      // China Minsheng Bank (民生银行)
+    // 8. 中信银行 (CITIC) - 红色方印双窗标
+    case 'citic':
       return (
         <div
-          className={`${currentSize} rounded-xl bg-teal-700 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#DB0011] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="中信银行 China CITIC Bank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <rect x="18" y="18" width="64" height="64" rx="8" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <rect x="32" y="32" width="16" height="36" rx="2" fill="#FFFFFF" />
+            <rect x="52" y="32" width="16" height="36" rx="2" fill="#FFFFFF" />
+          </svg>
+        </div>
+      );
+
+    // 9. 中国光大银行 (CEB) - 紫色光芒S纽带标
+    case 'ceb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#671E75] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="中国光大银行 China Everbright Bank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M35 34 C35 26 44 22 53 22 C64 22 70 28 68 36 C66 44 50 46 44 52 C38 58 40 68 50 68 C58 68 64 64 66 58 L74 62 C70 72 61 78 49 78 C35 78 28 68 32 56 C35 46 50 43 56 38 C60 34 58 30 52 30 C46 30 43 33 42 37 Z" />
+          </svg>
+        </div>
+      );
+
+    // 10. 华夏银行 (HXB) - 红色玉龙玉佩C形标
+    case 'hxb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#CD0000] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="华夏银行 Hua Xia Bank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M50 15 C70 15 85 30 85 50 C85 70 70 85 50 85 C30 85 15 70 15 50 C15 30 30 15 50 15 Z M50 27 C37 27 27 37 27 50 C27 63 37 73 50 73 C60 73 68 66 71 58 L81 64 C76 77 64 85 50 85" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <circle cx="50" cy="50" r="10" fill="#FFFFFF" />
+          </svg>
+        </div>
+      );
+
+    // 11. 中国民生银行 (CMBC) - 蓝绿渐变民生帆标
+    case 'cmbc':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#007078] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="中国民生银行 CMBC"
         >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">民生</span>
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M16 80 L50 20 L84 80 L62 80 L50 56 L38 80 Z M50 38 L58 54 L42 54 Z" />
+          </svg>
         </div>
       );
 
-    case 'ceb':
-      // China Everbright Bank (光大银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-purple-700 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="中国光大银行 CEB"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">光大</span>
-        </div>
-      );
-
-    case 'cib':
-      // Industrial Bank (兴业银行)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-blue-700 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="兴业银行 CIB"
-        >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">兴业</span>
-        </div>
-      );
-
+    // 12. 广发银行 (CGB) - 红色现代折角标
     case 'cgb':
-      // China Guangfa Bank (广发银行)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-red-700 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
-          title="广发银行 CGB"
+          className={`${currentSize} rounded-full bg-[#C60000] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="广发银行 China Guangfa Bank"
         >
-          <span className="font-black tracking-tighter text-[10px] sm:text-[11px] leading-none">广发</span>
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <polygon points="50,15 85,35 85,65 50,85 15,65 15,35" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <polygon points="50,28 72,42 72,60 50,72 28,60 28,42" fill="#FFFFFF" />
+          </svg>
         </div>
       );
 
-    case 'alipay':
-      // Alipay (支付宝) - 官方标准 "支" 徽标矢量
+    // 13. 平安银行 (PINGAN / PAB) - 橙红相间平安方印标
+    case 'pingan':
+    case 'pab':
       return (
         <div
-          className={`${currentSize} rounded-xl bg-[#1677ff] flex items-center justify-center text-white shadow-xs p-1 shrink-0 overflow-hidden ${className}`}
+          className={`${currentSize} rounded-full bg-[#EA5404] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="平安银行 Ping An Bank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <rect x="18" y="18" width="64" height="64" rx="14" fill="#FFFFFF" />
+            <rect x="25" y="25" width="22" height="22" rx="4" fill="#EA5404" />
+            <rect x="53" y="25" width="22" height="22" rx="4" fill="#EA5404" />
+            <rect x="25" y="53" width="22" height="22" rx="4" fill="#EA5404" />
+            <circle cx="64" cy="64" r="11" fill="#EA5404" />
+          </svg>
+        </div>
+      );
+
+    // 14. 浦发银行 (SPDB) - 蓝色极简SPD聚合标
+    case 'spdb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#0C326E] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="浦发银行 SPDB"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M30 35 L48 35 C58 35 64 41 64 50 C64 59 58 65 48 65 L30 65 Z M42 45 L42 55 L48 55 C52 55 54 53 54 50 C54 47 52 45 48 45 Z" />
+          </svg>
+        </div>
+      );
+
+    // 15. 兴业银行 (CIB) - 科技深蓝太极环标
+    case 'cib':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#004A97] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="兴业银行 Industrial Bank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M50 18 A32 32 0 0 1 82 50 A16 16 0 0 1 50 50 A16 16 0 0 0 18 50 A32 32 0 0 1 50 18 Z" fill="#FFFFFF" />
+            <circle cx="50" cy="34" r="5" fill="#004A97" />
+            <circle cx="50" cy="66" r="5" fill="#FFFFFF" />
+          </svg>
+        </div>
+      );
+
+    // 16. 浙商银行 (CZB) - 红色正方鼎标
+    case 'czb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#C9151E] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="浙商银行 China Zheshang Bank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <rect x="20" y="20" width="60" height="60" rx="10" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M34 36 L66 36 L44 64 L66 64" fill="none" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      );
+
+    // 17. 宁波银行 (NBCB) - 温暖金橙汇通标
+    case 'nbcb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#F58220] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="宁波银行 Bank of Ningbo"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M28 70 L28 30 L45 56 L45 30 M55 70 L55 30 L72 56 L72 30" fill="none" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" />
+          </svg>
+        </div>
+      );
+
+    // 18. 北京银行 (BOB) - 经典京韵红标
+    case 'bob':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#C8102E] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="北京银行 Bank of Beijing"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <rect x="34" y="30" width="32" height="40" rx="4" fill="none" stroke="#FFFFFF" strokeWidth="7" />
+            <line x1="34" y1="50" x2="66" y2="50" stroke="#FFFFFF" strokeWidth="7" />
+          </svg>
+        </div>
+      );
+
+    // 19. 上海银行 (BOS) - 经典海韵蓝标
+    case 'bos':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#004B97] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="上海银行 Bank of Shanghai"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <path d="M28 50 C28 35 40 28 50 28 C62 28 72 36 72 48 C72 62 58 64 50 68 C44 71 38 74 38 80 L72 80" fill="none" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" />
+          </svg>
+        </div>
+      );
+
+    // 20. 江苏银行 (JSB) - 金辉融汇J标
+    case 'jsb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#D4AF37] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="江苏银行 Bank of Jiangsu"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-[#1A1A1A]" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="#D4AF37" />
+            <path d="M56 25 L56 60 C56 68 50 74 40 74 C32 74 26 68 26 60 L36 60 C36 63 38 66 41 66 C44 66 46 64 46 60 L46 25 Z" fill="#1A1A1A" />
+          </svg>
+        </div>
+      );
+
+    // 21. 汇丰银行 (HSBC) - 经典六角红白菱形标
+    case 'hsbc':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-white flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden border border-slate-100 ${className}`}
+          title="汇丰银行 HSBC"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+            <polygon points="50,15 85,50 50,85 15,50" fill="#DB0011" />
+            <polygon points="50,15 15,50 15,15" fill="#DB0011" />
+            <polygon points="50,85 85,50 85,85" fill="#DB0011" />
+            <polygon points="50,15 85,15 85,50" fill="#FFFFFF" />
+            <polygon points="15,50 15,85 50,85" fill="#FFFFFF" />
+          </svg>
+        </div>
+      );
+
+    // 22. 渣打银行 (SCB) - 经典双螺旋蓝绿标
+    case 'scb':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-white flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden border border-slate-100 ${className}`}
+          title="渣打银行 Standard Chartered"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+            <path d="M30 20 C18 32 18 52 30 64 L50 84 C62 72 62 52 50 40 Z" fill="#0072CE" />
+            <path d="M70 20 C82 32 82 52 70 64 L50 84 C38 72 38 52 50 40 Z" fill="#00A54F" />
+          </svg>
+        </div>
+      );
+
+    // 23. 花旗银行 (CITI) - 经典红蓝弧拱标
+    case 'citi':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#003B70] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="花旗银行 Citibank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+            <path d="M35 30 C50 15 65 15 80 30" fill="none" stroke="#ED1B2D" strokeWidth="8" strokeLinecap="round" />
+            <text x="50" y="68" fill="#FFFFFF" fontSize="30" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">citi</text>
+          </svg>
+        </div>
+      );
+
+    // 24. 浙江网商银行 (MYBANK) - 阿里蚂蚁互联网银行
+    case 'mybank':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#0066CC] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="网商银行 MYbank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <rect width="100" height="100" rx="50" fill="#0066CC" />
+            <text x="35" y="48" fill="#FF7A00" fontSize="28" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">MY</text>
+            <text x="50" y="78" fill="#FFFFFF" fontSize="24" fontWeight="800" fontFamily="sans-serif" textAnchor="middle">bank</text>
+          </svg>
+        </div>
+      );
+
+    // 25. 微众银行 (WEBANK) - 腾讯前海微众银行
+    case 'webank':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#0052D9] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="微众银行 WeBank"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+            <text x="50" y="46" fill="#FFFFFF" fontSize="28" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">We</text>
+            <text x="50" y="76" fill="#79E2F2" fontSize="22" fontWeight="800" fontFamily="sans-serif" textAnchor="middle">Bank</text>
+          </svg>
+        </div>
+      );
+
+    // 26. 百信银行 (AIBANK) - 百度中信AI银行
+    case 'aibank':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#E11922] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="百信银行 aiBank"
+        >
+          <span className="font-black text-[9px] sm:text-[11px] text-white tracking-tighter">aiBank</span>
+        </div>
+      );
+
+    // 27. 支付宝 (ALIPAY) - 官方正版矢量标
+    case 'alipay':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#1677FF] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="支付宝 Alipay"
         >
-          <svg viewBox="0 0 16 16" className="w-full h-full" fill="none">
-            <rect width="16" height="16" rx="2.5" fill="#ffffff" />
-            <path
-              d="M2.541 0H13.5a2.55 2.55 0 0 1 2.54 2.563v8.297c-.006 0-.531-.046-2.978-.813-.412-.14-.916-.327-1.479-.536q-.456-.17-.957-.353a13 13 0 0 0 1.325-3.373H8.822V4.649h3.831v-.634h-3.83V2.121H7.26c-.274 0-.274.273-.274.273v1.621H3.11v.634h3.875v1.136h-3.2v.634H9.99c-.227.789-.532 1.53-.894 2.202-2.013-.67-4.161-1.212-5.51-.878-.864.214-1.42.597-1.746.998-1.499 1.84-.424 4.633 2.741 4.633 1.872 0 3.675-1.053 5.072-2.787 2.08 1.008 6.37 2.738 6.387 2.745v.105A2.55 2.55 0 0 1 13.5 16H2.541A2.55 2.55 0 0 1 0 13.437V2.563A2.55 2.55 0 0 1 2.541 0"
-              fill="#1677FF"
-            />
-            <path
-              d="M2.309 9.27c-1.22 1.073-.49 3.034 1.978 3.034 1.434 0 2.868-.925 3.994-2.406-1.602-.789-2.959-1.353-4.425-1.207-.397.04-1.14.217-1.547.58Z"
-              fill="#1677FF"
-            />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M16 10 C12.7 10 10 12.7 10 16 L10 84 C10 87.3 12.7 90 16 90 L84 90 C87.3 90 90 87.3 90 84 L90 16 C90 12.7 87.3 10 84 10 Z" fill="#1677FF" />
+            <path d="M22 34 L78 34 M22 46 L78 46 M50 20 L50 46 M32 60 C40 54 46 48 50 46 C56 54 66 64 78 72 M30 76 C42 76 56 68 62 58" fill="none" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       );
 
+    // 28. 蚂蚁花呗 (HUABEI)
     case 'huabei':
-      // Ant Huabei (蚂蚁花呗) - 官方标准 "花" 专属字形与徽标
       return (
         <div
-          className={`${currentSize} rounded-xl bg-gradient-to-br from-[#0091ff] via-[#0083ff] to-[#006bd6] flex items-center justify-center text-white shadow-xs p-1 shrink-0 select-none overflow-hidden ${className}`}
+          className={`${currentSize} rounded-full bg-gradient-to-br from-[#00A3FF] to-[#0066DB] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="蚂蚁花呗 Ant Huabei"
         >
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-current">
-            {/* 艹字头横向笔画 */}
-            <rect x="16" y="24" width="68" height="9" rx="4.5" />
-            {/* 艹字头左竖 */}
-            <rect x="32" y="14" width="9" height="22" rx="4.5" />
-            {/* 艹字头右竖 */}
-            <rect x="59" y="14" width="9" height="22" rx="4.5" />
-            {/* 单人旁 撇 */}
-            <path
-              d="M 37 40 C 37 40 33 43 27 51 C 21 59 16 67 12 74 C 10 77.5 12 81 16 80 C 19.5 79 25 73.5 30 65 C 33.5 59.5 36.5 52 38 46 C 38.8 43 38.5 40.5 37 40 Z"
-            />
-            {/* 单人旁 竖 */}
-            <rect x="27" y="55" width="9" height="31" rx="4.5" />
-            {/* 匕首部 撇/横 */}
-            <rect x="49" y="44" width="29" height="8.5" rx="4.25" />
-            {/* 匕首部 竖弯钩 */}
-            <path
-              d="M 48 48 C 45 48 43 50.5 43 53.5 L 43 71 C 43 78.5 48.5 84 56 84 L 71 84 C 78.5 84 84 78.5 84 71 L 84 62 C 84 59.5 81.5 57.5 79 57.5 C 76.5 57.5 74.5 59.5 74.5 62 L 74.5 71 C 74.5 73.5 72.5 75.5 70 75.5 L 56.5 75.5 C 54 75.5 52 73.5 52 71 L 52 53.5 C 52 50.5 50.5 48 48 48 Z"
-            />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            {/* 艹字头 */}
+            <rect x="18" y="24" width="64" height="8" rx="4" />
+            <rect x="34" y="16" width="8" height="20" rx="4" />
+            <rect x="58" y="16" width="8" height="20" rx="4" />
+            {/* 单人旁 */}
+            <path d="M38 40 C32 48 24 58 16 68" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" fill="none" />
+            <rect x="28" y="52" width="8" height="30" rx="4" />
+            {/* 匕字底 */}
+            <path d="M48 46 L74 46 M48 46 L48 70 C48 76 52 80 58 80 L72 80 C78 80 82 76 82 70" fill="none" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       );
 
+    // 29. 微信支付 (WECHAT) - 官方翡翠绿双气泡
     case 'wechat':
-      // WeChat Pay (微信支付)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#07C160] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="微信支付 WeChat Pay"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <path d="M9.5 4C5.91 4 3 6.46 3 9.5c0 1.83 1.05 3.45 2.68 4.43l-.7 2.17 2.53-1.28c.62.18 1.29.28 1.99.28.2 0 .4-.01.6-.03C9.72 14.54 9.5 13.9 9.5 13.22c0-3.31 3.25-6 7.25-6 .34 0 .68.02 1.01.07C16.8 5.25 13.43 4 9.5 4zm-2.25 3.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zm4.5 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zM16.75 8.5c-3.45 0-6.25 2.24-6.25 5s2.8 5 6.25 5c.57 0 1.12-.07 1.64-.2l2.06 1.05-.57-1.76c1.33-.8 2.12-2.11 2.12-3.59 0-2.76-2.8-5-6.25-5zm-2 2.75a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M42 22 C25 22 12 33 12 47 C12 55 17 62 25 67 L21 78 L33 72 C36 73 39 73 42 73 C42 72 42 70 42 68 C42 53 56 41 72 41 C73 41 75 41 76 41 C73 30 59 22 42 22 Z M32 36 A5 5 0 1 1 32 46 A5 5 0 1 1 32 36 Z M52 36 A5 5 0 1 1 52 46 A5 5 0 1 1 52 36 Z" />
+            <path d="M70 44 C56 44 45 53 45 65 C45 71 49 77 55 81 L52 90 L61 86 C64 87 67 87 70 87 C84 87 95 77 95 65 C95 53 84 44 70 44 Z M62 55 A4 4 0 1 1 62 63 A4 4 0 1 1 62 55 Z M78 55 A4 4 0 1 1 78 63 A4 4 0 1 1 78 55 Z" />
           </svg>
         </div>
       );
 
-    case 'yuebao':
-      // Yuebao (余额宝)
-      return (
-        <div
-          className={`${currentSize} rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
-          title="余额宝 Yuebao"
-        >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z" />
-          </svg>
-        </div>
-      );
-
+    // 30. 京东金融 / 京东白条 (JD / BAITIAO)
     case 'jd':
     case 'baitiao':
-      // JD Finance & BaiTiao (京东金融 / 京东白条)
+    case 'jd_finance':
+    case 'jd_baitiao':
       return (
         <div
-          className={`${currentSize} rounded-xl bg-red-600 flex items-center justify-center text-white shadow-sm p-0.5 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-[#E1251B] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="京东金融 JD Finance"
         >
-          <span className="font-black tracking-tight text-[11px] leading-none">JD</span>
+          <span className="font-black text-[10px] sm:text-xs text-white tracking-tighter">JD</span>
         </div>
       );
 
-    case 'applepay':
-      // Apple Pay
+    // 31. 余额宝 (YUEBAO)
+    case 'yuebao':
       return (
         <div
-          className={`${currentSize} rounded-xl bg-black flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
-          title="Apple Pay"
+          className={`${currentSize} rounded-full bg-gradient-to-tr from-[#FF7A00] to-[#FF9E00] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="余额宝 Yuebao"
         >
-          <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
-            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.85c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.63 1.35-.57.66-.99 1.73-.86 2.76 1.01.08 2.03-.51 2.57-1.26z" />
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+            <circle cx="50" cy="50" r="18" fill="#FFFFFF" />
+            <line x1="50" y1="16" x2="50" y2="84" stroke="#FFFFFF" strokeWidth="8" />
           </svg>
         </div>
       );
 
-    case 'gold':
-      // 24K Gold Ingot (黄金理财)
+    // 32. 苹果支付 (APPLEPAY)
+    case 'applepay':
       return (
         <div
-          className={`${currentSize} rounded-xl bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-600 flex items-center justify-center text-amber-950 shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-black flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="Apple Pay"
+        >
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M68 50 C68 41 76 36 76 36 C72 30 65 29 63 29 C57 28 51 32 48 32 C45 32 40 28 35 29 C27 29 19 35 15 44 C8 58 13 78 20 88 C24 93 28 99 34 99 C39 99 41 96 47 96 C53 96 55 99 61 99 C66 99 70 94 74 88 C78 82 80 77 80 76 C80 76 68 71 68 50 Z M56 21 C59 17 61 12 60 7 C55 7 50 10 47 14 C44 18 42 23 43 28 C49 28 53 25 56 21 Z" />
+          </svg>
+        </div>
+      );
+
+    // 33. 云闪付 (UNIONPAY APP)
+    case 'unionpay_app':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-[#C8102E] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          title="云闪付 UnionPay App"
+        >
+          <span className="font-bold text-[8px] sm:text-[9px] text-white tracking-tighter">云闪付</span>
+        </div>
+      );
+
+    // 34. 黄金积存金 (GOLD)
+    case 'gold':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden text-amber-950 font-bold ${className}`}
           title="黄金理财 24K Gold"
         >
           <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
@@ -394,11 +552,11 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         </div>
       );
 
+    // 35. 公募基金 (FUND)
     case 'fund':
-      // Mutual Fund (公募基金)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
+          className={`${currentSize} rounded-full bg-purple-600 flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden text-white ${className}`}
           title="公募基金 Mutual Fund"
         >
           <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
@@ -407,12 +565,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         </div>
       );
 
+    // 36. 现金储备 (CASH)
     case 'cash':
-      // Cash (现金)
       return (
         <div
-          className={`${currentSize} rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
-          title="现金储蓄 Cash"
+          className={`${currentSize} rounded-full bg-emerald-600 flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden text-white ${className}`}
+          title="现金备用金 Cash"
         >
           <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
             <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2zM12 14c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" />
@@ -420,12 +578,34 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         </div>
       );
 
-    default:
-      // Generic Bank Card Logo
+    // 37. 借出款项 (RECEIVABLE)
+    case 'receivable':
       return (
         <div
-          className={`${currentSize} rounded-xl bg-slate-800 flex items-center justify-center text-white shadow-sm p-1 shrink-0 ${className}`}
-          title="银行卡 / 金融账户"
+          className={`${currentSize} rounded-full bg-cyan-600 flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden text-white ${className}`}
+          title="借出款项 (债权待收)"
+        >
+          <span className="font-medium text-[8px] sm:text-[9px]">待收</span>
+        </div>
+      );
+
+    // 38. 借入款项 (PAYABLE)
+    case 'payable':
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-purple-700 flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden text-white ${className}`}
+          title="借入款项 (债务待还)"
+        >
+          <span className="font-medium text-[8px] sm:text-[9px]">待还</span>
+        </div>
+      );
+
+    // 通用银行卡缺省
+    default:
+      return (
+        <div
+          className={`${currentSize} rounded-full bg-slate-800 flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden text-white ${className}`}
+          title="银行卡账户"
         >
           <svg viewBox="0 0 24 24" className="w-full h-full fill-current">
             <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" />
@@ -436,13 +616,13 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 };
 
 /**
- * HIGH-DEFINITION CARD NETWORK BADGES:
- * ALL TRANSPARENT BACKGROUNDS (No ugly opaque white/black boxes)
- * - 中国银联 (UnionPay) - 官方三色斜带 + 精准矢量书法中英文，全透明自然融合
- * - VISA - 经典透明矢量字体
- * - 万事达 (Mastercard) - 经典双相交红橙圆，全透明背景
- * - 美国运通 (AMEX) - 经典蓝白字标，透明融入
- * - JCB - 经典三色条字标，透明背景
+ * 国际主流卡组织徽标：
+ * - 中国银联 (UnionPay) - 官方正版红蓝青三色斜带 + 优雅矢量银联中英文字体
+ * - VISA - 经典矢量字标 + 左上翼金光弧
+ * - 万事达 (Mastercard) - 双色正圆交错
+ * - 美国运通 (AMEX) - 经典运通蓝白居中标
+ * - JCB - 经典三色圆角条标
+ * 全透明背景，严格保留在卡面右上角展示
  */
 export const CardNetworkBadge: React.FC<{
   network?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE';
@@ -451,26 +631,24 @@ export const CardNetworkBadge: React.FC<{
 }> = ({ network = 'UNIONPAY', className = '', size = 'md' }) => {
   if (!network || network === 'NONE') return null;
 
-  // 1. VISA (Authentic Official Vector Shape)
+  // 1. VISA
   if (network === 'VISA') {
-    const svgWidth =
-      size === 'sm' ? 'w-11 h-4' : size === 'lg' ? 'w-20 h-7' : 'w-14 h-5 sm:w-16 sm:h-5.5';
+    const dim =
+      size === 'sm' ? 'w-10 h-3.5' : size === 'lg' ? 'w-16 h-5.5' : 'w-12 h-4 sm:w-14 sm:h-4.5';
     return (
       <div
-        className={`inline-flex items-center justify-center select-none ${className}`}
+        className={`inline-flex items-center justify-center select-none shrink-0 ${className}`}
         title="VISA 国际卡组织"
       >
         <svg
           viewBox="0 7.8 24 8.5"
-          className={`${svgWidth} drop-shadow-sm`}
+          className={`${dim} drop-shadow-sm`}
           style={{ overflow: 'visible' }}
         >
-          {/* Main Authentic VISA Wordmark */}
           <path
             d="M9.112 8.262L5.97 15.758H3.92L2.374 9.775c-.094-.368-.175-.503-.461-.658C1.447 8.864.677 8.627 0 8.479l.046-.217h3.3a.904.904 0 01.894.764l.817 4.338 2.018-5.102zm8.033 5.049c.008-1.979-2.736-2.088-2.717-2.972.006-.269.262-.555.822-.628a3.66 3.66 0 011.913.336l.34-1.59a5.207 5.207 0 00-1.814-.333c-1.917 0-3.266 1.02-3.278 2.479-.012 1.079.963 1.68 1.698 2.04.756.367 1.01.603 1.006.931-.005.504-.602.725-1.16.734-.975.015-1.54-.263-1.992-.473l-.351 1.642c.453.208 1.289.39 2.156.398 2.037 0 3.37-1.006 3.377-2.564m5.061 2.447H24l-1.565-7.496h-1.656a.883.883 0 00-.826.55l-2.909 6.946h2.036l.405-1.12h2.488zm-2.163-2.656l1.02-2.815.588 2.815zm-8.16-4.84l-1.603 7.496H8.34l1.605-7.496z"
             fill="#FFFFFF"
           />
-          {/* Classic Iconic Gold Wing on the top-left flick of the 'V' */}
           <path
             d="M0 8.479l.046-.217h3.3a.904.904 0 01.894.764l.817 4.338C4.5 11.8 3.5 10.5 2.374 9.775c-.094-.368-.175-.503-.461-.658C1.447 8.864.677 8.627 0 8.479z"
             fill="#F7B600"
@@ -480,34 +658,25 @@ export const CardNetworkBadge: React.FC<{
     );
   }
 
-  // 2. 万事达 (Mastercard - Official Dual-Color Interlocking Vector Circles)
+  // 2. 万事达 (Mastercard)
   if (network === 'MASTERCARD') {
-    const svgWidth =
-      size === 'sm' ? 'w-9 h-5.5' : size === 'lg' ? 'w-16 h-10' : 'w-12 h-7.5 sm:w-14 sm:h-8.5';
+    const dim =
+      size === 'sm' ? 'w-8 h-5' : size === 'lg' ? 'w-14 h-9' : 'w-11 h-7 sm:w-12 sm:h-7.5';
     return (
       <div
-        className={`inline-flex items-center justify-center select-none ${className}`}
+        className={`inline-flex items-center justify-center select-none shrink-0 ${className}`}
         title="Mastercard 万事达卡"
       >
         <svg
           viewBox="0 0 256 158"
-          className={`${svgWidth} drop-shadow-md`}
+          className={`${dim} drop-shadow-md`}
           style={{ overflow: 'visible' }}
         >
-          {/* Intersection Center Lens (Vibrant Orange) */}
-          <rect
-            fill="#FF5F00"
-            x="93.298"
-            y="16.903"
-            width="69.15"
-            height="124.251"
-          />
-          {/* Left Circle Body (Mastercard Red) */}
+          <rect fill="#FF5F00" x="93.298" y="16.903" width="69.15" height="124.251" />
           <path
             d="M97.689 79.029C97.689 53.784 109.543 31.392 127.763 16.903 114.372 6.366 97.469 0 79.029 0 35.343 0 0 35.343 0 79.029s35.343 79.029 79.029 79.029c18.44 0 35.343-6.366 48.734-16.903C109.543 126.885 97.689 104.274 97.689 79.029z"
             fill="#EB001B"
           />
-          {/* Right Circle Body (Mastercard Yellow-Orange) */}
           <path
             d="M255.746 79.029c0 43.685-35.343 79.029-79.029 79.029-18.44 0-35.343-6.366-48.734-16.903 18.44-14.489 30.075-36.88 30.075-62.126s-11.855-47.637-30.075-62.126C141.374 6.366 158.277 0 176.717 0c43.685 0 79.029 35.563 79.029 79.029z"
             fill="#F79E1B"
@@ -517,77 +686,69 @@ export const CardNetworkBadge: React.FC<{
     );
   }
 
-  // 3. 美国运通 (AMEX / American Express - Transparent Centered Badge)
+  // 3. 美国运通 (AMEX)
   if (network === 'AMEX') {
-    const dim = size === 'sm' ? 'h-4 px-1.5' : size === 'lg' ? 'h-6 px-2.5' : 'h-5 px-2';
-    const textSz = size === 'sm' ? 'text-[8px]' : size === 'lg' ? 'text-xs' : 'text-[9px] sm:text-[10px]';
+    const dim = size === 'sm' ? 'h-3.5 px-1.5' : size === 'lg' ? 'h-5.5 px-2.5' : 'h-4.5 px-2';
     return (
       <div
-        className={`inline-flex items-center justify-center rounded-sm bg-[#006fcf] text-white select-none ${dim} shadow-xs border border-white/30 ${className}`}
+        className={`inline-flex items-center justify-center rounded-[3px] bg-[#006FCF] text-white select-none ${dim} shadow-xs border border-white/30 shrink-0 ${className}`}
         title="American Express 美国运通"
       >
-        <span className={`font-black tracking-tighter uppercase font-sans ${textSz} leading-none`}>
+        <span className="font-medium tracking-tight uppercase text-[9px] sm:text-[10px] leading-none">
           AMEX
         </span>
       </div>
     );
   }
 
-  // 4. JCB (Transparent 3-Ribbon Clean Badge)
+  // 4. JCB
   if (network === 'JCB') {
-    const height = size === 'sm' ? 'h-4' : size === 'lg' ? 'h-6' : 'h-5';
+    const height = size === 'sm' ? 'h-3.5' : size === 'lg' ? 'h-5.5' : 'h-4.5';
     return (
       <div
-        className={`inline-flex items-center overflow-hidden rounded-[3px] select-none ${height} drop-shadow-sm ${className}`}
+        className={`inline-flex items-center overflow-hidden rounded-[3px] select-none ${height} drop-shadow-sm shrink-0 ${className}`}
         title="JCB 国际卡组织"
       >
         <div className="flex items-center h-full space-x-[1px]">
           <div className="w-2.5 sm:w-3 h-full rounded-l-xs bg-[#003780] flex items-center justify-center">
-            <span className="text-[8px] sm:text-[9px] font-black text-white leading-none">J</span>
+            <span className="text-[8px] sm:text-[9px] font-medium text-white leading-none">J</span>
           </div>
-          <div className="w-2.5 sm:w-3 h-full bg-[#dd1124] flex items-center justify-center">
-            <span className="text-[8px] sm:text-[9px] font-black text-white leading-none">C</span>
+          <div className="w-2.5 sm:w-3 h-full bg-[#DD1124] flex items-center justify-center">
+            <span className="text-[8px] sm:text-[9px] font-medium text-white leading-none">C</span>
           </div>
           <div className="w-2.5 sm:w-3 h-full rounded-r-xs bg-[#008940] flex items-center justify-center">
-            <span className="text-[8px] sm:text-[9px] font-black text-white leading-none">B</span>
+            <span className="text-[8px] sm:text-[9px] font-medium text-white leading-none">B</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // 5. 中国银联 (UnionPay) - 官方正规三色斜标 + 标准中英文字体 (全透明背景，高精矢量)
-  const svgWidth = size === 'sm' ? 'w-11 h-5' : size === 'lg' ? 'w-18 h-8' : 'w-13 h-6 sm:w-15 sm:h-7';
+  // 5. 中国银联 (UNIONPAY) - 官方正版矢量规范
+  const dim = size === 'sm' ? 'w-10 h-4.5' : size === 'lg' ? 'w-16 h-7' : 'w-12 h-5 sm:w-14 sm:h-6';
   return (
     <div
-      className={`inline-flex items-center justify-center select-none ${className}`}
+      className={`inline-flex items-center justify-center select-none shrink-0 ${className}`}
       title="中国银联 UnionPay"
     >
       <svg
         viewBox="0 0 96 46"
-        className={`${svgWidth} drop-shadow-sm`}
+        className={`${dim} drop-shadow-sm`}
         style={{ overflow: 'visible' }}
       >
-        {/* Three classic UnionPay skewed rounded color blocks (Red, Navy, Turquoise) */}
         <g transform="skewX(-14)">
-          {/* Red Flag */}
-          <rect x="22" y="2" width="22" height="42" rx="4" fill="#C8102E" />
-          {/* Deep Blue Flag */}
-          <rect x="42" y="2" width="22" height="42" rx="4" fill="#002F6C" />
-          {/* Turquoise / Sky Blue Flag */}
-          <rect x="62" y="2" width="22" height="42" rx="4" fill="#007B83" />
+          <rect x="22" y="2" width="22" height="42" rx="3.5" fill="#C8102E" />
+          <rect x="42" y="2" width="22" height="42" rx="3.5" fill="#002F6C" />
+          <rect x="62" y="2" width="22" height="42" rx="3.5" fill="#007B83" />
         </g>
-
-        {/* Crisp Chinese calligraphy '银联' and modern 'UnionPay' */}
-        {/* Silver/White Inscription over ribbons */}
         <text
           x="30"
           y="23"
           fill="#FFFFFF"
-          fontSize="15"
-          fontWeight="900"
+          fontSize="14.5"
+          fontWeight="700"
           fontFamily="system-ui, -apple-system, sans-serif"
-          letterSpacing="0.5"
+          letterSpacing="0.4"
         >
           银联
         </text>
@@ -595,8 +756,8 @@ export const CardNetworkBadge: React.FC<{
           x="26"
           y="36"
           fill="#FFFFFF"
-          fontSize="8.5"
-          fontWeight="800"
+          fontSize="8"
+          fontWeight="600"
           fontStyle="italic"
           fontFamily="Arial, Helvetica, sans-serif"
           letterSpacing="0.2"
@@ -609,35 +770,36 @@ export const CardNetworkBadge: React.FC<{
 };
 
 /**
- * Realistic Gold EMV Smart Security Chip with contact lines
+ * 仿真智能 EMV 芯片 (ISO/IEC 7816)
  */
 export const EMVChip: React.FC<{ className?: string; size?: 'sm' | 'md' }> = ({
   className = '',
   size = 'md',
 }) => {
-  const chipDim = size === 'sm' ? 'w-8 h-6 rounded-md' : 'w-10 h-8 rounded-lg';
+  const chipDim = size === 'sm' ? 'w-7 h-5 rounded-md' : 'w-9 h-6.5 rounded-lg';
   return (
     <div
-      className={`${chipDim} bg-gradient-to-tr from-amber-300 via-yellow-200 to-amber-400 border border-amber-500/70 shadow-inner relative overflow-hidden flex flex-col justify-between p-0.5 shrink-0 ${className}`}
-      title="EMV 安全安全芯片 (ISO/IEC 7816)"
+      className={`${chipDim} bg-gradient-to-tr from-amber-300 via-yellow-100 to-amber-400 border border-amber-500/70 shadow-inner relative overflow-hidden flex flex-col justify-between p-0.5 shrink-0 select-none ${className}`}
+      title="EMV 智能防伪安全芯片"
     >
-      <div className="w-full h-px bg-amber-600/60 my-auto" />
-      <div className="w-full h-px bg-amber-600/60 my-auto" />
-      <div className="absolute inset-y-0 left-1/2 w-px bg-amber-600/60" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-2.5 rounded-xs border border-amber-600/70 bg-amber-200/40" />
+      <div className="w-full h-px bg-amber-600/50 my-auto" />
+      <div className="w-full h-px bg-amber-600/50 my-auto" />
+      <div className="absolute inset-y-0 left-1/2 w-px bg-amber-600/50" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-2 rounded-xs border border-amber-600/60 bg-amber-200/40" />
     </div>
   );
 };
 
 /**
- * Contactless Radio Wave / NFC Icon
+ * 非接触式无线感应射频波 (Contactless NFC)
  */
 export const ContactlessIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
   return (
     <svg
       viewBox="0 0 24 24"
-      className={`w-4 h-4 sm:w-5 sm:h-5 fill-none stroke-current stroke-2 opacity-85 ${className}`}
-      title="非接触式 NFC 闪付感应"
+      className={`w-3.5 h-3.5 sm:w-4 sm:h-4 fill-none stroke-current stroke-[1.8] opacity-75 shrink-0 ${className}`}
+      title="NFC 非接触式无线感应"
+      aria-hidden="true"
     >
       <path d="M8.5 14.5A4.5 4.5 0 0 1 12 10a4.5 4.5 0 0 1 3.5 4.5" strokeLinecap="round" />
       <path d="M6 16.5A7.5 7.5 0 0 1 12 7a7.5 7.5 0 0 1 6 9.5" strokeLinecap="round" />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Trash2,
@@ -15,6 +15,9 @@ import {
   RotateCcw,
   RefreshCw,
   RotateCw,
+  Image as ImageIcon,
+  SlidersHorizontal,
+  SunMoon,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
@@ -29,7 +32,18 @@ import {
   LuxuryPalette,
   getDefaultPresetForCategory,
   getBrandsForCategory,
+  COMMON_CARD_TIERS,
+  getTierTheme,
 } from '../lib/brandHelper';
+import {
+  CARDENTIFY_PRESETS,
+  CardFacePreset,
+  matchBestCardentifyPreset,
+  matchBestCardentifyCard,
+  getTotalGalleryCardsCount,
+  CardentifyCard,
+} from '../lib/cardentifyPresets';
+import { CardentifyGalleryModal } from './CardentifyGalleryModal';
 import {
   fetchLiveGoldRate,
   getCachedGoldRate,
@@ -65,7 +79,12 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [cardTier, setCardTier] = useState(initialAccount?.cardTier || '');
   const [cardSkin, setCardSkin] = useState(initialAccount?.cardSkin || '');
   const [cardBgColor, setCardBgColor] = useState(initialAccount?.cardBgColor || '');
+  const [cardPattern, setCardPattern] = useState(initialAccount?.cardPattern || 'radial-sheen');
+  const [cardTextColor, setCardTextColor] = useState<'light' | 'dark'>(initialAccount?.cardTextColor || 'light');
+  const [cardImageUrl, setCardImageUrl] = useState(initialAccount?.cardImageUrl || '');
+  const [cardPresetId, setCardPresetId] = useState(initialAccount?.cardPresetId || '');
   const [cardExpiry, setCardExpiry] = useState(initialAccount?.cardExpiry || '08/29');
+  const [showBrandLogo, setShowBrandLogo] = useState<boolean>(initialAccount?.showBrandLogo || false);
   const [cardNetwork, setCardNetwork] = useState<'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'>(
     initialAccount?.cardNetwork || 'UNIONPAY'
   );
@@ -102,6 +121,8 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [brandFilterTab, setBrandFilterTab] = useState<'RECOMMENDED' | 'BANKS' | 'DIGITAL' | 'CREDIT' | 'ALL'>('RECOMMENDED');
   const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
   const [isFetchingGold, setIsFetchingGold] = useState<boolean>(false);
+  const [isCardentifyGalleryOpen, setIsCardentifyGalleryOpen] = useState<boolean>(false);
+  const totalGalleryCardsCount = useMemo(() => getTotalGalleryCardsCount(), [isCardentifyGalleryOpen]);
 
   // Auto fetch latest gold market price
   useEffect(() => {
@@ -144,6 +165,73 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     }
   };
 
+  // Intelligent Auto-select Card Face based on Card Tier & Bank
+  const applyCardTierAndFace = (
+    newTier: string,
+    targetBank?: string,
+    targetName?: string,
+    targetCategory?: AccountCategory
+  ) => {
+    const effectiveBank = targetBank !== undefined ? targetBank : bankName;
+    const effectiveCategory = targetCategory !== undefined ? targetCategory : category;
+    const effectiveName = targetName !== undefined ? targetName : (name || `${effectiveBank || ''}${newTier}`);
+
+    setCardTier(newTier);
+
+    // 1. Try to match the best authentic Cardentify & CardArt card face based on bank + name + category + tier!
+    const matchedCard = matchBestCardentifyCard(
+      effectiveName,
+      effectiveBank,
+      effectiveCategory,
+      newTier
+    );
+
+    if (matchedCard) {
+      const presetId = String(matchedCard.id).startsWith('card')
+        ? String(matchedCard.id)
+        : `cardentify-${matchedCard.id}`;
+
+      setCardPresetId(presetId);
+      setCardImageUrl(matchedCard.imageUrl);
+
+      let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+      const brandUp = (matchedCard.brand || '').toUpperCase();
+      if (brandUp.includes('VISA')) net = 'VISA';
+      else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
+      else if (brandUp.includes('AMEX')) net = 'AMEX';
+      else if (brandUp.includes('JCB')) net = 'JCB';
+      setCardNetwork(net);
+
+      const brandInfo = detectBrandInfo(effectiveName, effectiveBank, effectiveCategory);
+      const tierTheme = getTierTheme(newTier, brandInfo);
+      setCardSkin(tierTheme.cardSkin);
+      setCardPattern(tierTheme.cardPattern);
+      setCardTextColor(tierTheme.cardTextColor);
+      setCardBgColor('');
+
+      setAutoGenMsg(`✨ 已根据「${newTier}」智能匹配「${matchedCard.name}」高清卡面`);
+      setTimeout(() => setAutoGenMsg(''), 3500);
+      return;
+    }
+
+    // 2. If no exact HD card face image exists, apply tier-specific luxury skin & gradient
+    const brandInfo = detectBrandInfo(effectiveName, effectiveBank, effectiveCategory);
+    const tierTheme = getTierTheme(newTier, brandInfo);
+
+    setCardPresetId('');
+    setCardImageUrl('');
+    setCardSkin(tierTheme.cardSkin);
+    setCardBgColor(tierTheme.cardBgColor);
+    setCardPattern(tierTheme.cardPattern);
+    setCardTextColor(tierTheme.cardTextColor);
+    if (tierTheme.cardNetwork && (!cardNetwork || cardNetwork === 'NONE')) {
+      setCardNetwork(tierTheme.cardNetwork);
+    }
+
+    setAutoGenMsg(`🎨 已根据「${newTier}」自动适配 ${tierTheme.description}`);
+    setTimeout(() => setAutoGenMsg(''), 3500);
+  };
+
   // Handle category switching with complete intelligent auto-matching
   const handleCategoryChange = (newCategory: AccountCategory) => {
     setCategory(newCategory);
@@ -152,8 +240,6 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     const preset = getDefaultPresetForCategory(newCategory);
     setName(preset.name);
     setBankName(preset.bankName);
-    setCardTier(preset.cardTier);
-    setCardSkin(preset.cardSkin);
     setCardNetwork(preset.cardNetwork);
     setColor(preset.primaryColor);
     setCardBgColor('');
@@ -186,9 +272,8 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setBalance(preset.balance);
     }
 
-    const catLabel = ACCOUNT_CATEGORY_CONFIG[newCategory]?.label || newCategory;
-    setAutoGenMsg(`✨ 已根据「${catLabel}」自动匹配「${preset.name}」官方卡面、LOGO与属性`);
-    setTimeout(() => setAutoGenMsg(''), 4000);
+    // Automatically select card face based on tier
+    applyCardTierAndFace(preset.cardTier, preset.bankName, preset.name, newCategory);
   };
 
   // Auto set defaults on initial creation
@@ -197,10 +282,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       const preset = getDefaultPresetForCategory(category);
       setName(preset.name);
       setBankName(preset.bankName);
-      setCardTier(preset.cardTier);
-      setCardSkin(preset.cardSkin);
       setCardNetwork(preset.cardNetwork);
       setColor(preset.primaryColor);
+      applyCardTierAndFace(preset.cardTier, preset.bankName, preset.name, category);
     }
   }, [isEdit]);
 
@@ -233,7 +317,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     setTimeout(() => setAutoGenMsg(''), 3500);
   };
 
-  // Apply a brand preset directly with context awareness
+  // Apply a brand preset directly with context awareness and tier-based cardface selection
   const handleSelectBrandPreset = (brand: BankBrandInfo) => {
     const isDedicatedCategoryBrand = [
       'HUABEI',
@@ -253,17 +337,20 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       return;
     }
 
+    // Clear old custom settings
+    setCardPresetId('');
+    setCardImageUrl('');
+    setCardBgColor('');
+
     // Bank entity selected (e.g. 招商银行, 工商银行, 建设银行, 农业银行, 交通银行, 宁波银行...)
     if (category === 'CREDIT_CARD') {
-      setBankName(brand.shortName);
-      setName(`${brand.shortName}经典白金信用卡`);
-      setCardTier('标准白金信用卡');
-      setCardSkin(brand.cardSkin);
-      setCardNetwork('UNIONPAY');
+      const bName = brand.shortName;
+      const curTier = cardTier || '白金卡';
+      const accName = `${bName}${curTier.includes('白金') ? '经典白金信用卡' : '信用卡'}`;
+      setBankName(bName);
+      setName(accName);
       setColor(brand.primaryColor);
-      setCardBgColor('');
-      setAutoGenMsg(`✨ 已匹配「${brand.shortName}」官方信用卡卡面与品牌配色`);
-      setTimeout(() => setAutoGenMsg(''), 3500);
+      applyCardTierAndFace(curTier, bName, accName, 'CREDIT_CARD');
       return;
     }
 
@@ -273,7 +360,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setCardTier('9999足金积存账户');
       setCardSkin('gold-metallic');
       setColor(brand.primaryColor);
-      setAutoGenMsg(`✨ 已匹配「${brand.shortName}」贵金属积存官方卡面`);
+      setAutoGenMsg(`✨ 已应用「${brand.shortName}」贵金属积存官方卡面与LOGO`);
       setTimeout(() => setAutoGenMsg(''), 3500);
       return;
     }
@@ -284,22 +371,25 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setCardTier('公募ETF/混合基金组合');
       setCardSkin(brand.cardSkin);
       setColor(brand.primaryColor);
-      setAutoGenMsg(`✨ 已匹配「${brand.shortName}」公募基金理财卡面`);
+      setAutoGenMsg(`✨ 已应用「${brand.shortName}」公募基金理财卡面与LOGO`);
       setTimeout(() => setAutoGenMsg(''), 3500);
       return;
     }
 
     // Default to debit card / general account
     setCategory('DEBIT_CARD');
-    setName(brand.name);
-    setBankName(brand.shortName);
-    setCardTier(brand.defaultTier);
-    setCardSkin(brand.cardSkin);
-    setCardNetwork(brand.cardNetwork);
+    const bName = brand.shortName;
+    const curTier = cardTier || brand.defaultTier;
+    const accName = brand.name;
+    setBankName(bName);
+    setName(accName);
     setColor(brand.primaryColor);
-    setCardBgColor('');
-    setAutoGenMsg(`✨ 已应用「${brand.name}」官方借记卡卡面与LOGO`);
-    setTimeout(() => setAutoGenMsg(''), 3500);
+    applyCardTierAndFace(curTier, bName, accName, 'DEBIT_CARD');
+  };
+
+  // Bank name input handler: updates bank name only, no longer forced real-time exclusive logo linkage
+  const handleBankNameChange = (newBankVal: string) => {
+    setBankName(newBankVal);
   };
 
   const isCredit = category === 'CREDIT_CARD' || category === 'JD_BAITIAO' || category === 'HUABEI';
@@ -335,8 +425,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     cardTier: cardTier || undefined,
     cardSkin: cardSkin || undefined,
     cardBgColor: cardBgColor || undefined,
+    cardPattern: cardPattern || undefined,
+    cardTextColor: cardTextColor || undefined,
+    cardImageUrl: cardImageUrl || undefined,
+    cardPresetId: cardPresetId || undefined,
     cardExpiry: cardExpiry || undefined,
     cardNetwork,
+    showBrandLogo,
     updatedAt: new Date().toISOString(),
   };
 
@@ -367,8 +462,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       cardTier: cardTier.trim() || undefined,
       cardSkin: cardSkin || undefined,
       cardBgColor: cardBgColor.trim() || undefined,
+      cardPattern: cardPattern || undefined,
+      cardTextColor: cardTextColor || undefined,
+      cardImageUrl: cardImageUrl.trim() || undefined,
+      cardPresetId: cardPresetId || undefined,
       cardExpiry: cardExpiry.trim() || undefined,
       cardNetwork,
+      showBrandLogo,
       notes: notes.trim() || undefined,
       updatedAt: new Date().toISOString(),
     };
@@ -574,16 +674,16 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  银行 / 机构品牌名称
+                <label htmlFor="acc-input-bank" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  银行名称
                 </label>
                 <input
                   id="acc-input-bank"
                   type="text"
                   value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  placeholder="如 招商银行 / 工商银行 / 支付宝"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+                  onChange={(e) => handleBankNameChange(e.target.value)}
+                  placeholder="如 工商银行 / 建设银行 / 招商银行"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white font-medium"
                 />
               </div>
             </div>
@@ -638,15 +738,34 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  卡片等级
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    卡片等级
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => applyCardTierAndFace(cardTier || '白金卡')}
+                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-0.5"
+                    title="根据填写的等级自动重新匹配对应卡面"
+                  >
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>联动卡面</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={cardTier}
-                  onChange={(e) => setCardTier(e.target.value)}
-                  placeholder="如 经典白金"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCardTier(val);
+                  }}
+                  onBlur={() => {
+                    if (cardTier && cardTier.trim().length >= 2) {
+                      applyCardTierAndFace(cardTier.trim());
+                    }
+                  }}
+                  placeholder="如 经典白金 / 金卡"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none font-medium"
                 />
               </div>
 
@@ -680,6 +799,45 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                   <option value="JCB">JCB (吉士美)</option>
                   <option value="NONE">无卡组织</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Quick Card Tier Chips · Automatically Selects Corresponding Card Face */}
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-slate-50 to-indigo-50/70 border border-indigo-100/90 space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>卡片等级快捷切换（自动联动对应卡面艺廊与质感）</span>
+                </span>
+                <span className="text-[10px] text-slate-400">点击自动匹配对应卡面</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {COMMON_CARD_TIERS.map((tierItem) => {
+                  const isCurrent =
+                    cardTier === tierItem.value ||
+                    (tierItem.id === 'PLATINUM' && cardTier.includes('白金')) ||
+                    (tierItem.id === 'GOLD' && cardTier.includes('金卡') && !cardTier.includes('白金')) ||
+                    (tierItem.id === 'BLACK' && (cardTier.includes('黑') || cardTier.includes('百夫长') || cardTier.includes('无限'))) ||
+                    (tierItem.id === 'DIAMOND' && cardTier.includes('钻石')) ||
+                    (tierItem.id === 'VIP' && (cardTier.includes('金葵花') || cardTier.includes('理财金') || cardTier.includes('沃德') || cardTier.includes('贵宾'))) ||
+                    (tierItem.id === 'STANDARD' && (cardTier.includes('普卡') || cardTier.includes('标准') || cardTier.includes('借记')));
+
+                  return (
+                    <button
+                      key={tierItem.id}
+                      type="button"
+                      onClick={() => applyCardTierAndFace(tierItem.value)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all active:scale-95 border flex items-center gap-1.5 ${
+                        isCurrent
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-bold scale-102 ring-2 ring-indigo-500/20'
+                          : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/60 shadow-2xs'
+                      }`}
+                    >
+                      <span>{tierItem.label}</span>
+                      {isCurrent && <Check className="w-3 h-3 text-white" />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -888,154 +1046,381 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
               </div>
             )}
 
-            {/* Card Base Color & Texture Skin Selection */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                  <Palette className="w-3.5 h-3.5 text-purple-600" />
-                  <span>卡面底色与材质主题</span>
-                </label>
+              {/* Card Base Color & Texture Skin Selection */}
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-purple-600" />
+                    <span>CardArt & Cardentify 高清卡面艺廊 ({totalGalleryCardsCount.toLocaleString()} 款)</span>
+                  </label>
 
-                {/* Quick Auto Generation Action Buttons */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleAutoGenerateBackground}
-                    className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-semibold border border-purple-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                    title="根据填写的卡片名称或所属银行，智能计算高质感专属底色"
-                  >
-                    <Wand2 className="w-3 h-3 text-purple-600" />
-                    <span>✨ 智能自动匹配</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleRandomBackground}
-                    className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold border border-amber-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                    title="从奢华黑金、皇家蓝、翡翠绿、香槟金等顶级卡面中随机换色"
-                  >
-                    <Dices className="w-3 h-3 text-amber-600" />
-                    <span>🎲 随机灵感换色</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Dynamic feedback toast */}
-              {autoGenMsg && (
-                <div className="px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-800 text-xs font-medium flex items-center justify-between animate-fade-in shadow-2xs">
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-600 animate-spin" />
-                    <span>{autoGenMsg}</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setAutoGenMsg('')}
-                    className="text-purple-400 hover:text-purple-700 text-xs ml-2"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-
-              {/* 1. Curated Luxury Gradient Recipes */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <span>💎 尊享奢华高定色系 (点击应用)</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400">已收录12款顶级卡面渐变</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {LUXURY_PALETTES.map((pal) => {
-                    const isSelected = cardBgColor === pal.gradient;
-                    return (
-                      <button
-                        key={pal.id}
-                        type="button"
-                        onClick={() => handleApplyPalette(pal)}
-                        className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 relative overflow-hidden ${
-                          isSelected
-                            ? 'border-purple-600 ring-2 ring-purple-500/20 bg-purple-50/50 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
-                        }`}
-                      >
-                        <div
-                          className="w-5 h-5 rounded-lg shrink-0 shadow-2xs border border-white/20"
-                          style={{ background: pal.gradient }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[11px] font-semibold text-slate-800 truncate">
-                            {pal.name}
-                          </div>
-                          <div className="text-[9px] text-slate-400 truncate font-mono">
-                            {pal.tag}
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-600 ring-2 ring-white" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 2. Official Bank Skins & Custom Hex Color */}
-              <div className="pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    🏛️ 银行官方标准材质主题
-                  </span>
-                  {/* Custom color picker */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-slate-400">调色板:</span>
-                    <input
-                      type="color"
-                      value={cardBgColor && !cardBgColor.includes('gradient') ? cardBgColor : '#0f172a'}
-                      onChange={(e) => setCardBgColor(e.target.value)}
-                      className="w-5 h-5 rounded cursor-pointer border border-slate-200"
-                      title="选择任意自定义纯色底色"
-                    />
-                    {cardBgColor && (
-                      <button
-                        type="button"
-                        onClick={handleResetToDefaultSkin}
-                        className="text-[10px] text-purple-600 hover:text-purple-800 underline font-medium"
-                      >
-                        恢复官方默认
-                      </button>
-                    )}
+                  {/* Quick Auto Generation Action Buttons */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setIsCardentifyGalleryOpen(true)}
+                      className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-rose-600 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white text-[11px] font-bold flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
+                      title={`打开 CardArt (cardart.cc) & Cardentify (cards.no2.ac) 双库高清卡面艺廊 (${totalGalleryCardsCount.toLocaleString()} 款)`}
+                    >
+                      <span>🎨 打开卡面艺廊 ({totalGalleryCardsCount.toLocaleString()} 款)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const matched = matchBestCardentifyCard(name, bankName, category);
+                        if (matched) {
+                          setCardImageUrl(matched.imageUrl);
+                          if (!bankName) setBankName(matched.issuerName);
+                          let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+                          const bUp = (matched.brand || '').toUpperCase();
+                          if (bUp.includes('VISA')) net = 'VISA';
+                          else if (bUp.includes('MASTER')) net = 'MASTERCARD';
+                          else if (bUp.includes('AMEX')) net = 'AMEX';
+                          else if (bUp.includes('JCB')) net = 'JCB';
+                          setCardNetwork(net);
+                          setCardTier(matched.name.includes('白金') ? '白金卡' : matched.name.includes('金卡') ? '金卡' : '贵宾卡');
+                          setAutoGenMsg(`🍎 已智能匹配 Cardentify 原版卡面: 「${matched.name}」`);
+                        } else {
+                          const p = matchBestCardentifyPreset(name, bankName, category);
+                          setCardPresetId(p.id);
+                          if (p.cardImageUrl) setCardImageUrl(p.cardImageUrl);
+                          setCardBgColor(p.cardStyle.background);
+                          setAutoGenMsg(`🍎 已匹配 Cardentify 主题卡面: 「${p.name}」`);
+                        }
+                        setTimeout(() => setAutoGenMsg(''), 3500);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold border border-indigo-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      title="根据当前填写的银行或卡名自动匹配官方卡面"
+                    >
+                      <Sparkles className="w-3 h-3 text-indigo-600" />
+                      <span>✨ 智能匹配</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAutoGenerateBackground}
+                      className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-semibold border border-purple-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      title="根据填写的卡片名称或所属银行，智能计算高质感专属底色"
+                    >
+                      <Wand2 className="w-3 h-3 text-purple-600" />
+                      <span>✨ 智能底色</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRandomBackground}
+                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold border border-amber-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      title="从奢华黑金、皇家蓝、翡翠绿、香槟金等顶级卡面中随机换色"
+                    >
+                      <Dices className="w-3 h-3 text-amber-600" />
+                      <span>🎲 灵感换色</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {CARD_SKINS.slice(0, 8).map((skin) => {
-                    const isSelected =
-                      (cardSkin || detectBrandInfo(name, bankName, category).cardSkin) === skin.id &&
-                      !cardBgColor;
-                    return (
+                {/* Cardentify Official HD Card Faces Carousel */}
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50/50 via-slate-50 to-indigo-50/50 border border-indigo-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <span className="text-base">🍎</span>
+                      <span>Cardentify 精选官方原版卡面 (直接点击套用)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsCardentifyGalleryOpen(true)}
+                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5"
+                    >
+                      <span>查看全部 557+ 张 &gt;</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1.5 modal-custom-scrollbar">
+                    {CARDENTIFY_PRESETS.map((p) => {
+                      const isSelected = cardImageUrl === p.cardImageUrl || cardPresetId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setCardPresetId(p.id);
+                            if (p.cardImageUrl) setCardImageUrl(p.cardImageUrl);
+                            setCardBgColor(p.cardStyle.background);
+                            setCardPattern(p.cardStyle.patternType || 'radial-sheen');
+                            setCardTextColor(p.textColorMode);
+                            setCardTier(p.cardTier);
+                            setCardNetwork(p.cardNetwork);
+                            if (!bankName) setBankName(p.bankName);
+                            setAutoGenMsg(`🍎 已应用 Cardentify 卡面: 「${p.name}」`);
+                            setTimeout(() => setAutoGenMsg(''), 3500);
+                          }}
+                          className={`p-2 rounded-xl border text-left shrink-0 w-36 transition-all relative overflow-hidden group/item ${
+                            isSelected
+                              ? 'border-indigo-600 ring-2 ring-indigo-500/30 bg-white shadow-sm scale-102'
+                              : 'border-slate-200 hover:border-slate-300 bg-white/80 hover:bg-white'
+                          }`}
+                        >
+                          <div
+                            className="w-full h-11 rounded-lg mb-1.5 relative overflow-hidden flex flex-col justify-between p-1.5 text-white shadow-2xs border border-white/20 bg-slate-900"
+                          >
+                            {p.cardImageUrl ? (
+                              <img
+                                src={p.cardImageUrl}
+                                alt={p.name}
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div
+                                className="absolute inset-0"
+                                style={{ background: p.cardStyle.background }}
+                              />
+                            )}
+                            <div className="relative z-10 flex items-center justify-between">
+                              <span className="text-[8px] font-bold truncate max-w-[70px] drop-shadow-md text-white">
+                                {p.bankName}
+                              </span>
+                              <span className="text-[7px] uppercase font-mono tracking-tighter text-white drop-shadow-md">
+                                {p.cardNetwork}
+                              </span>
+                            </div>
+                            <span className="relative z-10 text-[7px] truncate text-white drop-shadow-md">{p.cardTier}</span>
+                          </div>
+                          <div className="text-[11px] font-bold text-slate-800 truncate leading-tight">
+                            {p.name}
+                          </div>
+                          <div className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">
+                            {p.englishName}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Micro Customization: Surface Patterns & Text Color Mode */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Apple Pay 仿真微光暗纹</span>
+                    </label>
+                    <select
+                      value={cardPattern}
+                      onChange={(e) => setCardPattern(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-xs font-medium focus:outline-none"
+                    >
+                      <option value="radial-sheen">高光微晕 (Radial Specular)</option>
+                      <option value="waves">流动波浪 (Flowing Waves)</option>
+                      <option value="geometric">几何度量 (Geometric Lines)</option>
+                      <option value="mesh">经纬网格 (Precision Mesh)</option>
+                      <option value="silk-stripes">丝绸斜纹 (Silk Stripes)</option>
+                      <option value="circuit">科技电路线 (Cyber Circuit)</option>
+                      <option value="dots">点阵星芒 (Matrix Dots)</option>
+                      <option value="none">纯净哑光 (无暗纹)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                      <SunMoon className="w-3.5 h-3.5 text-slate-600" />
+                      <span>卡面文字色调模式</span>
+                    </label>
+                    <div className="flex items-center gap-2">
                       <button
-                        key={skin.id}
                         type="button"
-                        onClick={() => {
-                          setCardSkin(skin.id);
-                          setCardBgColor(''); // clear custom hex to use skin
-                        }}
-                        className={`p-1.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
-                          isSelected
-                            ? 'border-slate-900 ring-2 ring-slate-900/10 shadow-xs scale-102 bg-slate-50 font-semibold'
-                            : 'border-slate-200 hover:border-slate-300'
+                        onClick={() => setCardTextColor('light')}
+                        className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${
+                          cardTextColor === 'light'
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                         }`}
                       >
-                        <div
-                          className={`w-4 h-4 rounded-md bg-gradient-to-br ${skin.gradientClass} shrink-0 shadow-2xs border border-black/10`}
-                        />
-                        <span className="text-[11px] text-slate-700 truncate">{skin.name}</span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-white border border-slate-300 shadow-xs" />
+                        <span>白银微光字 (深色卡)</span>
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        onClick={() => setCardTextColor('dark')}
+                        className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${
+                          cardTextColor === 'dark'
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-white/50 shadow-xs" />
+                        <span>钛黑石墨字 (浅色卡)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bank Logo Badge Display Option */}
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">卡面银行标志显示</span>
+                    <span className="text-[11px] text-slate-400 block mt-0.5">默认仅显示优雅银行名称文本，不再强制联动显示圆形专属LOGO</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showBrandLogo}
+                      onChange={(e) => setShowBrandLogo(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-700 font-medium">显示专属LOGO</span>
+                  </label>
+                </div>
+
+                {/* Custom Card Face Image URL or File Upload */}
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Cardentify / Apple Pay 自定义高清卡面图像 (可选)</span>
+                    </label>
+                    {cardImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setCardImageUrl('')}
+                        className="text-[10px] text-rose-600 hover:underline"
+                      >
+                        清除图像
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={cardImageUrl}
+                      onChange={(e) => setCardImageUrl(e.target.value)}
+                      placeholder="粘贴原图 URL (如 GitHub Raw / Apple Pay 提取图)"
+                      className="flex-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none"
+                    />
+                    <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs cursor-pointer shrink-0 transition-colors">
+                      <span>本地上传</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (typeof ev.target?.result === 'string') {
+                                setCardImageUrl(ev.target.result);
+                                setAutoGenMsg('📷 已载入本地高清银行卡卡面图像');
+                                setTimeout(() => setAutoGenMsg(''), 3500);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    支持粘贴 Cardentify 仓库原图链接或从相册上传从 Apple Pay / 云闪付 导出的高清卡面切图。
+                  </p>
+                </div>
+
+                {/* 1. Curated Luxury Gradient Recipes */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      <span>💎 尊享奢华高定色系 (点击应用)</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">已收录12款顶级卡面渐变</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {LUXURY_PALETTES.map((pal) => {
+                      const isSelected = cardBgColor === pal.gradient;
+                      return (
+                        <button
+                          key={pal.id}
+                          type="button"
+                          onClick={() => handleApplyPalette(pal)}
+                          className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 relative overflow-hidden ${
+                            isSelected
+                              ? 'border-purple-600 ring-2 ring-purple-500/20 bg-purple-50/50 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                          }`}
+                        >
+                          <div
+                            className="w-5 h-5 rounded-lg shrink-0 shadow-2xs border border-white/20"
+                            style={{ background: pal.gradient }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11px] font-semibold text-slate-800 truncate">
+                              {pal.name}
+                            </div>
+                            <div className="text-[9px] text-slate-400 truncate font-mono">
+                              {pal.tag}
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-600 ring-2 ring-white" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Official Bank Skins & Custom Hex Color */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      🏛️ 银行官方标准材质主题
+                    </span>
+                    {/* Custom color picker */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-slate-400">调色板:</span>
+                      <input
+                        type="color"
+                        value={cardBgColor && !cardBgColor.includes('gradient') ? cardBgColor : '#0f172a'}
+                        onChange={(e) => setCardBgColor(e.target.value)}
+                        className="w-5 h-5 rounded cursor-pointer border border-slate-200"
+                        title="选择任意自定义纯色底色"
+                      />
+                      {cardBgColor && (
+                        <button
+                          type="button"
+                          onClick={handleResetToDefaultSkin}
+                          className="text-[10px] text-purple-600 hover:text-purple-800 underline font-medium"
+                        >
+                          恢复官方默认
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {CARD_SKINS.slice(0, 8).map((skin) => {
+                      const isSelected =
+                        (cardSkin || detectBrandInfo(name, bankName, category).cardSkin) === skin.id &&
+                        !cardBgColor;
+                      return (
+                        <button
+                          key={skin.id}
+                          type="button"
+                          onClick={() => {
+                            setCardSkin(skin.id);
+                            setCardBgColor(''); // clear custom hex to use skin
+                          }}
+                          className={`p-1.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                            isSelected
+                              ? 'border-slate-900 ring-2 ring-slate-900/10 shadow-xs scale-102 bg-slate-50 font-semibold'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-md bg-gradient-to-br ${skin.gradientClass} shrink-0 shadow-2xs border border-black/10`}
+                          />
+                          <span className="text-[11px] text-slate-700 truncate">{skin.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
 
             {/* Notes */}
             <div>
@@ -1159,6 +1544,30 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
         </div>
       </div>
     </div>
+
+    {/* Cardentify Official Gallery & Selector Modal */}
+    <CardentifyGalleryModal
+      isOpen={isCardentifyGalleryOpen}
+      onClose={() => setIsCardentifyGalleryOpen(false)}
+      currentImageUrl={cardImageUrl}
+      defaultBankQuery={bankName || name}
+      onSelectCard={(card) => {
+        setCardImageUrl(card.imageUrl);
+        if (!bankName || bankName === '中国银行' || bankName === '银行账户') {
+          setBankName(card.issuerName);
+        }
+        let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+        const brandUp = (card.brand || '').toUpperCase();
+        if (brandUp.includes('VISA')) net = 'VISA';
+        else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
+        else if (brandUp.includes('AMEX')) net = 'AMEX';
+        else if (brandUp.includes('JCB')) net = 'JCB';
+        setCardNetwork(net);
+        setCardTier(card.name.includes('白金') ? '白金卡' : card.name.includes('金卡') ? '金卡' : '标准卡');
+        setAutoGenMsg(`🍎 已从 Cardentify 套用原版卡面: 「${card.name}」`);
+        setTimeout(() => setAutoGenMsg(''), 4000);
+      }}
+    />
   </div>
   );
 };

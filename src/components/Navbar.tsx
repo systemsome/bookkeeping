@@ -97,14 +97,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Center Navigation Tabs (Desktop) */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
+          <nav className="hidden md:flex items-center gap-1.5 bg-transparent p-0">
             <button
               id="nav-tab-overview"
               onClick={() => setActiveTab('overview')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'overview'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-emerald-700 dark:text-emerald-400 font-bold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-emerald-600 dark:after:bg-emerald-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -113,10 +113,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-tab-credit"
               onClick={() => setActiveTab('credit')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'credit'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-blue-700 dark:text-blue-400 font-bold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-blue-600 dark:after:bg-blue-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -125,10 +125,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-tab-accounts"
               onClick={() => setActiveTab('accounts')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'accounts'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-purple-700 dark:text-purple-400 font-bold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-purple-600 dark:after:bg-purple-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Wallet className="w-4 h-4 text-purple-600 dark:text-purple-400" />
@@ -137,10 +137,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-tab-transactions"
               onClick={() => setActiveTab('transactions')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'transactions'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-amber-700 dark:text-amber-400 font-bold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-amber-600 dark:after:bg-amber-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <ListOrdered className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -149,10 +149,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-tab-projects"
               onClick={() => setActiveTab('projects')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'projects'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-indigo-700 dark:text-indigo-400 font-bold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-indigo-600 dark:after:bg-indigo-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <FolderKanban className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -161,10 +161,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-tab-analytics"
               onClick={() => setActiveTab('analytics')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'analytics'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-teal-700 dark:text-teal-400 font-bold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-teal-600 dark:after:bg-teal-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <BarChart3 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
@@ -174,7 +174,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Tools */}
           <div className="flex items-center gap-2 sm:gap-2.5">
-            {/* Real-time Cloud Sync Status Indicator & Manual Trigger (仅图标纯净按钮，与右侧按钮尺寸、样式完全对齐一致) */}
+            {/* Real-time Cloud Sync Status Indicator & Manual Trigger */}
             <button
               id="btn-cloud-sync-status"
               onClick={onTriggerFullSync}
@@ -189,7 +189,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : '当前处于离线模式（数据保存在本地，点击尝试重连云端）'
               }
               aria-label="手动全量云端同步"
-              className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
+              className="relative p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
             >
               <RefreshCw
                 className={`w-4 h-4 transition-transform duration-300 ${
@@ -231,7 +231,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title={`当前外观: ${
                   themeMode === 'light' ? '明亮模式' : themeMode === 'dark' ? '暗黑模式' : '跟随系统'
                 }`}
-                className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center"
+                className="p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center"
               >
                 {themeMode === 'light' ? (
                   <Sun className="w-4 h-4 text-amber-500" />
@@ -313,7 +313,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="btn-toggle-privacy"
               onClick={() => setPrivacyMode(!privacyMode)}
               title={privacyMode ? '显示金额' : '隐藏敏感金额'}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+              className="p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
             >
               {privacyMode ? (
                 <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -322,7 +322,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
-            {/* GitHub Repository Link Button (右上角 GitHub 仓库入口) */}
+            {/* GitHub Repository Link Button */}
             <a
               id="btn-github-repo"
               href="https://github.com/systemsome/bookkeeping"
@@ -330,18 +330,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               rel="noopener noreferrer"
               title="GitHub 源码仓库 (systemsome/bookkeeping)"
               aria-label="GitHub 源码仓库"
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center group"
+              className="p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center group"
             >
               <Github className="w-4 h-4 transition-transform group-hover:scale-110" />
             </a>
 
-            {/* Quick Record CTA Button (Pure Icon Format: 顶部记一笔直接采用图标格式不再添加文字) */}
+            {/* Quick Record CTA Button (透明背景，绿色图标) */}
             <button
               id="btn-quick-record"
               onClick={onOpenNewTx}
               title="记一笔"
               aria-label="记一笔"
-              className="p-2 rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 text-emerald-400 dark:text-white shadow-xs transition-all active:scale-95 flex items-center justify-center border border-slate-800 dark:border-emerald-500/50"
+              className="p-2 rounded-xl bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-all active:scale-95 flex items-center justify-center border border-slate-200 dark:border-slate-700"
             >
               <PlusCircle className="w-4 h-4" />
             </button>
@@ -351,7 +351,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="btn-quick-lock"
               onClick={onLockApp}
               title="立即锁定锁屏"
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-slate-200 dark:border-slate-700 transition-colors hidden sm:inline-flex"
+              className="p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors hidden sm:inline-flex"
             >
               <Lock className="w-4 h-4" />
             </button>
@@ -361,7 +361,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="btn-user-menu"
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors"
+                className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-xl bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
               >
                 <div className="w-7 h-7 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
                   {currentUser?.displayName?.[0] || '用'}
@@ -474,7 +474,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'overview' ? 'scale-110 bg-emerald-50 dark:bg-emerald-950/60' : ''}`}>
+            <div className={`p-1 transition-transform ${activeTab === 'overview' ? 'scale-110' : ''}`}>
               <Layers className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">全览</span>
@@ -488,7 +488,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'credit' ? 'scale-110 bg-rose-50 dark:bg-rose-950/60' : ''}`}>
+            <div className={`p-1 transition-transform ${activeTab === 'credit' ? 'scale-110' : ''}`}>
               <CreditCard className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">信用卡</span>
@@ -502,7 +502,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'accounts' ? 'scale-110 bg-purple-50 dark:bg-purple-950/60' : ''}`}>
+            <div className={`p-1 transition-transform ${activeTab === 'accounts' ? 'scale-110' : ''}`}>
               <Wallet className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">资产卡包</span>
@@ -516,7 +516,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'transactions' ? 'scale-110 bg-amber-50 dark:bg-amber-950/60' : ''}`}>
+            <div className={`p-1 transition-transform ${activeTab === 'transactions' ? 'scale-110' : ''}`}>
               <ListOrdered className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">记账本</span>
@@ -530,7 +530,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'projects' ? 'scale-110 bg-indigo-50 dark:bg-indigo-950/60' : ''}`}>
+            <div className={`p-1 transition-transform ${activeTab === 'projects' ? 'scale-110' : ''}`}>
               <FolderKanban className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">项目</span>
@@ -544,7 +544,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg transition-transform ${activeTab === 'analytics' ? 'scale-110 bg-teal-50 dark:bg-teal-950/60' : ''}`}>
+            <div className={`p-1 transition-transform ${activeTab === 'analytics' ? 'scale-110' : ''}`}>
               <BarChart3 className="w-5 h-5" />
             </div>
             <span className="text-[10px] tracking-tight mt-0.5">图表分析</span>
