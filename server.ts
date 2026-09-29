@@ -807,6 +807,190 @@ async function startServer() {
     });
   });
 
+  // ==========================================
+  // Cardentify (https://cards.no2.ac) Real Sync Engine
+  // Fetches latest official PassKit cards directly from https://cards.no2.ac/api/cards
+  // ==========================================
+  const CARDENTIFY_FILE_PATH = path.join(DATA_DIR, 'cardentify_cards.json');
+  let cardentifyMemoryCards: any[] = [];
+  let cardentifyLastSyncedAt: string = '';
+  let isCardentifySyncing = false;
+
+  // Load existing Cardentify cards from disk if available
+  try {
+    if (fs.existsSync(CARDENTIFY_FILE_PATH)) {
+      const raw = fs.readFileSync(CARDENTIFY_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cardentifyMemoryCards = parsed;
+        const stat = fs.statSync(CARDENTIFY_FILE_PATH);
+        cardentifyLastSyncedAt = stat.mtime.toISOString();
+        console.log(`[Cardentify] Loaded ${cardentifyMemoryCards.length} cached cards from ${CARDENTIFY_FILE_PATH}`);
+      }
+    }
+  } catch (e) {
+    console.warn('[Cardentify] Warning loading cached cards:', e);
+  }
+
+  // Core synchronization logic with https://cards.no2.ac
+  async function performCardentifySync(): Promise<{ count: number; newCards: number; duration: number }> {
+    if (isCardentifySyncing) {
+      throw new Error('Cardentify sync already in progress');
+    }
+    isCardentifySyncing = true;
+    const t0 = Date.now();
+    try {
+      const response = await fetch('https://cards.no2.ac/api/cards', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (Cardentify-Sync-Client)',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`cards.no2.ac responded with HTTP ${response.status}`);
+      }
+
+      const rawCards = await response.json();
+      if (!Array.isArray(rawCards)) {
+        throw new Error('cards.no2.ac returned invalid data format');
+      }
+
+      const normalizedList: any[] = [];
+      const seenIds = new Set<number>();
+
+      for (const item of rawCards) {
+        if (!item || !item.id || seenIds.has(item.id)) continue;
+        const imgUrl = item.images?.[0]?.image;
+        if (!imgUrl) continue;
+
+        seenIds.add(item.id);
+        normalizedList.push({
+          id: item.id,
+          name: item.name || '银行卡',
+          bins: Array.isArray(item.bins) ? item.bins : [],
+          brand: item.card?.brand || 'VISA',
+          type: item.card?.type || 'Debit',
+          country: item.card?.country || item.issuer?.country || 'CN',
+          issuerName: item.issuer?.name || '银行机构',
+          issuerEnglish: item.issuer?.english_name || item.issuer?.name || 'BANK CARD',
+          imageUrl: imgUrl,
+          discontinued: !!item.card?.discontinued,
+        });
+      }
+
+      if (normalizedList.length > 0) {
+        cardentifyMemoryCards = normalizedList;
+        cardentifyLastSyncedAt = new Date().toISOString();
+        try {
+          if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+          fs.writeFileSync(CARDENTIFY_FILE_PATH, JSON.stringify(normalizedList, null, 2), 'utf-8');
+          console.log(`[Cardentify] Successfully synced and persisted ${normalizedList.length} cards to ${CARDENTIFY_FILE_PATH}`);
+        } catch (err) {
+          console.warn('[Cardentify] Warning saving cards to disk:', err);
+        }
+      }
+
+      return {
+        count: normalizedList.length,
+        newCards: normalizedList.length,
+        duration: Date.now() - t0,
+      };
+    } finally {
+      isCardentifySyncing = false;
+    }
+  }
+
+  // API Endpoint: Query Cardentify Cards
+  app.get('/api/cardentify/cards', (req, res) => {
+    return res.json({
+      success: true,
+      total: cardentifyMemoryCards.length,
+      cards: cardentifyMemoryCards,
+      lastSyncedAt: cardentifyLastSyncedAt || (cardentifyMemoryCards.length > 0 ? '已就绪' : null),
+      isLiveSynced: true,
+    });
+  });
+
+  // API Endpoint: Trigger on-demand sync with cards.no2.ac
+  app.all('/api/cardentify/sync', async (req, res) => {
+    try {
+      const result = await performCardentifySync();
+      return res.json({
+        success: true,
+        message: `已成功同步 https://cards.no2.ac/ 官方卡面库！共 ${result.count} 张官方原版卡面`,
+        count: result.count,
+        durationMs: result.duration,
+        lastSyncedAt: cardentifyLastSyncedAt,
+      });
+    } catch (err: any) {
+      console.warn('[Cardentify] Sync failed:', err);
+      return res.json({
+        success: false,
+        message: `同步异常: ${err.message || '网络不稳定'}，已继续使用本地高可用缓存`,
+        count: cardentifyMemoryCards.length,
+        lastSyncedAt: cardentifyLastSyncedAt,
+      });
+    }
+  });
+
+  // ==========================================
+  // Dual-Library Unified Sync & Stats Endpoints
+  // ==========================================
+  app.get('/api/gallery/stats', (req, res) => {
+    const cardartCount = cardartMemoryCards.length;
+    const cardentifyCount = cardentifyMemoryCards.length;
+    const totalCount = cardartCount + cardentifyCount;
+
+    return res.json({
+      success: true,
+      cardartCount,
+      cardentifyCount,
+      totalCount,
+      cardartLastSyncedAt,
+      cardentifyLastSyncedAt,
+      lastSyncedAt: new Date().toISOString(),
+    });
+  });
+
+  // API Endpoint: Dual-library Real-time Simultaneous Sync
+  app.all('/api/gallery/sync-all', async (req, res) => {
+    const t0 = Date.now();
+    const [cardartRes, cardentifyRes] = await Promise.allSettled([
+      performCardArtSync(),
+      performCardentifySync(),
+    ]);
+
+    const cardartSuccess = cardartRes.status === 'fulfilled';
+    const cardentifySuccess = cardentifyRes.status === 'fulfilled';
+    const totalCount = cardartMemoryCards.length + cardentifyMemoryCards.length;
+    const nowIso = new Date().toISOString();
+
+    return res.json({
+      success: true,
+      message: `双库融合实时同步完成！共计 ${totalCount} 款高清卡面 (CardArt: ${cardartMemoryCards.length} 款, Cardentify: ${cardentifyMemoryCards.length} 款)`,
+      cardartCount: cardartMemoryCards.length,
+      cardentifyCount: cardentifyMemoryCards.length,
+      totalCount,
+      cardartSuccess,
+      cardentifySuccess,
+      cardartCards: cardartMemoryCards,
+      cardentifyCards: cardentifyMemoryCards,
+      durationMs: Date.now() - t0,
+      lastSyncedAt: nowIso,
+    });
+  });
+
+  // Initial bootstrap background sync if memory is empty
+  setTimeout(() => {
+    if (cardartMemoryCards.length === 0) {
+      performCardArtSync().catch((e) => console.warn('[CardArt] Initial background sync error:', e.message));
+    }
+    if (cardentifyMemoryCards.length === 0) {
+      performCardentifySync().catch((e) => console.warn('[Cardentify] Initial background sync error:', e.message));
+    }
+  }, 2000);
+
   // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Shield,
@@ -12,9 +12,14 @@ import {
   Cloud,
   Github,
   ExternalLink,
+  Heart,
+  Palette,
+  Sparkles,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { updateCurrentUser, getAccounts, getTransactions, saveAccounts, saveTransactions, resetToDemoData } from '../lib/storage';
+import { getAllCardArtCards } from '../lib/cardArtSync';
+import { getAllCardentifyCards } from '../lib/cardentifyPresets';
 
 interface SecuritySettingsModalProps {
   currentUser: UserProfile;
@@ -38,6 +43,24 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   const [autoLockMinutes, setAutoLockMinutes] = useState(currentUser.autoLockMinutes || 15);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const [cardArtCount, setCardArtCount] = useState<number>(() => getAllCardArtCards().length);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(() => getAllCardentifyCards().length);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setCardArtCount(getAllCardArtCards().length);
+      setCardentifyCount(getAllCardentifyCards().length);
+    };
+    window.addEventListener('gallery-updated', handleUpdate);
+    window.addEventListener('cardart-updated', handleUpdate);
+    window.addEventListener('cardentify-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('gallery-updated', handleUpdate);
+      window.removeEventListener('cardart-updated', handleUpdate);
+      window.removeEventListener('cardentify-updated', handleUpdate);
+    };
+  }, []);
 
   const handleUpdateSecurity = (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,18 +329,50 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
             </button>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-            <span>资产管家 · 安全开源记账</span>
-            <a
-              href="https://github.com/systemsome/bookkeeping"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-medium transition-colors"
-            >
-              <Github className="w-3.5 h-3.5" />
-              <span>GitHub 项目地址</span>
-              <ExternalLink className="w-2.5 h-2.5 opacity-60" />
-            </a>
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-[11px] text-slate-500">
+            <div className="flex items-center justify-between">
+              <span>资产管家 · 安全开源记账</span>
+              <a
+                href="https://github.com/systemsome/bookkeeping"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-medium transition-colors"
+              >
+                <Github className="w-3.5 h-3.5" />
+                <span>GitHub 项目地址</span>
+                <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+              </a>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80 text-[10.5px]">
+              <span className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
+                <Heart className="w-3 h-3 text-rose-500 fill-rose-500" />
+                <span>卡面开源致谢</span>
+              </span>
+              <div className="flex items-center gap-3">
+                <a
+                  href="https://cardart.cc/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium transition-colors"
+                >
+                  <Palette className="w-3 h-3" />
+                  <span>CardArt ({cardArtCount}款)</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+                <span className="text-slate-300 dark:text-slate-700">·</span>
+                <a
+                  href="https://cards.no2.ac/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-400 hover:underline font-medium transition-colors"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Cardentify ({cardentifyCount}款)</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </div>

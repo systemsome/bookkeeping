@@ -41,6 +41,7 @@ import { formatCurrency } from '../lib/formatters';
 import { getRandomCardBackground } from '../lib/brandHelper';
 import { matchBestCardentifyPreset, matchBestCardentifyCard, getTotalGalleryCardsCount } from '../lib/cardentifyPresets';
 import { CardentifyGalleryModal } from './CardentifyGalleryModal';
+import { syncDualLibrariesOnline } from '../lib/gallerySync';
 import { fetchLiveGoldRate, getCachedGoldRate, GoldMarketRate } from '../lib/goldRates';
 
 interface AccountsListProps {
@@ -85,8 +86,31 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [isGalleryOpenGeneral, setIsGalleryOpenGeneral] = useState<boolean>(false);
   const [globalWakeMode, setGlobalWakeMode] = useState<'hidden' | 'pinned'>('hidden');
 
-  // 双库卡面总数实时与后台数据源同步
-  const totalGalleryCards = useMemo(() => getTotalGalleryCardsCount(), [isGalleryOpenGeneral]);
+  // 双库卡面总数实时与后台数据源双向同步
+  const [totalGalleryCards, setTotalGalleryCards] = useState<number>(() => getTotalGalleryCardsCount());
+
+  useEffect(() => {
+    const handleGalleryUpdate = () => {
+      setTotalGalleryCards(getTotalGalleryCardsCount());
+    };
+    window.addEventListener('gallery-updated', handleGalleryUpdate);
+    window.addEventListener('cardart-updated', handleGalleryUpdate);
+    window.addEventListener('cardentify-updated', handleGalleryUpdate);
+
+    // Initial background sync check
+    syncDualLibrariesOnline(false).catch(() => {});
+
+    return () => {
+      window.removeEventListener('gallery-updated', handleGalleryUpdate);
+      window.removeEventListener('cardart-updated', handleGalleryUpdate);
+      window.removeEventListener('cardentify-updated', handleGalleryUpdate);
+    };
+  }, []);
+
+  // Update whenever general gallery modal opens/closes
+  useEffect(() => {
+    setTotalGalleryCards(getTotalGalleryCardsCount());
+  }, [isGalleryOpenGeneral]);
 
   // 顶部功能按键折叠/收起菜单状态（响应用户隐藏诉求，保持界面极简）
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState<boolean>(false);

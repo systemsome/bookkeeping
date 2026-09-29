@@ -100,16 +100,72 @@ export function cardArtToUnified(c: CardArtItem): UnifiedCardItem {
   };
 }
 
-// Get all unified cards from both sources (801+ items)
+const CARDENTIFY_CACHE_KEY = 'cardentify_synced_cards_v2';
+
+// Get all Cardentify cards (Base 557 + dynamically synced from cards.no2.ac)
+export function getAllCardentifyCards(): CardentifyCard[] {
+  try {
+    const raw = localStorage.getItem(CARDENTIFY_CACHE_KEY);
+    const cached: CardentifyCard[] = raw ? JSON.parse(raw) : [];
+    const map = new Map<number, CardentifyCard>();
+    CARDENTIFY_CARDS.forEach((c) => map.set(c.id, c));
+    cached.forEach((c) => map.set(c.id, c));
+    return Array.from(map.values());
+  } catch {
+    return CARDENTIFY_CARDS;
+  }
+}
+
+// Cache newly discovered or synced Cardentify cards
+export function cacheCardentifyCards(newCards: CardentifyCard[]): number {
+  if (!newCards || newCards.length === 0) return 0;
+  try {
+    const current = getAllCardentifyCards();
+    const map = new Map<number, CardentifyCard>();
+    current.forEach((c) => map.set(c.id, c));
+
+    let addedCount = 0;
+    newCards.forEach((c) => {
+      if (!map.has(c.id)) {
+        addedCount++;
+      }
+      map.set(c.id, c);
+    });
+
+    const merged = Array.from(map.values());
+    localStorage.setItem(CARDENTIFY_CACHE_KEY, JSON.stringify(merged));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('cardentify-updated', { detail: { count: merged.length } })
+      );
+      window.dispatchEvent(
+        new CustomEvent('gallery-updated', {
+          detail: {
+            total: merged.length + getAllCardArtCards().length,
+            cardentifyCount: merged.length,
+            cardArtCount: getAllCardArtCards().length,
+          },
+        })
+      );
+    }
+
+    return addedCount;
+  } catch {
+    return 0;
+  }
+}
+
+// Get all unified cards from both sources (live dual-library fused)
 export function getAllUnifiedCards(): UnifiedCardItem[] {
-  const cardentifyList = CARDENTIFY_CARDS.map(cardentifyToUnified);
+  const cardentifyList = getAllCardentifyCards().map(cardentifyToUnified);
   const cardArtList = getAllCardArtCards().map(cardArtToUnified);
   return [...cardentifyList, ...cardArtList];
 }
 
 // Get dynamic total card count across both databases (Cardentify + CardArt synced)
 export function getTotalGalleryCardsCount(): number {
-  return CARDENTIFY_CARDS.length + getAllCardArtCards().length;
+  return getAllCardentifyCards().length + getAllCardArtCards().length;
 }
 
 // Convert Cardentify card to CardFacePreset format for backwards compatibility

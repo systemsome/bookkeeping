@@ -38,7 +38,7 @@ export interface CardArtSyncMeta {
 }
 
 // Convert base CardArtCard to CardArtItem
-function normalizeBaseCard(c: CardArtCard): CardArtItem {
+export function normalizeBaseCard(c: CardArtCard): CardArtItem {
   const t = (c.title + ' ' + (c.titleEn || '')).toUpperCase();
   let brand = 'UnionPay';
   if (t.includes('VISA')) brand = 'VISA';

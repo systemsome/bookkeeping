@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wallet,
   Eye,
@@ -26,10 +26,15 @@ import {
   CloudOff,
   RefreshCw,
   WifiOff,
+  Heart,
+  Palette,
 } from 'lucide-react';
 import { UserProfile, FinancialSummary, CloudSyncStatus } from '../types';
 import { formatCurrency } from '../lib/formatters';
 import { ThemeMode } from '../lib/theme';
+import { getAllCardArtCards } from '../lib/cardArtSync';
+import { getAllCardentifyCards } from '../lib/cardentifyPresets';
+import { fetchDualGalleryStats } from '../lib/gallerySync';
 
 interface NavbarProps {
   currentUser: UserProfile | null;
@@ -70,6 +75,42 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+
+  // Auto-updating card counts for CardArt & Cardentify
+  const [cardArtCount, setCardArtCount] = useState<number>(() => getAllCardArtCards().length);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(() => getAllCardentifyCards().length);
+
+  useEffect(() => {
+    const handleCountUpdate = () => {
+      setCardArtCount(getAllCardArtCards().length);
+      setCardentifyCount(getAllCardentifyCards().length);
+    };
+
+    window.addEventListener('gallery-updated', handleCountUpdate);
+    window.addEventListener('cardart-updated', handleCountUpdate);
+    window.addEventListener('cardentify-updated', handleCountUpdate);
+
+    fetchDualGalleryStats()
+      .then((stats) => {
+        if (stats.cardartCount) setCardArtCount(stats.cardartCount);
+        if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener('gallery-updated', handleCountUpdate);
+      window.removeEventListener('cardart-updated', handleCountUpdate);
+      window.removeEventListener('cardentify-updated', handleCountUpdate);
+    };
+  }, []);
+
+  // Refresh counts when user opens user menu
+  useEffect(() => {
+    if (showUserMenu) {
+      setCardArtCount(getAllCardArtCards().length);
+      setCardentifyCount(getAllCardentifyCards().length);
+    }
+  }, [showUserMenu]);
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-colors duration-200">
@@ -379,7 +420,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     className="fixed inset-0 z-40"
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-sm animate-in fade-in zoom-in-95">
+                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-sm animate-in fade-in zoom-in-95">
                     <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700">
                       <p className="font-semibold text-slate-900 dark:text-white truncate">
                         {currentUser?.displayName}
@@ -438,6 +479,73 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span>GitHub 开源仓库</span>
                       </div>
                       <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </a>
+
+                    {/* 开源生态鸣谢 / Acknowledgements */}
+                    <div className="border-t border-slate-100 dark:border-slate-700/80 my-1" />
+                    
+                    <div className="px-3.5 pt-1.5 pb-0.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                          <Heart className="w-3 h-3 text-rose-500 fill-rose-500" />
+                          <span>卡面生态特别鸣谢</span>
+                        </span>
+                        <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-full border border-emerald-200/60 dark:border-emerald-800/60">
+                          共 {cardArtCount + cardentifyCount} 款
+                        </span>
+                      </div>
+                    </div>
+
+                    <a
+                      id="menu-item-cardart"
+                      href="https://cardart.cc/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowUserMenu(false)}
+                      className="w-full flex items-center justify-between px-3.5 py-2 text-slate-700 dark:text-slate-200 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 hover:text-amber-800 dark:hover:text-amber-300 transition-colors text-xs font-medium group"
+                      title="鸣谢 CardArt (https://cardart.cc/) 创意卡面社区"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Palette className="w-3 h-3" />
+                        </div>
+                        <div className="text-left min-w-0">
+                          <p className="font-semibold leading-tight flex items-center gap-1.5">
+                            <span className="truncate">CardArt</span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-medium shrink-0">
+                              {cardArtCount > 0 ? `${cardArtCount}款` : '840+款'}
+                            </span>
+                          </p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">cardart.cc 创意卡面社区</p>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 shrink-0 transition-colors ml-1" />
+                    </a>
+
+                    <a
+                      id="menu-item-cardentify"
+                      href="https://cards.no2.ac/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowUserMenu(false)}
+                      className="w-full flex items-center justify-between px-3.5 py-2 text-slate-700 dark:text-slate-200 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors text-xs font-medium group"
+                      title="鸣谢 Cardentify (https://cards.no2.ac/) 高清银行卡面资料库"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Sparkles className="w-3 h-3" />
+                        </div>
+                        <div className="text-left min-w-0">
+                          <p className="font-semibold leading-tight flex items-center gap-1.5">
+                            <span className="truncate">Cardentify</span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-medium shrink-0">
+                              {cardentifyCount > 0 ? `${cardentifyCount}款` : '632+款'}
+                            </span>
+                          </p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">cards.no2.ac 高清卡面库</p>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 shrink-0 transition-colors ml-1" />
                     </a>
 
                     <div className="border-t border-slate-100 dark:border-slate-700 my-1" />

@@ -122,7 +122,27 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
   const [isFetchingGold, setIsFetchingGold] = useState<boolean>(false);
   const [isCardentifyGalleryOpen, setIsCardentifyGalleryOpen] = useState<boolean>(false);
-  const totalGalleryCardsCount = useMemo(() => getTotalGalleryCardsCount(), [isCardentifyGalleryOpen]);
+  const [totalGalleryCardsCount, setTotalGalleryCardsCount] = useState<number>(() => getTotalGalleryCardsCount());
+
+  // Real-time listener for dual-library gallery updates
+  useEffect(() => {
+    const handleGalleryUpdate = () => {
+      setTotalGalleryCardsCount(getTotalGalleryCardsCount());
+    };
+    window.addEventListener('gallery-updated', handleGalleryUpdate);
+    window.addEventListener('cardart-updated', handleGalleryUpdate);
+    window.addEventListener('cardentify-updated', handleGalleryUpdate);
+    return () => {
+      window.removeEventListener('gallery-updated', handleGalleryUpdate);
+      window.removeEventListener('cardart-updated', handleGalleryUpdate);
+      window.removeEventListener('cardentify-updated', handleGalleryUpdate);
+    };
+  }, []);
+
+  // Update whenever gallery modal closes or opens
+  useEffect(() => {
+    setTotalGalleryCardsCount(getTotalGalleryCardsCount());
+  }, [isCardentifyGalleryOpen]);
 
   // Auto fetch latest gold market price
   useEffect(() => {

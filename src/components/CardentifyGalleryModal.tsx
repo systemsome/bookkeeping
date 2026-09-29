@@ -25,6 +25,7 @@ import {
   CARDENTIFY_CARDS,
   CardentifyCard,
   COUNTRY_NAMES,
+  getAllCardentifyCards,
 } from '../lib/cardentifyPresets';
 import {
   getAllCardArtCards,
@@ -32,6 +33,7 @@ import {
   syncWithCardArtOnline,
   getCardArtSyncMeta,
 } from '../lib/cardArtSync';
+import { syncDualLibrariesOnline } from '../lib/gallerySync';
 
 export interface UnifiedGalleryCard {
   id: string | number;
@@ -93,23 +95,54 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
   const [sortBy, setSortBy] = useState<SortOption>('POPULAR');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
-  // Sync state with cardart.cc
+  // Real-time synchronization state with CardArt and Cardentify
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [syncMeta, setSyncMeta] = useState(getCardArtSyncMeta());
-  const [cardArtList, setCardArtList] = useState<CardArtItem[]>([]);
+  const [cardArtList, setCardArtList] = useState<CardArtItem[]>(() => getAllCardArtCards());
+  const [cardentifyList, setCardentifyList] = useState<CardentifyCard[]>(() => getAllCardentifyCards());
 
-  // Load initial CardArt cards & listen for background updates
+  // Proactive auto-sync whenever the gallery modal is opened
   useEffect(() => {
-    setCardArtList(getAllCardArtCards());
-    setSyncMeta(getCardArtSyncMeta());
+    if (!isOpen) return;
 
+    let isMounted = true;
+    syncDualLibrariesOnline(false)
+      .then((res) => {
+        if (isMounted) {
+          setCardArtList(getAllCardArtCards());
+          setCardentifyList(getAllCardentifyCards());
+          setSyncMeta(getCardArtSyncMeta());
+          if (res.newCardsCount > 0) {
+            setSyncToast(res.message);
+            setTimeout(() => {
+              if (isMounted) setSyncToast(null);
+            }, 3500);
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
+  // Listen for background updates from custom window events
+  useEffect(() => {
     const handleUpdate = () => {
       setCardArtList(getAllCardArtCards());
+      setCardentifyList(getAllCardentifyCards());
       setSyncMeta(getCardArtSyncMeta());
     };
+    window.addEventListener('gallery-updated', handleUpdate);
     window.addEventListener('cardart-updated', handleUpdate);
-    return () => window.removeEventListener('cardart-updated', handleUpdate);
+    window.addEventListener('cardentify-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('gallery-updated', handleUpdate);
+      window.removeEventListener('cardart-updated', handleUpdate);
+      window.removeEventListener('cardentify-updated', handleUpdate);
+    };
   }, []);
 
   // Synchronize initial default bank query
@@ -129,29 +162,30 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Trigger Online Sync with https://cardart.cc
+  // Trigger Online Sync with BOTH CardArt (cardart.cc) & Cardentify (cards.no2.ac)
   const handleTriggerSync = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
-    setSyncToast('正在与 https://cardart.cc/ 实时同步最新卡面库...');
+    setSyncToast('正在与 cardart.cc & cards.no2.ac 实时同步双库最新卡面...');
 
     try {
-      const res = await syncWithCardArtOnline();
+      const res = await syncDualLibrariesOnline(true);
       setCardArtList(getAllCardArtCards());
+      setCardentifyList(getAllCardentifyCards());
       setSyncMeta(getCardArtSyncMeta());
-      setSyncToast(res.message || '✨ 同步完成！已更新至最新卡面');
+      setSyncToast(res.message || '✨ 同步完成！双库卡面已更新至最新');
       setTimeout(() => setSyncToast(null), 4000);
     } catch (e: any) {
-      setSyncToast(`同步完成，使用当前最新资料库缓存 (${cardArtList.length} 款)`);
+      setSyncToast(`同步完成，当前双库共计 ${cardArtList.length + cardentifyList.length} 款卡面`);
       setTimeout(() => setSyncToast(null), 3500);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Convert Cardentify into unified cards
+  // Convert Cardentify into unified cards with real-time dynamic items
   const unifiedCardentifyList: UnifiedGalleryCard[] = useMemo(() => {
-    return CARDENTIFY_CARDS.map((c) => ({
+    return cardentifyList.map((c) => ({
       id: `cardentify-${c.id}`,
       name: c.name,
       titleEn: c.issuerEnglish,
@@ -167,7 +201,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       bins: c.bins,
       tags: [c.issuerName, c.name, c.brand, c.type].filter(Boolean) as string[],
     }));
-  }, []);
+  }, [cardentifyList]);
 
   // Convert CardArt cards into unified cards
   const unifiedCardArtList: UnifiedGalleryCard[] = useMemo(() => {
@@ -194,7 +228,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     }));
   }, [cardArtList]);
 
-  // Combined master collection (1,190+ items)
+  // Combined master collection with live dual-library count
   const allUnifiedCards = useMemo(() => {
     return [...unifiedCardArtList, ...unifiedCardentifyList];
   }, [unifiedCardArtList, unifiedCardentifyList]);
@@ -202,7 +236,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
   // Top popular banks for quick chip filtration
   const topBanks = useMemo(() => {
     const counts: Record<string, number> = {};
-    CARDENTIFY_CARDS.forEach((c) => {
+    cardentifyList.forEach((c) => {
       const b = c.issuerName?.trim();
       if (b) {
         counts[b] = (counts[b] || 0) + 1;
@@ -212,7 +246,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       .filter(([_, count]) => count >= 5)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 16);
-  }, []);
+  }, [cardentifyList]);
 
   // Filtered Cards
   const filteredCards = useMemo(() => {
@@ -490,10 +524,10 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white active:scale-95 shadow-xs'
               }`}
-              title="立即与 https://cardart.cc 官方进行实时增量同步"
+              title="立即与 cardart.cc & cards.no2.ac 官方进行双库增量同步"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isSyncing ? '同步中...' : '与 CardArt 保持同步'}</span>
+              <span className="hidden sm:inline">{isSyncing ? '双库同步中...' : '实时同步双库'}</span>
               <span className="sm:hidden">{isSyncing ? '同步中' : '同步'}</span>
             </button>
 
