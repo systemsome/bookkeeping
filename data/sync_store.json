@@ -1,0 +1,26 @@
+{
+  "demo-user-888": {
+    "user": {
+      "id": "demo-user-888",
+      "username": "demo",
+      "displayName": "财务管理官 (体验号)",
+      "passwordHash": "demo123456",
+      "pinCode": "123456",
+      "autoLockMinutes": 15,
+      "privacyMode": false,
+      "createdAt": "2026-09-13T06:57:15.674Z",
+      "lastLoginTime": "2026-09-13T06:58:25.172Z"
+    },
+    "accounts": [
+      {
+        "id": "acc-test-realtime",
+        "name": "实时测试卡",
+        "category": "DEBIT_CARD",
+        "balance": 888
+      }
+    ],
+    "transactions": [],
+    "projects": [],
+    "lastUpdated": "2026-09-29T09:30:46.193Z"
+  }
+}

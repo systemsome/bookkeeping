@@ -14,6 +14,20 @@ const STORAGE_KEYS = {
   PROJECTS_PREFIX: 'asset_manager_projs_',
   IS_LOCKED: 'asset_manager_is_locked_v1',
   LAST_ACTIVITY: 'asset_manager_last_act_v1',
+  DEVICE_ID: 'asset_manager_device_id_v1',
+};
+
+export const getDeviceId = (): string => {
+  try {
+    let id = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+    if (!id) {
+      id = 'dev-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem(STORAGE_KEYS.DEVICE_ID, id);
+    }
+    return id;
+  } catch {
+    return 'dev-temp-' + Date.now();
+  }
 };
 
 // Initial demo user
@@ -72,7 +86,7 @@ export const getCurrentUser = (): UserProfile | null => {
 
 // Debounce timer for auto-syncing with server and cloud storage
 let syncTimeout: any = null;
-export const triggerAutoServerSync = (userId: string, immediate = false) => {
+export const triggerAutoServerSync = (userId: string, immediate = true) => {
   if (!userId) return;
   if (syncTimeout) clearTimeout(syncTimeout);
 
@@ -90,7 +104,7 @@ export const triggerAutoServerSync = (userId: string, immediate = false) => {
       lastLoginTime: new Date().toISOString(),
     };
 
-    // 1. 同步至 Express / NAS 服务端持久化文件存储
+    // 1. 同步至 Express / NAS 服务端持久化文件存储 (0ms立即推送到云端)
     try {
       await syncDataToServer(userId, accounts, transactions, projects, user);
     } catch (e) {
@@ -139,7 +153,7 @@ export const triggerAutoServerSync = (userId: string, immediate = false) => {
   if (immediate) {
     executeSync();
   } else {
-    syncTimeout = setTimeout(executeSync, 400);
+    syncTimeout = setTimeout(executeSync, 50);
   }
 };
 
@@ -238,12 +252,18 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    // Intelligently auto-populate Cardentify lossless Apple Pay card faces for accounts without cardImageUrl
+    // Intelligently auto-populate Cardentify card faces only for fresh accounts with no card styling configured
     let needsResave = false;
     const enriched = parsed.map((acc: FinancialAccount) => {
       let updatedAcc = { ...acc };
 
-      if (!updatedAcc.cardImageUrl) {
+      // Only auto-match card image if account has no cardImageUrl AND no custom skin/color/preset
+      if (
+        updatedAcc.cardImageUrl === undefined &&
+        !updatedAcc.cardPresetId &&
+        !updatedAcc.cardBgColor &&
+        !updatedAcc.cardSkin
+      ) {
         const matched = matchBestCardentifyCard(updatedAcc.name, updatedAcc.bankName, updatedAcc.category);
         if (matched) {
           needsResave = true;
@@ -257,7 +277,7 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
           updatedAcc = {
             ...updatedAcc,
             cardImageUrl: matched.imageUrl,
-            cardPresetId: updatedAcc.cardPresetId || `cardentify-${matched.id}`,
+            cardPresetId: `cardentify-${matched.id}`,
             cardNetwork: updatedAcc.cardNetwork && updatedAcc.cardNetwork !== 'NONE' ? updatedAcc.cardNetwork : net,
             bankName: updatedAcc.bankName || matched.issuerName,
             cardTier: updatedAcc.cardTier || (matched.name.includes('白金') ? '白金卡' : matched.name.includes('金卡') ? '金卡' : '标准卡'),
@@ -265,16 +285,17 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
         }
       }
 
-      if (!updatedAcc.cardPresetId || !updatedAcc.cardPattern) {
+      // Only auto-match preset if user has neither preset, pattern, skin, nor bg color
+      if (!updatedAcc.cardPresetId && !updatedAcc.cardPattern && !updatedAcc.cardBgColor && !updatedAcc.cardSkin && !updatedAcc.cardImageUrl) {
         const preset = matchBestCardentifyPreset(updatedAcc.name, updatedAcc.bankName);
         if (preset) {
           needsResave = true;
           updatedAcc = {
             ...updatedAcc,
-            cardPresetId: updatedAcc.cardPresetId || preset.id,
-            cardPattern: updatedAcc.cardPattern || preset.cardStyle.patternType || 'radial-sheen',
-            cardTextColor: updatedAcc.cardTextColor || preset.textColorMode,
-            cardBgColor: updatedAcc.cardBgColor || preset.cardStyle.background,
+            cardPresetId: preset.id,
+            cardPattern: preset.cardStyle.patternType || 'radial-sheen',
+            cardTextColor: preset.textColorMode,
+            cardBgColor: preset.cardStyle.background,
             cardTier: updatedAcc.cardTier || preset.cardTier,
             cardNetwork: updatedAcc.cardNetwork || preset.cardNetwork,
           };
@@ -297,8 +318,12 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
 };
 
 export const saveAccounts = (userId: string, accounts: FinancialAccount[]) => {
-  localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(accounts || []));
-  triggerAutoServerSync(userId);
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(accounts || []));
+  } catch (err) {
+    console.warn('LocalStorage saveAccounts warning:', err);
+  }
+  triggerAutoServerSync(userId, true);
 };
 
 export const getTransactions = (userId: string): Transaction[] => {
@@ -307,7 +332,9 @@ export const getTransactions = (userId: string): Transaction[] => {
     if (!raw) {
       if (userId === DEFAULT_DEMO_USER.id) {
         const sortedDemo = sortTransactions(INITIAL_DEMO_TRANSACTIONS);
-        localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sortedDemo));
+        try {
+          localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sortedDemo));
+        } catch {}
         return sortedDemo;
       }
       return [];
@@ -321,8 +348,12 @@ export const getTransactions = (userId: string): Transaction[] => {
 
 export const saveTransactions = (userId: string, transactions: Transaction[]) => {
   const sorted = sortTransactions(transactions || []);
-  localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sorted));
-  triggerAutoServerSync(userId);
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sorted));
+  } catch (err) {
+    console.warn('LocalStorage saveTransactions warning:', err);
+  }
+  triggerAutoServerSync(userId, true);
 };
 
 export const getProjects = (userId: string): LedgerProject[] => {
@@ -346,8 +377,12 @@ export const getProjects = (userId: string): LedgerProject[] => {
 };
 
 export const saveProjects = (userId: string, projects: LedgerProject[]) => {
-  localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(projects));
-  triggerAutoServerSync(userId);
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(projects));
+  } catch (err) {
+    console.warn('LocalStorage saveProjects warning:', err);
+  }
+  triggerAutoServerSync(userId, true);
 };
 
 export const calculateProjectStats = (
@@ -590,6 +625,7 @@ export const syncDataToServer = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId,
+        senderDeviceId: getDeviceId(),
         user: user || getCurrentUser(),
         accounts,
         transactions,
@@ -601,6 +637,135 @@ export const syncDataToServer = async (
   } catch (err: any) {
     return { success: false, message: err.message };
   }
+};
+
+/**
+ * 建立毫秒级跨设备实时长连接 (Server-Sent Events)
+ * 无论手机端或电脑端何时修改，其他设备均能在毫秒内自动感知并无缝更新页面数据
+ */
+export const initRealtimeSyncStream = (
+  userId: string,
+  username: string | undefined,
+  onRemoteUpdate: (payload: {
+    accounts: FinancialAccount[];
+    transactions: Transaction[];
+    projects: LedgerProject[];
+    user?: UserProfile;
+    lastUpdated?: string;
+  }) => void
+): (() => void) => {
+  if (!userId || typeof window === 'undefined' || typeof EventSource === 'undefined') {
+    return () => {};
+  }
+
+  let eventSource: EventSource | null = null;
+  let reconnectTimer: any = null;
+  let isClosed = false;
+
+  const connect = () => {
+    if (isClosed) return;
+    try {
+      const url = `/api/sync/stream?userId=${encodeURIComponent(userId)}&username=${encodeURIComponent(username || '')}`;
+      eventSource = new EventSource(url);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.type === 'SYNC_UPDATE') {
+            const currentDeviceId = getDeviceId();
+            // 如果来自当前设备自身发出的变更，已在本地乐观更新，跳过避免重复渲染
+            if (data.senderDeviceId && data.senderDeviceId === currentDeviceId) {
+              return;
+            }
+
+            const incomingAccounts: FinancialAccount[] = Array.isArray(data.accounts) ? data.accounts : [];
+            const incomingTransactions: Transaction[] = Array.isArray(data.transactions)
+              ? sortTransactions<Transaction>(data.transactions)
+              : [];
+            const incomingProjects: LedgerProject[] = Array.isArray(data.projects) ? data.projects : [];
+
+            // 毫秒级写入本地缓存并持久化
+            try {
+              localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(incomingAccounts));
+              localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(incomingTransactions));
+              localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(incomingProjects));
+              if (data.user) {
+                const users = getStoredUsers();
+                const idx = users.findIndex((u) => u.id === userId || u.username.toLowerCase() === data.user.username?.toLowerCase());
+                if (idx >= 0) {
+                  users[idx] = { ...users[idx], ...data.user };
+                } else {
+                  users.push(data.user);
+                }
+                saveUsers(users);
+              }
+            } catch (err) {
+              console.warn('[RealtimeSync] Local storage update warning:', err);
+            }
+
+            // 实时通知 UI 自动更新
+            onRemoteUpdate({
+              accounts: incomingAccounts,
+              transactions: incomingTransactions,
+              projects: incomingProjects,
+              user: data.user,
+              lastUpdated: data.lastUpdated,
+            });
+          }
+        } catch {
+          // ignore parsing error
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (!isClosed) {
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connect, 2500);
+        }
+      };
+    } catch {
+      if (!isClosed) {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 2500);
+      }
+    }
+  };
+
+  connect();
+
+  // 手机锁屏恢复或从后台切换回前台时，即刻校验并补全最新数据
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      fetchLatestDataFromServer(userId).then((res) => {
+        if (res.success && res.accounts && res.transactions) {
+          onRemoteUpdate({
+            accounts: res.accounts,
+            transactions: res.transactions,
+            projects: res.projects || [],
+            user: res.user,
+          });
+        }
+      }).catch(() => {});
+    }
+  };
+
+  window.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('focus', handleVisibilityChange);
+
+  return () => {
+    isClosed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    window.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('focus', handleVisibilityChange);
+  };
 };
 
 /**

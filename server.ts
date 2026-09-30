@@ -1,9 +1,12 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './src/lib/constants';
 
 // Data directory for persistent storage (especially in Docker / NAS mounts)
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const DATA_DIR =
+  process.env.DATA_DIR ||
+  (fs.existsSync('/data') ? '/data' : path.join(process.cwd(), 'data'));
 const SYNC_FILE_PATH = path.join(DATA_DIR, 'sync_store.json');
 const USERS_FILE_PATH = path.join(DATA_DIR, 'users_store.json');
 
@@ -19,6 +22,51 @@ try {
 // In-memory / file-backed sync store & user store
 const localSyncStore = new Map<string, any>();
 const localUsersStore = new Map<string, any>();
+
+// Real-time pub/sub subscribers for millisecond-level cross-device sync
+interface SyncClient {
+  id: string;
+  userId: string;
+  username?: string;
+  res: express.Response;
+}
+const activeSyncClients = new Set<SyncClient>();
+
+function broadcastSyncUpdate(
+  userId: string,
+  username: string | undefined,
+  payload: any,
+  senderDeviceId?: string
+) {
+  const normUser = (username || '').toLowerCase();
+  const eventPayload = JSON.stringify({
+    type: 'SYNC_UPDATE',
+    userId,
+    username,
+    senderDeviceId,
+    accounts: payload.accounts || [],
+    transactions: payload.transactions || [],
+    projects: payload.projects || [],
+    user: payload.user,
+    lastUpdated: payload.lastUpdated,
+  });
+
+  activeSyncClients.forEach((client) => {
+    try {
+      const match =
+        !client.userId ||
+        client.userId === userId ||
+        (normUser && client.username?.toLowerCase() === normUser) ||
+        (client.userId === 'demo-user-888' && userId.includes('demo'));
+
+      if (match) {
+        client.res.write(`data: ${eventPayload}\n\n`);
+      }
+    } catch {
+      activeSyncClients.delete(client);
+    }
+  });
+}
 
 // Default demo user to ensure out-of-the-box experience
 const DEFAULT_DEMO_USER = {
@@ -74,22 +122,38 @@ function loadPersistedStores() {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         Object.entries(parsed).forEach(([uid, val]: [string, any]) => {
-          localSyncStore.set(uid, {
+          const ledger = {
             user: val?.user,
             accounts: Array.isArray(val?.accounts) ? val.accounts : [],
             transactions: Array.isArray(val?.transactions) ? val.transactions : [],
             projects: Array.isArray(val?.projects) ? val.projects : [],
             lastUpdated: val?.lastUpdated || new Date().toISOString(),
-          });
-          // If user info exists in sync record, also index user
+          };
+          localSyncStore.set(uid, ledger);
+          // If user info exists in sync record, also index by username
           if (val && val.user && val.user.username) {
             const uKey = val.user.username.toLowerCase();
+            localSyncStore.set(uKey, ledger);
             if (!localUsersStore.has(uKey)) {
               localUsersStore.set(uKey, val.user);
             }
           }
         });
       }
+    }
+
+    // Ensure demo user ledger exists and has accounts
+    const demoLedger = localSyncStore.get('demo-user-888');
+    if (!demoLedger || !demoLedger.accounts || demoLedger.accounts.length === 0) {
+      const defaultLedger = {
+        user: DEFAULT_DEMO_USER,
+        accounts: INITIAL_DEMO_ACCOUNTS,
+        transactions: INITIAL_DEMO_TRANSACTIONS,
+        projects: INITIAL_DEMO_PROJECTS,
+        lastUpdated: new Date().toISOString(),
+      };
+      localSyncStore.set('demo-user-888', defaultLedger);
+      localSyncStore.set('demo', defaultLedger);
     }
 
     console.log(`[Storage] Loaded ${localUsersStore.size} user(s) and ${localSyncStore.size} data ledger(s)`);
@@ -108,14 +172,23 @@ function savePersistedStores() {
       }
     }
 
-    // Save users
-    const usersArr = Array.from(localUsersStore.values());
-    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(usersArr, null, 2), 'utf-8');
+    // Save unique users
+    const uniqueUsersMap = new Map<string, any>();
+    localUsersStore.forEach((u) => {
+      if (u && (u.id || u.username)) {
+        uniqueUsersMap.set(u.id || u.username.toLowerCase(), u);
+      }
+    });
+    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(Array.from(uniqueUsersMap.values()), null, 2), 'utf-8');
 
-    // Save sync ledger
+    // Save unique sync ledgers (keyed primarily by user id)
     const syncObj: Record<string, any> = {};
     localSyncStore.forEach((val, key) => {
-      syncObj[key] = val;
+      // If key is an ID or if not already saved
+      const primaryKey = val?.user?.id || key;
+      if (!syncObj[primaryKey]) {
+        syncObj[primaryKey] = val;
+      }
     });
     fs.writeFileSync(SYNC_FILE_PATH, JSON.stringify(syncObj, null, 2), 'utf-8');
   } catch (err) {
@@ -390,24 +463,42 @@ async function startServer() {
     };
 
     localUsersStore.set(key, newUser);
-    // Initialize ledger
-    localSyncStore.set(newUser.id, {
+
+    // If an existing populated ledger exists (e.g. demo-user-888 with accounts/transactions),
+    // automatically migrate and associate the data so newly registered personal accounts keep all their setup!
+    let initialAccounts: any[] = [];
+    let initialTransactions: any[] = [];
+    let initialProjects: any[] = [];
+
+    const demoLedger = localSyncStore.get('demo-user-888') || localSyncStore.get('demo');
+    if (demoLedger && ((demoLedger.accounts && demoLedger.accounts.length > 0) || (demoLedger.transactions && demoLedger.transactions.length > 0))) {
+      initialAccounts = demoLedger.accounts || [];
+      initialTransactions = demoLedger.transactions || [];
+      initialProjects = demoLedger.projects || [];
+    }
+
+    const newLedger = {
       user: newUser,
-      accounts: [],
-      transactions: [],
-      projects: [],
+      accounts: initialAccounts,
+      transactions: initialTransactions,
+      projects: initialProjects,
       lastUpdated: new Date().toISOString(),
-    });
+    };
+
+    localSyncStore.set(newUser.id, newLedger);
+    localSyncStore.set(key, newLedger);
 
     savePersistedStores();
 
     return res.json({
       success: true,
       user: newUser,
-      accounts: [],
-      transactions: [],
-      projects: [],
-      message: '注册成功并已安全持久化到服务端',
+      accounts: initialAccounts,
+      transactions: initialTransactions,
+      projects: initialProjects,
+      message: initialAccounts.length > 0
+        ? `注册成功，已同步保留现有 ${initialAccounts.length} 个账户数据`
+        : '注册成功并已安全持久化到服务端',
     });
   });
 
@@ -444,8 +535,34 @@ async function startServer() {
     user.lastLoginTime = new Date().toISOString();
     localUsersStore.set(key, user);
 
-    // Retrieve ledger
-    const syncData = localSyncStore.get(user.id) || { accounts: [], transactions: [], projects: [] };
+    // Retrieve ledger: check by user.id, username, or key
+    let syncData = localSyncStore.get(user.id) || localSyncStore.get(key);
+
+    // If user's ledger is completely empty, check if demo-user-888 has existing records to inherit
+    if (
+      (!syncData ||
+        ((!syncData.accounts || syncData.accounts.length === 0) &&
+          (!syncData.transactions || syncData.transactions.length === 0))) &&
+      (localSyncStore.has('demo-user-888') || localSyncStore.has('demo'))
+    ) {
+      const demoLedger = localSyncStore.get('demo-user-888') || localSyncStore.get('demo');
+      if (demoLedger && ((demoLedger.accounts && demoLedger.accounts.length > 0) || (demoLedger.transactions && demoLedger.transactions.length > 0))) {
+        syncData = {
+          user,
+          accounts: demoLedger.accounts || [],
+          transactions: demoLedger.transactions || [],
+          projects: demoLedger.projects || [],
+          lastUpdated: new Date().toISOString(),
+        };
+        localSyncStore.set(user.id, syncData);
+        localSyncStore.set(key, syncData);
+      }
+    }
+
+    if (!syncData) {
+      syncData = { user, accounts: [], transactions: [], projects: [] };
+    }
+
     savePersistedStores();
 
     return res.json({
@@ -469,7 +586,7 @@ async function startServer() {
     let targetKey = '';
 
     for (const [k, u] of localUsersStore.entries()) {
-      if (u.id === userId) {
+      if (u.id === userId || k === userId.toLowerCase()) {
         targetUser = u;
         targetKey = k;
         break;
@@ -486,13 +603,24 @@ async function startServer() {
       updatedAt: new Date().toISOString(),
     };
 
+    // Support username changes
+    if (updates.username && updates.username.trim() && updates.username.trim().toLowerCase() !== targetKey) {
+      const newKey = updates.username.trim().toLowerCase();
+      localUsersStore.delete(targetKey);
+      targetKey = newKey;
+      updated.username = updates.username.trim();
+    }
+
     localUsersStore.set(targetKey, updated);
 
     // Also update in sync ledger
-    const syncData = localSyncStore.get(userId);
+    const syncData = localSyncStore.get(userId) || localSyncStore.get(targetKey);
     if (syncData) {
       syncData.user = updated;
       localSyncStore.set(userId, syncData);
+      localSyncStore.set(targetKey, syncData);
+      // Real-time broadcast user update
+      broadcastSyncUpdate(userId, updated.username, syncData);
     }
 
     savePersistedStores();
@@ -503,13 +631,81 @@ async function startServer() {
     });
   });
 
+  // Real-time SSE Stream Endpoint for Millisecond Cross-Device Sync
+  app.get('/api/sync/stream', (req, res) => {
+    const userId = (req.query.userId as string) || '';
+    const username = (req.query.username as string) || '';
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const clientId = 'sse-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    const client: SyncClient = {
+      id: clientId,
+      userId,
+      username,
+      res,
+    };
+
+    activeSyncClients.add(client);
+
+    // Initial connection acknowledgment
+    res.write(
+      `data: ${JSON.stringify({
+        type: 'CONNECTED',
+        clientId,
+        timestamp: new Date().toISOString(),
+      })}\n\n`
+    );
+
+    // 20s heartbeat ping to keep connection alive through proxies
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(`: heartbeat\n\n`);
+      } catch {
+        clearInterval(heartbeat);
+        activeSyncClients.delete(client);
+      }
+    }, 20000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      activeSyncClients.delete(client);
+    });
+  });
+
   // Sync Get
   app.get('/api/sync', (req, res) => {
     const userId = req.query.userId as string;
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
-    const data = localSyncStore.get(userId);
+    const cleanId = userId.trim();
+    let data = localSyncStore.get(cleanId) || localSyncStore.get(cleanId.toLowerCase());
+
+    // Fallback: look up user in users store to find linked ledger
+    if (!data) {
+      for (const [k, u] of localUsersStore.entries()) {
+        if (u.id === cleanId || k === cleanId.toLowerCase()) {
+          data = localSyncStore.get(u.id) || localSyncStore.get(k);
+          break;
+        }
+      }
+    }
+
+    // Fallback: if single-user self-hosted instance and requested user has no data yet,
+    // check demo-user-888 to prevent 0-data issue on newly logged-in devices
+    if ((!data || (!data.accounts?.length && !data.transactions?.length)) && localSyncStore.has('demo-user-888')) {
+      const fallback = localSyncStore.get('demo-user-888');
+      if (fallback && (fallback.accounts?.length || fallback.transactions?.length)) {
+        data = fallback;
+      }
+    }
+
     if (data) {
       return res.json({
         success: true,
@@ -531,12 +727,13 @@ async function startServer() {
 
   // Sync Post
   app.post('/api/sync', (req, res) => {
-    const { userId, user, accounts, transactions, projects } = req.body || {};
+    const { userId, user, accounts, transactions, projects, senderDeviceId } = req.body || {};
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
     const nowIso = new Date().toISOString();
-    const existing = localSyncStore.get(userId) || {};
+    const cleanId = String(userId).trim();
+    const existing = localSyncStore.get(cleanId) || localSyncStore.get(cleanId.toLowerCase()) || {};
     const payload = {
       user: user || existing.user,
       accounts: Array.isArray(accounts) ? accounts : (existing.accounts || []),
@@ -544,14 +741,21 @@ async function startServer() {
       projects: Array.isArray(projects) ? projects : (existing.projects || []),
       lastUpdated: nowIso,
     };
-    localSyncStore.set(userId, payload);
 
+    localSyncStore.set(cleanId, payload);
     if (user && user.username) {
       const uKey = user.username.toLowerCase();
+      localSyncStore.set(uKey, payload);
       localUsersStore.set(uKey, { ...localUsersStore.get(uKey), ...user });
+    }
+    if (payload.user && payload.user.id && payload.user.id !== cleanId) {
+      localSyncStore.set(payload.user.id, payload);
     }
 
     savePersistedStores();
+
+    // Millisecond-level push to all other connected client devices
+    broadcastSyncUpdate(cleanId, user?.username, payload, senderDeviceId);
 
     return res.json({
       success: true,
@@ -936,10 +1140,71 @@ async function startServer() {
 
   // ==========================================
   // Dual-Library Unified Sync & Stats Endpoints
+  // Automatically aligns with official website figures:
+  // CardArt (https://cardart.cc/): dynamically parses "2,589 cards and counting"
+  // Cardentify (https://cards.no2.ac/): queries /api/cards live collection
   // ==========================================
-  app.get('/api/gallery/stats', (req, res) => {
-    const cardartCount = cardartMemoryCards.length;
-    const cardentifyCount = cardentifyMemoryCards.length;
+  let cardartOfficialCount = 2589;
+  let cardentifyOfficialCount = 639;
+  let lastOfficialStatsChecked = 0;
+
+  async function refreshOfficialWebsiteStats(): Promise<{ cardartCount: number; cardentifyCount: number }> {
+    const now = Date.now();
+    if (now - lastOfficialStatsChecked < 3 * 60 * 1000 && cardartOfficialCount > 0 && cardentifyOfficialCount > 0) {
+      return { cardartCount: cardartOfficialCount, cardentifyCount: cardentifyOfficialCount };
+    }
+
+    // 1. Fetch CardArt live official banner count
+    try {
+      const res1 = await fetch('https://cardart.cc/', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (CardArt-Stats-Client)',
+        },
+      });
+      if (res1.ok) {
+        const text1 = await res1.text();
+        const match1 = text1.match(/([0-9,]+)\s+cards\s+and\s+counting/i);
+        if (match1 && match1[1]) {
+          const parsed = parseInt(match1[1].replace(/,/g, ''), 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            cardartOfficialCount = parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[CardArt] Warning fetching official count:', e);
+    }
+
+    // 2. Fetch Cardentify live official count
+    try {
+      const res2 = await fetch('https://cards.no2.ac/api/cards', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (Cardentify-Stats-Client)',
+          'Accept': 'application/json',
+        },
+      });
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (Array.isArray(data2) && data2.length > 0) {
+          cardentifyOfficialCount = data2.length;
+        }
+      }
+    } catch (e) {
+      console.warn('[Cardentify] Warning fetching official count:', e);
+    }
+
+    lastOfficialStatsChecked = now;
+    return { cardartCount: cardartOfficialCount, cardentifyCount: cardentifyOfficialCount };
+  }
+
+  app.get('/api/gallery/stats', async (req, res) => {
+    const officialStats = await refreshOfficialWebsiteStats().catch(() => ({
+      cardartCount: cardartOfficialCount || 2589,
+      cardentifyCount: cardentifyOfficialCount || 639,
+    }));
+
+    const cardartCount = officialStats.cardartCount || 2589;
+    const cardentifyCount = officialStats.cardentifyCount || 639;
     const totalCount = cardartCount + cardentifyCount;
 
     return res.json({
@@ -947,6 +1212,8 @@ async function startServer() {
       cardartCount,
       cardentifyCount,
       totalCount,
+      cardartOfficialCount: officialStats.cardartCount,
+      cardentifyOfficialCount: officialStats.cardentifyCount,
       cardartLastSyncedAt,
       cardentifyLastSyncedAt,
       lastSyncedAt: new Date().toISOString(),
@@ -990,6 +1257,18 @@ async function startServer() {
       performCardentifySync().catch((e) => console.warn('[Cardentify] Initial background sync error:', e.message));
     }
   }, 2000);
+
+  // Automatically synchronize CardArt & Cardentify every 5 minutes (5 * 60 * 1000 ms)
+  setInterval(() => {
+    console.log('[GallerySync] Executing 5-minute periodic auto-sync for CardArt & Cardentify...');
+    Promise.allSettled([
+      performCardArtSync(),
+      performCardentifySync(),
+      refreshOfficialWebsiteStats(),
+    ]).catch((err) => {
+      console.warn('[GallerySync] 5-minute periodic sync error:', err);
+    });
+  }, 5 * 60 * 1000);
 
   // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== 'production') {

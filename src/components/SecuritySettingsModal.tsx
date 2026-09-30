@@ -20,6 +20,7 @@ import { UserProfile } from '../types';
 import { updateCurrentUser, getAccounts, getTransactions, saveAccounts, saveTransactions, resetToDemoData } from '../lib/storage';
 import { getAllCardArtCards } from '../lib/cardArtSync';
 import { getAllCardentifyCards } from '../lib/cardentifyPresets';
+import { fetchDualGalleryStats } from '../lib/gallerySync';
 
 interface SecuritySettingsModalProps {
   currentUser: UserProfile;
@@ -37,6 +38,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   onOpenSyncModal,
 }) => {
   const [displayName, setDisplayName] = useState(currentUser.displayName);
+  const [username, setUsername] = useState(currentUser.username);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPin, setNewPin] = useState(currentUser.pinCode || '123456');
@@ -44,17 +46,25 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const [cardArtCount, setCardArtCount] = useState<number>(() => getAllCardArtCards().length);
-  const [cardentifyCount, setCardentifyCount] = useState<number>(() => getAllCardentifyCards().length);
+  const [cardArtCount, setCardArtCount] = useState<number>(2589);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(639);
 
   useEffect(() => {
     const handleUpdate = () => {
-      setCardArtCount(getAllCardArtCards().length);
-      setCardentifyCount(getAllCardentifyCards().length);
+      fetchDualGalleryStats()
+        .then((stats) => {
+          if (stats.cardartCount) setCardArtCount(stats.cardartCount);
+          if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
+        })
+        .catch(() => {});
     };
+
     window.addEventListener('gallery-updated', handleUpdate);
     window.addEventListener('cardart-updated', handleUpdate);
     window.addEventListener('cardentify-updated', handleUpdate);
+
+    handleUpdate();
+
     return () => {
       window.removeEventListener('gallery-updated', handleUpdate);
       window.removeEventListener('cardart-updated', handleUpdate);
@@ -85,6 +95,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
     }
 
     const updated = updateCurrentUser({
+      username: username.trim() || currentUser.username,
       displayName: displayName.trim() || currentUser.username,
       passwordHash: newPassword ? newPassword : currentUser.passwordHash,
       pinCode: newPin,
@@ -199,17 +210,39 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
         )}
 
         <form onSubmit={handleUpdateSecurity} className="space-y-4 mt-4">
-          {/* User Profile Info */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
-              账本名称 / 昵称
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
-            />
+          {/* User Profile & Account Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center justify-between">
+                <span>登录账号 (手机多端同步账号)</span>
+                <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded font-mono">凭证</span>
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="例如: admin / myname"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white font-mono"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                手机等新设备登录请输入此账号以加载云端数据
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                账本名称 / 昵称
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                账本展示名称（如：家庭主账本 / 我的小金库）
+              </p>
+            </div>
           </div>
 
           {/* PIN and Auto-lock */}
@@ -357,7 +390,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
                   className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium transition-colors"
                 >
                   <Palette className="w-3 h-3" />
-                  <span>CardArt ({cardArtCount}款)</span>
+                  <span>CardArt ({cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '2,589+款'})</span>
                   <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                 </a>
                 <span className="text-slate-300 dark:text-slate-700">·</span>
@@ -368,7 +401,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
                   className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-400 hover:underline font-medium transition-colors"
                 >
                   <Sparkles className="w-3 h-3" />
-                  <span>Cardentify ({cardentifyCount}款)</span>
+                  <span>Cardentify ({cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '639款'})</span>
                   <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                 </a>
               </div>

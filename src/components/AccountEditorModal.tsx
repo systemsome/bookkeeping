@@ -238,12 +238,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     const brandInfo = detectBrandInfo(effectiveName, effectiveBank, effectiveCategory);
     const tierTheme = getTierTheme(newTier, brandInfo);
 
-    setCardPresetId('');
-    setCardImageUrl('');
-    setCardSkin(tierTheme.cardSkin);
-    setCardBgColor(tierTheme.cardBgColor);
-    setCardPattern(tierTheme.cardPattern);
-    setCardTextColor(tierTheme.cardTextColor);
+    if (!cardImageUrl) {
+      setCardPresetId('');
+      setCardSkin(tierTheme.cardSkin);
+      setCardBgColor(tierTheme.cardBgColor);
+      setCardPattern(tierTheme.cardPattern);
+      setCardTextColor(tierTheme.cardTextColor);
+    }
     if (tierTheme.cardNetwork && (!cardNetwork || cardNetwork === 'NONE')) {
       setCardNetwork(tierTheme.cardNetwork);
     }
@@ -457,14 +458,11 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      alert('请输入账户名称');
-      return;
-    }
+    const finalName = name.trim() || bankName.trim() || (ACCOUNT_CATEGORY_CONFIG[category]?.label || '银行卡账户');
 
     const saved: FinancialAccount = {
       id: initialAccount?.id || 'acc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-      name: name.trim(),
+      name: finalName,
       category,
       bankName: bankName.trim() || undefined,
       cardNumberLast4: cardNumberLast4.trim() || undefined,
@@ -1324,11 +1322,40 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           if (file) {
                             const reader = new FileReader();
                             reader.onload = (ev) => {
-                              if (typeof ev.target?.result === 'string') {
-                                setCardImageUrl(ev.target.result);
-                                setAutoGenMsg('📷 已载入本地高清银行卡卡面图像');
+                              const src = ev.target?.result as string;
+                              if (!src) return;
+                              const img = new Image();
+                              img.onload = () => {
+                                const maxWidth = 1024;
+                                const maxHeight = 640;
+                                let { width, height } = img;
+                                if (width > maxWidth || height > maxHeight) {
+                                  const ratio = Math.min(maxWidth / width, maxHeight / height);
+                                  width = Math.round(width * ratio);
+                                  height = Math.round(height * ratio);
+                                }
+                                const canvas = document.createElement('canvas');
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext('2d');
+                                if (ctx) {
+                                  ctx.drawImage(img, 0, 0, width, height);
+                                  try {
+                                    const webp = canvas.toDataURL('image/webp', 0.88);
+                                    setCardImageUrl(webp);
+                                  } catch {
+                                    setCardImageUrl(canvas.toDataURL('image/jpeg', 0.85));
+                                  }
+                                } else {
+                                  setCardImageUrl(src);
+                                }
+                                setAutoGenMsg('📷 已载入并优化本地高清卡面图像');
                                 setTimeout(() => setAutoGenMsg(''), 3500);
-                              }
+                              };
+                              img.onerror = () => {
+                                setCardImageUrl(src);
+                              };
+                              img.src = src;
                             };
                             reader.readAsDataURL(file);
                           }
@@ -1573,8 +1600,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       defaultBankQuery={bankName || name}
       onSelectCard={(card) => {
         setCardImageUrl(card.imageUrl);
+        const presetId = String(card.id).startsWith('card') ? String(card.id) : `cardentify-${card.id}`;
+        setCardPresetId(presetId);
         if (!bankName || bankName === '中国银行' || bankName === '银行账户') {
           setBankName(card.issuerName);
+        }
+        if (!name || name === '借记卡' || name === '信用卡' || name === '银行账户' || name === '账户') {
+          setName(card.name);
         }
         let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
         const brandUp = (card.brand || '').toUpperCase();
@@ -1584,7 +1616,8 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
         else if (brandUp.includes('JCB')) net = 'JCB';
         setCardNetwork(net);
         setCardTier(card.name.includes('白金') ? '白金卡' : card.name.includes('金卡') ? '金卡' : '标准卡');
-        setAutoGenMsg(`🍎 已从 Cardentify 套用原版卡面: 「${card.name}」`);
+        setAutoGenMsg(`🍎 已从卡面艺廊套用原版卡面: 「${card.name}」`);
+        setIsCardentifyGalleryOpen(false);
         setTimeout(() => setAutoGenMsg(''), 4000);
       }}
     />

@@ -47,7 +47,7 @@ import { fetchLiveGoldRate, getCachedGoldRate, GoldMarketRate } from '../lib/gol
 interface AccountsListProps {
   accounts: FinancialAccount[];
   privacyMode: boolean;
-  onAddAccount: (category?: AccountCategory) => void;
+  onAddAccount: (category?: AccountCategory, prefillAccount?: Partial<FinancialAccount>) => void;
   onEditAccount: (account: FinancialAccount) => void;
   onDeleteAccount: (accountId: string) => void;
   onReorderAccounts?: (newAccounts: FinancialAccount[]) => void;
@@ -1659,8 +1659,25 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           defaultBankQuery=""
           onSelectCard={(card) => {
             const isCredit = card.type === 'Credit';
-            onAddAccount(isCredit ? 'CREDIT_CARD' : 'DEBIT_CARD');
-            showToast(`🎨 已选择「${card.name}」，请补充账户信息保存`);
+            let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+            const brandUp = (card.brand || '').toUpperCase();
+            if (brandUp.includes('VISA')) net = 'VISA';
+            else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
+            else if (brandUp.includes('AMEX')) net = 'AMEX';
+            else if (brandUp.includes('JCB')) net = 'JCB';
+            const presetId = String(card.id).startsWith('card') ? String(card.id) : `cardentify-${card.id}`;
+
+            onAddAccount(isCredit ? 'CREDIT_CARD' : 'DEBIT_CARD', {
+              name: card.name,
+              bankName: card.issuerName,
+              cardImageUrl: card.imageUrl,
+              cardPresetId: presetId,
+              cardNetwork: net,
+              cardTier: card.name.includes('白金') ? '白金卡' : card.name.includes('金卡') ? '金卡' : '标准卡',
+              category: isCredit ? 'CREDIT_CARD' : 'DEBIT_CARD',
+              color: card.dominantColor || '#2563eb',
+            } as any);
+            showToast(`🎨 已选择「${card.name}」卡面，请补充额度与余额后保存`);
             setIsGalleryOpenGeneral(false);
           }}
         />

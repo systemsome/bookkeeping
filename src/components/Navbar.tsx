@@ -76,26 +76,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
 
-  // Auto-updating card counts for CardArt & Cardentify
-  const [cardArtCount, setCardArtCount] = useState<number>(() => getAllCardArtCards().length);
-  const [cardentifyCount, setCardentifyCount] = useState<number>(() => getAllCardentifyCards().length);
+  // Auto-updating card counts for CardArt (https://cardart.cc/) & Cardentify (https://cards.no2.ac/)
+  const [cardArtCount, setCardArtCount] = useState<number>(2589);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(639);
 
   useEffect(() => {
     const handleCountUpdate = () => {
-      setCardArtCount(getAllCardArtCards().length);
-      setCardentifyCount(getAllCardentifyCards().length);
+      fetchDualGalleryStats()
+        .then((stats) => {
+          if (stats.cardartCount) setCardArtCount(stats.cardartCount);
+          if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
+        })
+        .catch(() => {});
     };
 
     window.addEventListener('gallery-updated', handleCountUpdate);
     window.addEventListener('cardart-updated', handleCountUpdate);
     window.addEventListener('cardentify-updated', handleCountUpdate);
 
-    fetchDualGalleryStats()
-      .then((stats) => {
-        if (stats.cardartCount) setCardArtCount(stats.cardartCount);
-        if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
-      })
-      .catch(() => {});
+    // Initial fetch from live server stats
+    handleCountUpdate();
 
     return () => {
       window.removeEventListener('gallery-updated', handleCountUpdate);
@@ -107,8 +107,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Refresh counts when user opens user menu
   useEffect(() => {
     if (showUserMenu) {
-      setCardArtCount(getAllCardArtCards().length);
-      setCardentifyCount(getAllCardentifyCards().length);
+      fetchDualGalleryStats()
+        .then((stats) => {
+          if (stats.cardartCount) setCardArtCount(stats.cardartCount);
+          if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
+        })
+        .catch(() => {});
     }
   }, [showUserMenu]);
 
@@ -222,9 +226,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               disabled={syncStatus === 'syncing'}
               title={
                 syncStatus === 'syncing'
-                  ? '云端数据同步中，正在传输...'
+                  ? '⚡ 正在毫秒级推送同步最新数据...'
                   : syncStatus === 'synced'
-                  ? `云端已同步${lastSyncTime ? ` (${lastSyncTime})` : ''} · 点击立即手动触发全量同步`
+                  ? `⚡ 毫秒级多端实时同步中${lastSyncTime ? ` (${lastSyncTime})` : ''} · 随时修改随时更新`
                   : syncStatus === 'error'
                   ? '云端同步失败，连接异常 · 点击立即重新全量同步'
                   : '当前处于离线模式（数据保存在本地，点击尝试重连云端）'
@@ -491,7 +495,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <span>卡面生态特别鸣谢</span>
                         </span>
                         <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-full border border-emerald-200/60 dark:border-emerald-800/60">
-                          共 {cardArtCount + cardentifyCount} 款
+                          共 {(cardArtCount + cardentifyCount).toLocaleString()} 款
                         </span>
                       </div>
                     </div>
@@ -513,7 +517,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <p className="font-semibold leading-tight flex items-center gap-1.5">
                             <span className="truncate">CardArt</span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-medium shrink-0">
-                              {cardArtCount > 0 ? `${cardArtCount}款` : '840+款'}
+                              {cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '2,589+款'}
                             </span>
                           </p>
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">cardart.cc 创意卡面社区</p>
@@ -539,7 +543,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <p className="font-semibold leading-tight flex items-center gap-1.5">
                             <span className="truncate">Cardentify</span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-medium shrink-0">
-                              {cardentifyCount > 0 ? `${cardentifyCount}款` : '632+款'}
+                              {cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '639款'}
                             </span>
                           </p>
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">cards.no2.ac 高清卡面库</p>

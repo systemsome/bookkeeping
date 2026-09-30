@@ -25,6 +25,7 @@ import {
   saveProjects,
   triggerAutoServerSync,
   executeFullCloudSync,
+  initRealtimeSyncStream,
 } from './lib/storage';
 import {
   UserProfile,
@@ -55,6 +56,7 @@ import { SecuritySettingsModal } from './components/SecuritySettingsModal';
 import { SyncBackupModal } from './components/SyncBackupModal';
 import { mergeAccounts, mergeTransactions, mergeProjects } from './lib/backup';
 import { updateAccountsWithGoldPrice } from './lib/goldRates';
+import { syncDualLibrariesOnline, fetchDualGalleryStats } from './lib/gallerySync';
 import {
   ThemeMode,
   getStoredThemeMode,
@@ -101,6 +103,21 @@ export default function App() {
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'projects' | 'analytics'>('overview');
+
+  // CardArt & Cardentify 卡面艺廊 与 卡面生态特别鸣谢 每5分钟自动周期同步一次
+  useEffect(() => {
+    // 初始启动时触发一次静默同步
+    syncDualLibrariesOnline(false).catch(() => {});
+    fetchDualGalleryStats().catch(() => {});
+
+    // 每5分钟自动周期刷新一次
+    const intervalId = setInterval(() => {
+      syncDualLibrariesOnline(false).catch(() => {});
+      fetchDualGalleryStats().catch(() => {});
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   // 当切换功能 Tab 时，自动滚动回页面顶部
   useEffect(() => {
@@ -292,6 +309,31 @@ export default function App() {
     if (currentUser) {
       loadUserData(currentUser.id);
       setPrivacyMode(currentUser.privacyMode || false);
+
+      // 建立毫秒级跨设备实时双向长连接，手机/PC随时随地修改，立即自动同步并渲染
+      const unsubscribe = initRealtimeSyncStream(
+        currentUser.id,
+        currentUser.username,
+        (remoteDelta) => {
+          setAccounts(remoteDelta.accounts);
+          setTransactions(remoteDelta.transactions);
+          setProjects(remoteDelta.projects);
+          if (remoteDelta.user) {
+            setCurrentUser(remoteDelta.user);
+          }
+          setSyncStatus('synced');
+          const timeStr = new Date().toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+          setLastSyncTime(timeStr);
+        }
+      );
+
+      return () => {
+        unsubscribe();
+      };
     }
   }, [currentUser, loadUserData]);
 
@@ -413,8 +455,12 @@ export default function App() {
     setIsRepayModalOpen(true);
   };
 
-  const handleOpenAddAccount = (category: AccountCategory = 'DEBIT_CARD') => {
-    setEditingAccount(null);
+  const handleOpenAddAccount = (category: AccountCategory = 'DEBIT_CARD', prefillAccount?: Partial<FinancialAccount>) => {
+    if (prefillAccount) {
+      setEditingAccount(prefillAccount as FinancialAccount);
+    } else {
+      setEditingAccount(null);
+    }
     setDefaultAccCategory(category);
     setIsAccEditorOpen(true);
   };
