@@ -104,19 +104,35 @@ export default function App() {
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'projects' | 'analytics'>('overview');
 
-  // CardArt & Cardentify 卡面艺廊 与 卡面生态特别鸣谢 每5分钟自动周期同步一次
+  // CardArt & Cardentify 卡面艺廊 与 卡面生态特别鸣谢 分别每5分钟自动周期与官方网站同步
   useEffect(() => {
+    let lastSyncTime = Date.now();
+
     // 初始启动时触发一次静默同步
     syncDualLibrariesOnline(false).catch(() => {});
     fetchDualGalleryStats().catch(() => {});
 
     // 每5分钟自动周期刷新一次
     const intervalId = setInterval(() => {
+      lastSyncTime = Date.now();
       syncDualLibrariesOnline(false).catch(() => {});
       fetchDualGalleryStats().catch(() => {});
     }, 5 * 60 * 1000);
 
-    return () => clearInterval(intervalId);
+    // 页面切回前台时，若距离上次同步已超过5分钟则主动同步最新卡面数据
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastSyncTime >= 5 * 60 * 1000) {
+        lastSyncTime = Date.now();
+        syncDualLibrariesOnline(false).catch(() => {});
+        fetchDualGalleryStats().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // 当切换功能 Tab 时，自动滚动回页面顶部

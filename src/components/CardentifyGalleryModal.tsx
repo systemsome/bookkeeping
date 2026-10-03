@@ -33,7 +33,7 @@ import {
   syncWithCardArtOnline,
   getCardArtSyncMeta,
 } from '../lib/cardArtSync';
-import { syncDualLibrariesOnline } from '../lib/gallerySync';
+import { syncDualLibrariesOnline, fetchDualGalleryStats } from '../lib/gallerySync';
 
 export interface UnifiedGalleryCard {
   id: string | number;
@@ -46,6 +46,7 @@ export interface UnifiedGalleryCard {
   brand: string;
   type: string;
   country: string;
+  cardTier?: string;
   source: 'cardart' | 'cardentify';
   sourceUrl: string;
   dominantColor?: string;
@@ -64,6 +65,8 @@ interface CardentifyGalleryModalProps {
   onSelectCard: (card: UnifiedGalleryCard | CardentifyCard) => void;
   currentImageUrl?: string;
   defaultBankQuery?: string;
+  defaultTier?: string;
+  defaultNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' | 'ALL';
 }
 
 type SourceFilter = 'ALL' | 'CARDART' | 'CARDENTIFY';
@@ -84,12 +87,19 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
   onSelectCard,
   currentImageUrl,
   defaultBankQuery = '',
+  defaultTier = '',
+  defaultNetwork = 'ALL',
 }) => {
-  const [searchTerm, setSearchTerm] = useState(defaultBankQuery);
+  const [searchTerm, setSearchTerm] = useState(() => {
+    return defaultBankQuery ? defaultBankQuery.replace(/信用卡|借记卡|账户|卡面/g, '').trim() : '';
+  });
   const [activeSource, setActiveSource] = useState<SourceFilter>('ALL');
   const [selectedStyle, setSelectedStyle] = useState<StyleFilter>('ALL');
+  const [selectedTierFilter, setSelectedTierFilter] = useState<string>('ALL');
   const [selectedCountry, setSelectedCountry] = useState<string>('ALL');
-  const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
+  const [selectedBrand, setSelectedBrand] = useState<string>(
+    defaultNetwork && defaultNetwork !== 'NONE' && defaultNetwork !== 'ALL' ? defaultNetwork : 'ALL'
+  );
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('POPULAR');
@@ -101,6 +111,15 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
   const [syncMeta, setSyncMeta] = useState(getCardArtSyncMeta());
   const [cardArtList, setCardArtList] = useState<CardArtItem[]>(() => getAllCardArtCards());
   const [cardentifyList, setCardentifyList] = useState<CardentifyCard[]>(() => getAllCardentifyCards());
+  const [galleryStats, setGalleryStats] = useState<{
+    totalCount: number;
+    cardartCount: number;
+    cardentifyCount: number;
+  }>({
+    totalCount: 5069,
+    cardartCount: 4414,
+    cardentifyCount: 655,
+  });
 
   // Proactive auto-sync whenever the gallery modal is opened
   useEffect(() => {
@@ -113,12 +132,29 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
           setCardArtList(getAllCardArtCards());
           setCardentifyList(getAllCardentifyCards());
           setSyncMeta(getCardArtSyncMeta());
+          setGalleryStats({
+            totalCount: res.totalCount,
+            cardartCount: res.cardArtCount,
+            cardentifyCount: res.cardentifyCount,
+          });
           if (res.newCardsCount > 0) {
             setSyncToast(res.message);
             setTimeout(() => {
               if (isMounted) setSyncToast(null);
             }, 3500);
           }
+        }
+      })
+      .catch(() => {});
+
+    fetchDualGalleryStats()
+      .then((stats) => {
+        if (isMounted) {
+          setGalleryStats({
+            totalCount: stats.totalCount,
+            cardartCount: stats.cardartCount,
+            cardentifyCount: stats.cardentifyCount,
+          });
         }
       })
       .catch(() => {});
@@ -130,14 +166,43 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
 
   // Listen for background updates from custom window events
   useEffect(() => {
-    const handleUpdate = () => {
+    const handleUpdate = (e?: any) => {
       setCardArtList(getAllCardArtCards());
       setCardentifyList(getAllCardentifyCards());
       setSyncMeta(getCardArtSyncMeta());
+
+      if (e?.detail) {
+        setGalleryStats({
+          totalCount: e.detail.total || 5069,
+          cardartCount: e.detail.cardArtCount || 4414,
+          cardentifyCount: e.detail.cardentifyCount || 655,
+        });
+      } else {
+        fetchDualGalleryStats()
+          .then((stats) => {
+            setGalleryStats({
+              totalCount: stats.totalCount,
+              cardartCount: stats.cardartCount,
+              cardentifyCount: stats.cardentifyCount,
+            });
+          })
+          .catch(() => {});
+      }
     };
     window.addEventListener('gallery-updated', handleUpdate);
     window.addEventListener('cardart-updated', handleUpdate);
     window.addEventListener('cardentify-updated', handleUpdate);
+
+    fetchDualGalleryStats()
+      .then((stats) => {
+        setGalleryStats({
+          totalCount: stats.totalCount,
+          cardartCount: stats.cardartCount,
+          cardentifyCount: stats.cardentifyCount,
+        });
+      })
+      .catch(() => {});
+
     return () => {
       window.removeEventListener('gallery-updated', handleUpdate);
       window.removeEventListener('cardart-updated', handleUpdate);
@@ -145,12 +210,31 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     };
   }, []);
 
-  // Synchronize initial default bank query
+  // Synchronize initial default bank query, card tier & network
   useEffect(() => {
-    if (defaultBankQuery && !searchTerm) {
-      setSearchTerm(defaultBankQuery);
+    if (defaultBankQuery && isOpen) {
+      const sanitized = defaultBankQuery.replace(/信用卡|借记卡|账户|卡面/g, '').trim();
+      setSearchTerm(sanitized || defaultBankQuery);
     }
-  }, [defaultBankQuery]);
+  }, [defaultBankQuery, isOpen]);
+
+  useEffect(() => {
+    if (defaultNetwork && defaultNetwork !== 'NONE' && defaultNetwork !== 'ALL' && isOpen) {
+      setSelectedBrand(defaultNetwork);
+    }
+  }, [defaultNetwork, isOpen]);
+
+  useEffect(() => {
+    if (defaultTier && isOpen) {
+      const t = defaultTier.toLowerCase();
+      if (t.includes('白金')) setSelectedTierFilter('PLATINUM');
+      else if (t.includes('黑金') || t.includes('百夫长') || t.includes('无限') || t.includes('世界之极')) setSelectedTierFilter('BLACK_INFINITE');
+      else if (t.includes('御玺') || t.includes('世界')) setSelectedTierFilter('SIGNATURE_WORLD');
+      else if (t.includes('钻石') || t.includes('私行') || t.includes('财富')) setSelectedTierFilter('DIAMOND_VIP');
+      else if (t.includes('金卡') || t.includes('理财金')) setSelectedTierFilter('GOLD');
+      else if (t.includes('普卡') || t.includes('标准')) setSelectedTierFilter('STANDARD');
+    }
+  }, [defaultTier, isOpen]);
 
   // Escape key to close
   useEffect(() => {
@@ -173,10 +257,15 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       setCardArtList(getAllCardArtCards());
       setCardentifyList(getAllCardentifyCards());
       setSyncMeta(getCardArtSyncMeta());
+      setGalleryStats({
+        totalCount: res.totalCount,
+        cardartCount: res.cardArtCount,
+        cardentifyCount: res.cardentifyCount,
+      });
       setSyncToast(res.message || '✨ 同步完成！双库卡面已更新至最新');
       setTimeout(() => setSyncToast(null), 4000);
     } catch (e: any) {
-      setSyncToast(`同步完成，当前双库共计 ${cardArtList.length + cardentifyList.length} 款卡面`);
+      setSyncToast(`同步完成，当前双库共计 ${galleryStats.totalCount} 款卡面`);
       setTimeout(() => setSyncToast(null), 3500);
     } finally {
       setIsSyncing(false);
@@ -366,6 +455,54 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       });
     }
 
+    // 3.5. Card Tier filter (普卡、金卡、白金、御玺/世界、黑金/无限/世界之极、钻石/私行)
+    if (selectedTierFilter !== 'ALL') {
+      list = list.filter((card) => {
+        const full = (card.name + ' ' + (card.cardTier || '') + ' ' + (card.tags?.join(' ') || '')).toLowerCase();
+        switch (selectedTierFilter) {
+          case 'PLATINUM':
+            return full.includes('白金') || full.includes('platinum');
+          case 'BLACK_INFINITE':
+            return (
+              full.includes('黑金') ||
+              full.includes('百夫长') ||
+              full.includes('无限') ||
+              full.includes('世界之极') ||
+              full.includes('centurion') ||
+              full.includes('infinite') ||
+              full.includes('world elite') ||
+              full.includes('black')
+            );
+          case 'SIGNATURE_WORLD':
+            return full.includes('御玺') || full.includes('世界') || full.includes('signature') || full.includes('world');
+          case 'DIAMOND_VIP':
+            return (
+              full.includes('钻石') ||
+              full.includes('diamond') ||
+              full.includes('私行') ||
+              full.includes('私人银行') ||
+              full.includes('财富') ||
+              full.includes('金葵花') ||
+              full.includes('理财金') ||
+              full.includes('沃德')
+            );
+          case 'GOLD':
+            return (full.includes('金卡') || full.includes('gold')) && !full.includes('白金');
+          case 'STANDARD':
+            return (
+              full.includes('普卡') ||
+              full.includes('标准') ||
+              full.includes('classic') ||
+              full.includes('standard') ||
+              full.includes('young') ||
+              full.includes('灵通')
+            );
+          default:
+            return true;
+        }
+      });
+    }
+
     // 4. Country filter
     if (selectedCountry !== 'ALL') {
       list = list.filter((card) => card.country === selectedCountry);
@@ -375,12 +512,13 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     if (selectedBrand !== 'ALL') {
       list = list.filter((card) => {
         const brandUp = (card.brand || '').toUpperCase();
-        if (selectedBrand === 'UNIONPAY') return brandUp.includes('UNIONPAY') || brandUp.includes('银联');
-        if (selectedBrand === 'VISA') return brandUp.includes('VISA');
-        if (selectedBrand === 'MASTERCARD') return brandUp.includes('MASTER');
-        if (selectedBrand === 'AMEX') return brandUp.includes('AMEX') || brandUp.includes('AMERICAN');
-        if (selectedBrand === 'JCB') return brandUp.includes('JCB');
-        if (selectedBrand === 'TRANSIT') return brandUp.includes('TRANSIT') || card.name.includes('八达通');
+        const nameUp = card.name.toUpperCase();
+        if (selectedBrand === 'UNIONPAY') return brandUp.includes('UNIONPAY') || brandUp.includes('银联') || nameUp.includes('银联');
+        if (selectedBrand === 'VISA') return brandUp.includes('VISA') || nameUp.includes('VISA') || nameUp.includes('维萨');
+        if (selectedBrand === 'MASTERCARD') return brandUp.includes('MASTER') || nameUp.includes('MASTER') || nameUp.includes('万事达');
+        if (selectedBrand === 'AMEX') return brandUp.includes('AMEX') || brandUp.includes('AMERICAN') || nameUp.includes('运通') || nameUp.includes('百夫长');
+        if (selectedBrand === 'JCB') return brandUp.includes('JCB') || nameUp.includes('JCB');
+        if (selectedBrand === 'TRANSIT') return brandUp.includes('TRANSIT') || card.name.includes('八达通') || nameUp.includes('SUICA');
         return true;
       });
     }
@@ -474,7 +612,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                 <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-1.5">
                   <span>CardArt & Cardentify 卡面艺廊</span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
-                    双库融合 · {allUnifiedCards.length.toLocaleString()} 款
+                    双库融合 · {galleryStats.totalCount.toLocaleString()} 款
                   </span>
                 </h2>
 
@@ -487,7 +625,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
 
               <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-3 flex-wrap">
                 <span className="font-mono">
-                  CardArt {cardArtList.length.toLocaleString()} 款原创 · Cardentify {unifiedCardentifyList.length.toLocaleString()} 款官方
+                  CardArt {galleryStats.cardartCount.toLocaleString()} 款原创 · Cardentify {galleryStats.cardentifyCount.toLocaleString()} 款官方
                 </span>
                 <span className="text-slate-300 dark:text-slate-700">|</span>
                 <a
@@ -558,7 +696,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>全部卡面</span>
-                <span className="text-[10px] font-mono opacity-80">({allUnifiedCards.length})</span>
+                <span className="text-[10px] font-mono opacity-80">({galleryStats.totalCount.toLocaleString()})</span>
               </button>
 
               <button
@@ -572,7 +710,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
               >
                 <span>🎨</span>
                 <span>CardArt 原创</span>
-                <span className="text-[10px] font-mono opacity-80">({unifiedCardArtList.length})</span>
+                <span className="text-[10px] font-mono opacity-80">({galleryStats.cardartCount.toLocaleString()})</span>
               </button>
 
               <button
@@ -585,8 +723,8 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                 }`}
               >
                 <span>🍎</span>
-                <span>官方银行卡面</span>
-                <span className="text-[10px] font-mono opacity-80">({unifiedCardentifyList.length})</span>
+                <span>Cardentify 官方原版</span>
+                <span className="text-[10px] font-mono opacity-80">({galleryStats.cardentifyCount.toLocaleString()})</span>
               </button>
             </div>
 
@@ -637,7 +775,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                 <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
                   {filteredCards.length}
                 </strong>{' '}
-                张匹配卡面
+                款匹配卡面 (双库官方总计 {galleryStats.totalCount.toLocaleString()} 款)
               </span>
               {(searchTerm ||
                 activeSource !== 'ALL' ||
@@ -656,6 +794,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                     setSelectedBrand('ALL');
                     setSelectedType('ALL');
                     setSelectedBankFilter('ALL');
+                    setSelectedTierFilter('ALL');
                   }}
                   className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline ml-1 font-medium"
                 >
@@ -692,6 +831,36 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                 }`}
               >
                 {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Card Tier Chips · 联动卡片等级筛选 */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 modal-custom-scrollbar pt-0.5">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0 flex items-center gap-1 mr-1">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              <span>卡片等级:</span>
+            </span>
+            {[
+              { id: 'ALL', label: '全部等级' },
+              { id: 'STANDARD', label: '普卡 (Classic)' },
+              { id: 'GOLD', label: '金卡 (Gold)' },
+              { id: 'PLATINUM', label: '白金卡 (Platinum)' },
+              { id: 'SIGNATURE_WORLD', label: '御玺 / 世界卡' },
+              { id: 'BLACK_INFINITE', label: '黑金 / 无限 / 世界之极' },
+              { id: 'DIAMOND_VIP', label: '钻石 / 私行卡' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSelectedTierFilter(t.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+                  selectedTierFilter === t.id
+                    ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-2xs font-bold'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                {t.label}
               </button>
             ))}
           </div>

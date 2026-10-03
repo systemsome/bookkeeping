@@ -408,6 +408,20 @@
     "discontinued": false
   },
   {
+    "id": 660,
+    "name": "VISA World Talk 主题卡奥运纪念版",
+    "bins": [
+      "478060"
+    ],
+    "brand": "VISA",
+    "type": "Credit",
+    "country": "CN",
+    "issuerName": "浦发银行",
+    "issuerEnglish": "Shanghai Pudong Development Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/5244a56ae638c9ec370126c536cd3f08839b7b277a01b4194e74cbaea60b6d6a.png",
+    "discontinued": false
+  },
+  {
     "id": 158,
     "name": "Young卡(青年版)炫酷黑",
     "bins": [
@@ -576,6 +590,34 @@
     "discontinued": false
   },
   {
+    "id": 657,
+    "name": "中青旅出国+联名卡",
+    "bins": [
+      "622663"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中国光大银行",
+    "issuerEnglish": "China Everbright Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/d12b5fcbb70ff81718106c5aeee65c1b5a4ee9e29f225ed5d6b041757e84900a.png",
+    "discontinued": false
+  },
+  {
+    "id": 655,
+    "name": "乡村振兴卡",
+    "bins": [
+      "621336"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中国农业银行",
+    "issuerEnglish": "Agricultural Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/fc47123f9e6ac1b050f58924f946316cfcf627e9c03ce25d3f03533bc468a31c.png",
+    "discontinued": false
+  },
+  {
     "id": 289,
     "name": "京东闪付",
     "bins": [],
@@ -585,6 +627,20 @@
     "issuerName": "京东金融",
     "issuerEnglish": "JD Finance",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/6972c30eadb25d9f44efaba70b6353792d20022872ffe020d7cb076474ae55cd.jpg",
+    "discontinued": false
+  },
+  {
+    "id": 658,
+    "name": "凤凰卡",
+    "bins": [
+      "621067"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "北京农商银行",
+    "issuerEnglish": "Beijing Rural Commercial Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/a194802ee2d649443c80c70957a1f10b29577f91b8de1793622472ceaffb3933.png",
     "discontinued": false
   },
   {
@@ -650,6 +706,32 @@
     "discontinued": false
   },
   {
+    "id": 656,
+    "name": "哆啦A梦粉丝卡神奇现身普卡（万事达卡网络）",
+    "bins": [
+      "518710"
+    ],
+    "brand": "Mastercard",
+    "type": "Credit",
+    "country": "CN",
+    "issuerName": "招商银行",
+    "issuerEnglish": "China Merchants Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/4b5526908c8e1e6edd3befcf8cfbedaf22358a23343aaf5987f889d93ebcd08e.png",
+    "discontinued": false
+  },
+  {
+    "id": 659,
+    "name": "圆鼎卡（红）",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "江苏农村商业联合银行",
+    "issuerEnglish": "Jiangsu Rural Commercial United Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/d535a70d4d10c85bac558f6c39c330e8485cda614999aa2e9b4a482a84894c14.png",
+    "discontinued": false
+  },
+  {
     "id": 640,
     "name": "大鹏新市民卡",
     "bins": [],
@@ -699,6 +781,18 @@
     "issuerName": "中国工商银行",
     "issuerEnglish": "Industrial and Commercial Bank of China",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/61a36ec6f71b9855124adf63408ca1627e269fd70cd34b74cf418d2f8be260d8.png",
+    "discontinued": false
+  },
+  {
+    "id": 649,
+    "name": "宇宙星座卡简约白金卡·天秤座",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Credit",
+    "country": "CN",
+    "issuerName": "中国工商银行",
+    "issuerEnglish": "Industrial and Commercial Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/2768d63f64f6f7854f6aa5852468aa2ea68dc99cb47b0d6f8433ebfc04f08e15.png",
     "discontinued": false
   },
   {
@@ -891,6 +985,20 @@
     "discontinued": false
   },
   {
+    "id": 663,
+    "name": "新市民城市卡",
+    "bins": [
+      "620522"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "上海银行",
+    "issuerEnglish": "Bank of Shanghai",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/8a66fc96a0d5af02e0155ba2cba68d4b606c979acaf61c47828e46ce49f77da0.png",
+    "discontinued": false
+  },
+  {
     "id": 643,
     "name": "普卡",
     "bins": [],
@@ -981,6 +1089,18 @@
     "discontinued": false
   },
   {
+    "id": 648,
+    "name": "珠江平安普卡",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "广东省农村信用社联合社",
+    "issuerEnglish": "Guangdong Rural Credit Union",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/1aed0023785101ba49de3a820bb1307695f42492410e0fc980b189df640594eb.png",
+    "discontinued": false
+  },
+  {
     "id": 562,
     "name": "福鑫卡",
     "bins": [],
@@ -1005,6 +1125,42 @@
     "discontinued": false
   },
   {
+    "id": 650,
+    "name": "绿卡通",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中国邮政储蓄银行",
+    "issuerEnglish": "Postal Savings Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/c5ae0d57719e8fbf3e2d94c985832ca0fc7b66f4378bbc1e1e134d2d9c38bb85.png",
+    "discontinued": false
+  },
+  {
+    "id": 651,
+    "name": "绿卡通副卡",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中国邮政储蓄银行",
+    "issuerEnglish": "Postal Savings Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/d492f673f7608f9ccb282a269b2a036e690a4f2855bb081dd56ae24adbc15e26.png",
+    "discontinued": false
+  },
+  {
+    "id": 652,
+    "name": "绿卡通（美团联名卡）橙色版",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中国邮政储蓄银行",
+    "issuerEnglish": "Postal Savings Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/56eb18ddb32ad390b6a578eb0f7604a4b926b841f71158cd60e39bfe98526689.png",
+    "discontinued": false
+  },
+  {
     "id": 561,
     "name": "绿卡通（镇江市民卡）",
     "bins": [],
@@ -1014,6 +1170,18 @@
     "issuerName": "中国邮政储蓄银行",
     "issuerEnglish": "Postal Savings Bank of China",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/83142c16997e49033d08c633ded2ac9670a55a3ba66ca5dc2556648bc2602151.png",
+    "discontinued": false
+  },
+  {
+    "id": 653,
+    "name": "绿卡通（马年生肖卡）",
+    "bins": [],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中国邮政储蓄银行",
+    "issuerEnglish": "Postal Savings Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/0f1e1bac330e81c2059ecfef23b3987e6efd8b6091928fa3419e5e49e224312f.jpg",
     "discontinued": false
   },
   {
@@ -1111,6 +1279,20 @@
     "discontinued": false
   },
   {
+    "id": 661,
+    "name": "镇江博物馆联名借记卡",
+    "bins": [
+      "622876"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "江苏银行",
+    "issuerEnglish": "Bank of Jiangsu",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/3ee4e22f68d50ae5465608a67f5bca35f3353c55dcbde7c66028c2cf8e6fbfc8.png",
+    "discontinued": false
+  },
+  {
     "id": 19,
     "name": "长城借记卡",
     "bins": [],
@@ -1198,6 +1380,20 @@
     "issuerName": "江苏长江商业银行",
     "issuerEnglish": "Jiangsu Changjiang Commercial Bank",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/c2416954a7a8598789a0d50ba3a67d1bb1cbf5ad051768b1228183340d214afd.png",
+    "discontinued": false
+  },
+  {
+    "id": 662,
+    "name": "麦当劳联名借记卡",
+    "bins": [
+      "621773"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "中信银行",
+    "issuerEnglish": "China Citic Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/11e4a211cfbcb10010b40250207997b4e5d544ed12605169a289604bed3f6498.png",
     "discontinued": false
   },
   {
@@ -3299,6 +3495,20 @@
     "discontinued": false
   },
   {
+    "id": 667,
+    "name": "志愿者证借记卡",
+    "bins": [
+      "622355"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "广西北部湾银行",
+    "issuerEnglish": "Guangxi Beibu Gulf Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/c6895d130dafb33299c780c25f3fcdb152acf273900b25a209a6059e28cb1b4a.png",
+    "discontinued": true
+  },
+  {
     "id": 326,
     "name": "悦享白金卡",
     "bins": [],
@@ -3609,6 +3819,20 @@
     "discontinued": true
   },
   {
+    "id": 669,
+    "name": "星座简约白金卡 · 巨蟹座",
+    "bins": [
+      "625250"
+    ],
+    "brand": "UnionPay",
+    "type": "Credit",
+    "country": "CN",
+    "issuerName": "中国工商银行",
+    "issuerEnglish": "Industrial and Commercial Bank of China",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/a3e4e423818a25c7129e2cba98c395336500616c828b83d787bfc0042f7ab5ca.png",
+    "discontinued": false
+  },
+  {
     "id": 191,
     "name": "普通IC卡",
     "bins": [],
@@ -3661,6 +3885,20 @@
     "issuerName": "中国邮政储蓄银行",
     "issuerEnglish": "Postal Savings Bank of China",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/085b382c4836db02bf5fdb785ad84ca6ff45486886a0c9d4dae658fec2fd9076.jpg",
+    "discontinued": false
+  },
+  {
+    "id": 666,
+    "name": "桂盛卡",
+    "bins": [
+      "623133"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "广西农商联合银行",
+    "issuerEnglish": "Guangxi Rural Commercial United Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/50965cf7ab27614db6d49cfc00c7b67c3a43021a4a08312cf4720e1f3793e057.png",
     "discontinued": false
   },
   {
@@ -3905,6 +4143,20 @@
     "issuerName": "平安银行",
     "issuerEnglish": "Ping An Bank",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/9cb00179b8a509a1cea8361fc585b0cdcc30c8327c3e3762dd1d59b9ae50c2df.png",
+    "discontinued": false
+  },
+  {
+    "id": 668,
+    "name": "白条闪付",
+    "bins": [
+      "623185"
+    ],
+    "brand": "UnionPay",
+    "type": "Debit",
+    "country": "CN",
+    "issuerName": "上海银行",
+    "issuerEnglish": "Bank of Shanghai",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/c9fda124c05b9f39dce403037e3c2b17c47daeee80b95e8015f1cf8979f22c1a.png",
     "discontinued": false
   },
   {
@@ -4530,6 +4782,20 @@
     "discontinued": false
   },
   {
+    "id": 670,
+    "name": "N26 Mastercard (Virtual)",
+    "bins": [
+      "535585"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "DE",
+    "issuerName": "N26",
+    "issuerEnglish": "N26",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/1e58611d983096ec2c984264f1ea4e8a586619914c686e165af2de6670420f33.png",
+    "discontinued": false
+  },
+  {
     "id": 434,
     "name": "Wise Card EEA (Virtual)",
     "bins": [
@@ -4901,20 +5167,6 @@
     "issuerName": "Airwallex (Hong Kong)",
     "issuerEnglish": "Airwallex (Hong Kong)",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/86732ae757df4c1c52d8d7a7576f1e40eabf50a38af82d622fe772fea55bd17f.png",
-    "discontinued": false
-  },
-  {
-    "id": 576,
-    "name": "AlipayHK",
-    "bins": [
-      "53536723"
-    ],
-    "brand": "Mastercard",
-    "type": "Debit",
-    "country": "HK",
-    "issuerName": "AlipayHK",
-    "issuerEnglish": "AlipayHK",
-    "imageUrl": "https://r2-cardentify.cdn.no2.ac/809bacedff73268b941ce67f8a9de1a6ecc46ffd457ded5207745c69ae397b69.png",
     "discontinued": false
   },
   {
@@ -5818,6 +6070,34 @@
     "discontinued": false
   },
   {
+    "id": 665,
+    "name": "Wise Card Japan",
+    "bins": [
+      "539033"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "JP",
+    "issuerName": "Wise",
+    "issuerEnglish": "Wise",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/8f861800d91776c291eb546cc379a119e86117aec922b1a1d2dd93147b9c957c.png",
+    "discontinued": false
+  },
+  {
+    "id": 664,
+    "name": "Wise Card Japan (Virtual)",
+    "bins": [
+      "539033"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "JP",
+    "issuerName": "Wise",
+    "issuerEnglish": "Wise",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/32a9c2fba83b86fa7061844c42e430512eb2eb1fb713df1b59c00bded80c98be.png",
+    "discontinued": false
+  },
+  {
     "id": 514,
     "name": "かぞくのおさいふ",
     "bins": [
@@ -6390,6 +6670,20 @@
     "discontinued": false
   },
   {
+    "id": 576,
+    "name": "AlipayHK",
+    "bins": [
+      "53536723"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "SG",
+    "issuerName": "Alipay Payment Services (HK)",
+    "issuerEnglish": "Alipay Payment Services (HK)",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/809bacedff73268b941ce67f8a9de1a6ecc46ffd457ded5207745c69ae397b69.png",
+    "discontinued": false
+  },
+  {
     "id": 214,
     "name": "DBS Visa Debit Card",
     "bins": [
@@ -6745,7 +7039,7 @@
     "type": "Debit",
     "country": "TW",
     "issuerName": "第一銀行",
-    "issuerEnglish": "First Commercial BankBank",
+    "issuerEnglish": "First Commercial Bank",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/b92333f6a5cb51dd35357b7c437fdb1bdc407d5723843e89251cc4f9c67c0f36.jpg",
     "discontinued": false
   },
@@ -7347,7 +7641,7 @@
     "type": "Credit",
     "country": "TW",
     "issuerName": "第一銀行",
-    "issuerEnglish": "First Commercial BankBank",
+    "issuerEnglish": "First Commercial Bank",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/43819d492d8e4391297c5d74224e72aba4c5f01141f864a11769450c95922569.png",
     "discontinued": false
   },
@@ -8061,6 +8355,20 @@
     "issuerName": "Chase",
     "issuerEnglish": "Chase",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/6400a0bf078b62012464922a145fb8c9f8e3c25638e43265d81b52643673c0e7.png",
+    "discontinued": false
+  },
+  {
+    "id": 654,
+    "name": "Shopify Balance Card",
+    "bins": [
+      "485954"
+    ],
+    "brand": "VISA",
+    "type": "Credit",
+    "country": "US",
+    "issuerName": "Shopify",
+    "issuerEnglish": "Shopify",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/b2a487f3bc6af53db0aa8e0a7c912e9e3b7bdf494bb34f81118af0749e85b8a4.png",
     "discontinued": false
   },
   {

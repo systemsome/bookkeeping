@@ -105,7 +105,23 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
           const used = acc.usedCredit !== undefined ? acc.usedCredit : acc.balance || 0;
 
           return (
-            <div key={acc.id} className="transition-all duration-200 rounded-3xl">
+            <div
+              key={acc.id}
+              className="transition-all duration-200 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 sm:p-4 shadow-xs hover:shadow-md flex flex-col justify-between"
+            >
+              {/* Card Header: Card Name + Last 4 */}
+              <div className="flex items-center justify-between gap-2 mb-2.5 px-0.5">
+                <h3
+                  className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate"
+                  title={acc.name}
+                >
+                  {acc.name}
+                </h3>
+                <div className="text-[11px] font-mono font-semibold text-slate-400 dark:text-slate-500 shrink-0">
+                  •••• {acc.cardNumberLast4 || '8888'}
+                </div>
+              </div>
+
               <AccountCardFace
                 account={acc}
                 privacyMode={privacyMode}

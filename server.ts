@@ -156,6 +156,26 @@ function loadPersistedStores() {
       localSyncStore.set('demo', defaultLedger);
     }
 
+    // Ensure all Yuebao accounts across all ledgers have the authentic LogoHub logo permanently stored
+    let hasUpdatedYuebao = false;
+    localSyncStore.forEach((ledger) => {
+      if (Array.isArray(ledger?.accounts)) {
+        ledger.accounts.forEach((acc: any) => {
+          if (acc && (acc.category === 'YUEBAO' || acc.bankName === '余额宝' || (acc.name && acc.name.includes('余额宝')))) {
+            if (acc.bankLogoUrl !== 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg') {
+              acc.bankLogoUrl = 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg';
+              hasUpdatedYuebao = true;
+            }
+          }
+        });
+      }
+    });
+
+    if (hasUpdatedYuebao) {
+      savePersistedStores();
+      console.log('[Storage] Permanently synchronized official Yuebao LogoHub URL into database stores');
+    }
+
     console.log(`[Storage] Loaded ${localUsersStore.size} user(s) and ${localSyncStore.size} data ledger(s)`);
   } catch (err) {
     console.warn('[Storage] Warning loading persisted stores:', err);
@@ -215,6 +235,24 @@ async function startServer() {
       usersCount: localUsersStore.size,
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // 🏦 官方微众银行 (WeBank) 矢量 Logo (来源于 https://www.bootstrapmb.com/icon/VNNjq2VNNj-10)
+  const WEBANK_SVG = `<svg viewBox="-208 -208 1434 1434" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M920.22784 483.43552c-8.448-0.29696-40.9856 9.08288-51.82976 11.2896-17.39264 3.56864-34.82624 7.20384-52.21888 10.57792-88.00768 17.11616-194.8416 28.72832-285.25568 28.80512-18.13504 0.01536-45.21984-2.04288-62.01856-0.32768-9.98912 12.93312-19.79904 24.84736-29.12768 40.064-28.1856 45.9008-46.7968 92.25216-54.62016 148.49536-7.1424 51.79904-3.05152 130.87744 18.5856 178.29376 8.17664 17.88416 25.8048 39.33696 23.46496 44.33408-9.0368 8.6528-27.25888 2.51904-38.93248-0.57856-78.3872-20.79232-159.93344-67.28704-190.63296-148.18304-34.90816-92.06784 3.52256-186.27584 48.92672-265.18016 5.92384-10.29632 13.24544-20.09088 18.19648-29.6448-4.27008-2.90816-33.54624-11.7248-42.01984-15.0528-6.88128-2.7136-12.94848-5.25824-20.12672-8.22272-6.28224-2.62144-12.59008-6.784-19.61472-8.22272-42.40384 55.20896-79.91808 145.41312-91.5968 217.66144-11.23328 69.52448 2.81088 128.02048 38.3744 185.12384 12.73856 20.5056 29.5424 37.20192 33.72032 43.79648-10.368 7.69024-110.35648 32.87552-60.9024 59.81696 40.48384 22.03648 167.66976 30.61248 216.29952 33.77152 123.19232 8.00256 260.57216 14.81728 382.45376 0.49152 48.4864-5.69344 124.96384-17.60256 156.13952-43.57632 26.94144-22.46656 3.584-43.97568-6.5792-68.50048-26.01472-62.75072 14.14144-186.32192 33.4592-249.78432 15.34976-50.36032 29.39904-109.4912 35.85536-165.248zM253.1072 324.64384c8.6528 0.54784 27.2384 6.72768 37.69856 8.87296 11.64288 2.40128 27.56096 6.80448 39.29088 7.424-8.79616-30.52032-10.78272-50.37568 2.58048-83.73248 28.15488-70.23104 93.81888-116.5312 178.51392-120.41728 63.89248-2.93376 110.1824 26.83392 130.77504 68.46976 24.50432 49.59232 10.66496 108.28288-19.67616 152.45312 24.26368 0.384 56.15616-3.69152 80.6912-6.31296a1509.12 1509.12 0 0 0 78.17728-10.5216c49.75616-7.9872 98.88768-18.29888 145.50528-30.99648-7.37792-48.02048-9.60512-73.27232-28.33408-119.54688-13.89568-34.4064-32.29696-65.13664-56.86272-91.01824-44.21632-46.61248-114.50368-84.56192-204.65664-92.38016-157.17376-13.6192-298.4704 49.19296-365.14304 186.76736-4.53632 9.39008-6.99392 18.2272-10.99264 27.10016-24.6528 0.33792-44.32896 0.89088-65.22368 8.66816-44.94848 16.75776-49.34144 49.93024 3.91168 75.66848 16.34816 7.90016 52.6848 18.86208 53.74464 19.50208z" fill="#040000" /><path d="M622.28992 357.71392c-46.7968 4.35712-106.14784 2.58048-153.11872-0.2816-24.18688-1.46432-48.3072-3.24608-72.13056-6.25152-16.59392-2.10432-53.34016-5.49376-66.944-10.24-11.72992-0.61952-27.64288-5.02272-39.29088-7.424-10.46016-2.14528-29.04576-8.32512-37.69856-8.87296-2.8416 4.63872-7.19872 9.73312-10.7264 14.82752-11.34592 16.37376-20.98176 34.59584-29.21984 52.25984-11.55584 24.83712-21.39648 50.88256-30.16704 78.14656 7.02464 1.43872 13.33248 5.60128 19.61472 8.22272 7.17312 2.96448 13.24544 5.51424 20.12672 8.22272 8.4736 3.33312 37.74976 12.14976 42.01984 15.0528l47.08864 11.61216c33.51552 7.83872 68.30592 12.61056 102.58944 16.12288 6.16448 0.62464 53.22752 3.2768 54.47168 4.66944 16.79872-1.7152 43.88352 0.34304 62.01856 0.32768 90.41408-0.0768 197.24288-11.68896 285.25568-28.80512 17.39264-3.3792 34.82624-7.00928 52.21888-10.57792 10.84416-2.20672 43.38176-11.58656 51.82976-11.2896 12.14464-53.5808 25.90208-119.1424 6.43072-173.54752-46.61248 12.6976-95.74912 23.00928-145.50528 30.99648a1513.9584 1513.9584 0 0 1-78.17728 10.5216c-24.52992 2.61632-56.4224 6.69184-80.68608 6.30784z" fill="#D10C18" /><path d="M451.59424 213.14048c-60.53888 8.1664-48.62464 97.2288 11.59168 89.83552 22.36928-2.74432 41.66656-24.07936 38.70208-50.28864-2.6368-23.1424-24.30464-43.05408-50.29376-39.54688z" fill="#040000" /></svg>`;
+
+  app.get('/api/logos/webank.svg', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(WEBANK_SVG);
+  });
+
+  // 🏦 官方百信银行 (aiBank) 矢量 Logo
+  const AIBANK_SVG = `<svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><rect x="134" y="134" width="756" height="756" rx="378" fill="#E11922"/><text x="512" y="585" fill="#FFFFFF" font-size="205" font-weight="900" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif" text-anchor="middle" letter-spacing="-5">aiBank</text><circle cx="365" cy="430" r="28" fill="#FFD200"/></svg>`;
+
+  app.get('/api/logos/aibank.svg', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(AIBANK_SVG);
   });
 
   // In-memory cache for live gold & forex rates
@@ -734,9 +772,20 @@ async function startServer() {
     const nowIso = new Date().toISOString();
     const cleanId = String(userId).trim();
     const existing = localSyncStore.get(cleanId) || localSyncStore.get(cleanId.toLowerCase()) || {};
+    const rawAccounts = Array.isArray(accounts) ? accounts : (existing.accounts || []);
+    const normalizedAccounts = rawAccounts.map((acc: any) => {
+      if (acc && (acc.category === 'YUEBAO' || acc.bankName === '余额宝' || (acc.name && acc.name.includes('余额宝')))) {
+        return {
+          ...acc,
+          bankLogoUrl: 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg',
+        };
+      }
+      return acc;
+    });
+
     const payload = {
       user: user || existing.user,
-      accounts: Array.isArray(accounts) ? accounts : (existing.accounts || []),
+      accounts: normalizedAccounts,
       transactions: Array.isArray(transactions) ? transactions : (existing.transactions || []),
       projects: Array.isArray(projects) ? projects : (existing.projects || []),
       lastUpdated: nowIso,
@@ -1141,11 +1190,11 @@ async function startServer() {
   // ==========================================
   // Dual-Library Unified Sync & Stats Endpoints
   // Automatically aligns with official website figures:
-  // CardArt (https://cardart.cc/): dynamically parses "2,589 cards and counting"
+  // CardArt (https://cardart.cc/): dynamically parses "4,414 cards and counting"
   // Cardentify (https://cards.no2.ac/): queries /api/cards live collection
   // ==========================================
-  let cardartOfficialCount = 2589;
-  let cardentifyOfficialCount = 639;
+  let cardartOfficialCount = 4414;
+  let cardentifyOfficialCount = 655;
   let lastOfficialStatsChecked = 0;
 
   async function refreshOfficialWebsiteStats(): Promise<{ cardartCount: number; cardentifyCount: number }> {
@@ -1197,14 +1246,26 @@ async function startServer() {
     return { cardartCount: cardartOfficialCount, cardentifyCount: cardentifyOfficialCount };
   }
 
+  // Official LogoHub Yuebao Logo Endpoint
+  app.get('/api/logohub/yuebao', (req, res) => {
+    return res.json({
+      success: true,
+      name: '余额宝',
+      code: 'yuebao',
+      logoUrl: 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg',
+      brandColor: '#FF5B00',
+      source: 'https://logohub.afengblog.com/logo/yuebao',
+    });
+  });
+
   app.get('/api/gallery/stats', async (req, res) => {
     const officialStats = await refreshOfficialWebsiteStats().catch(() => ({
-      cardartCount: cardartOfficialCount || 2589,
-      cardentifyCount: cardentifyOfficialCount || 639,
+      cardartCount: cardartOfficialCount || 4414,
+      cardentifyCount: cardentifyOfficialCount || 655,
     }));
 
-    const cardartCount = officialStats.cardartCount || 2589;
-    const cardentifyCount = officialStats.cardentifyCount || 639;
+    const cardartCount = officialStats.cardartCount || 4414;
+    const cardentifyCount = officialStats.cardentifyCount || 655;
     const totalCount = cardartCount + cardentifyCount;
 
     return res.json({
@@ -1212,8 +1273,8 @@ async function startServer() {
       cardartCount,
       cardentifyCount,
       totalCount,
-      cardartOfficialCount: officialStats.cardartCount,
-      cardentifyOfficialCount: officialStats.cardentifyCount,
+      cardartOfficialCount: cardartCount,
+      cardentifyOfficialCount: cardentifyCount,
       cardartLastSyncedAt,
       cardentifyLastSyncedAt,
       lastSyncedAt: new Date().toISOString(),
@@ -1223,22 +1284,29 @@ async function startServer() {
   // API Endpoint: Dual-library Real-time Simultaneous Sync
   app.all('/api/gallery/sync-all', async (req, res) => {
     const t0 = Date.now();
-    const [cardartRes, cardentifyRes] = await Promise.allSettled([
+    const [cardartRes, cardentifyRes, statsRes] = await Promise.allSettled([
       performCardArtSync(),
       performCardentifySync(),
+      refreshOfficialWebsiteStats(),
     ]);
 
     const cardartSuccess = cardartRes.status === 'fulfilled';
     const cardentifySuccess = cardentifyRes.status === 'fulfilled';
-    const totalCount = cardartMemoryCards.length + cardentifyMemoryCards.length;
+    const official = statsRes.status === 'fulfilled' ? statsRes.value : { cardartCount: cardartOfficialCount, cardentifyCount: cardentifyOfficialCount };
+
+    const cardartCount = official.cardartCount || cardartOfficialCount;
+    const cardentifyCount = official.cardentifyCount || cardentifyOfficialCount;
+    const totalCount = cardartCount + cardentifyCount;
     const nowIso = new Date().toISOString();
 
     return res.json({
       success: true,
-      message: `双库融合实时同步完成！共计 ${totalCount} 款高清卡面 (CardArt: ${cardartMemoryCards.length} 款, Cardentify: ${cardentifyMemoryCards.length} 款)`,
-      cardartCount: cardartMemoryCards.length,
-      cardentifyCount: cardentifyMemoryCards.length,
+      message: `双库融合实时同步完成！官方共计 ${totalCount.toLocaleString()} 款高清卡面 (CardArt: ${cardartCount.toLocaleString()} 款, Cardentify: ${cardentifyCount.toLocaleString()} 款)`,
+      cardartCount,
+      cardentifyCount,
       totalCount,
+      cardartCardsCount: cardartMemoryCards.length,
+      cardentifyCardsCount: cardentifyMemoryCards.length,
       cardartSuccess,
       cardentifySuccess,
       cardartCards: cardartMemoryCards,
@@ -1250,6 +1318,7 @@ async function startServer() {
 
   // Initial bootstrap background sync if memory is empty
   setTimeout(() => {
+    refreshOfficialWebsiteStats().catch(() => {});
     if (cardartMemoryCards.length === 0) {
       performCardArtSync().catch((e) => console.warn('[CardArt] Initial background sync error:', e.message));
     }
@@ -1260,14 +1329,18 @@ async function startServer() {
 
   // Automatically synchronize CardArt & Cardentify every 5 minutes (5 * 60 * 1000 ms)
   setInterval(() => {
-    console.log('[GallerySync] Executing 5-minute periodic auto-sync for CardArt & Cardentify...');
+    console.log(`[GallerySync] [${new Date().toISOString()}] Executing 5-minute periodic auto-sync with cardart.cc & cards.no2.ac...`);
     Promise.allSettled([
       performCardArtSync(),
       performCardentifySync(),
       refreshOfficialWebsiteStats(),
-    ]).catch((err) => {
-      console.warn('[GallerySync] 5-minute periodic sync error:', err);
-    });
+    ])
+      .then(() => {
+        console.log(`[GallerySync] 5-minute periodic auto-sync complete. CardArt: ${cardartOfficialCount}, Cardentify: ${cardentifyOfficialCount}`);
+      })
+      .catch((err) => {
+        console.warn('[GallerySync] 5-minute periodic sync error:', err);
+      });
   }, 5 * 60 * 1000);
 
   // Vite middleware for development vs static build in production

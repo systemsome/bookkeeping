@@ -34,14 +34,14 @@ import {
   ChevronsUpDown,
   MoreHorizontal,
 } from 'lucide-react';
-import { FinancialAccount, AccountCategory, AssetGroup } from '../types';
+import { FinancialAccount, AccountCategory, AssetGroup, LedgerProject } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
 import { AccountCardFace } from './AccountCardFace';
 import { formatCurrency } from '../lib/formatters';
 import { getRandomCardBackground } from '../lib/brandHelper';
 import { matchBestCardentifyPreset, matchBestCardentifyCard, getTotalGalleryCardsCount } from '../lib/cardentifyPresets';
 import { CardentifyGalleryModal } from './CardentifyGalleryModal';
-import { syncDualLibrariesOnline } from '../lib/gallerySync';
+import { syncDualLibrariesOnline, fetchDualGalleryStats } from '../lib/gallerySync';
 import { fetchLiveGoldRate, getCachedGoldRate, GoldMarketRate } from '../lib/goldRates';
 
 interface AccountsListProps {
@@ -56,11 +56,13 @@ interface AccountsListProps {
   onOpenBatchReconcile: () => void;
   onOpenRepayment: (accountId: string, amount: number) => void;
   onOpenNewTx: (defaultType?: string, accountId?: string) => void;
+  projects?: LedgerProject[];
 }
 
 export const AccountsList: React.FC<AccountsListProps> = ({
   accounts,
   privacyMode,
+  projects = [],
   onAddAccount,
   onEditAccount,
   onDeleteAccount,
@@ -74,6 +76,12 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'GROUPED' | 'CARD' | 'TABLE'>('GROUPED');
 
+  const projectMap = useMemo(() => {
+    const map = new Map<string, LedgerProject>();
+    (projects || []).forEach((p) => map.set(p.id, p));
+    return map;
+  }, [projects]);
+
   // Drag & Drop Layout State
   const [isReorderMode, setIsReorderMode] = useState(false);
   const [draggedAccountId, setDraggedAccountId] = useState<string | null>(null);
@@ -85,17 +93,38 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [cardentifyGalleryAccount, setCardentifyGalleryAccount] = useState<FinancialAccount | null>(null);
   const [isGalleryOpenGeneral, setIsGalleryOpenGeneral] = useState<boolean>(false);
   const [globalWakeMode, setGlobalWakeMode] = useState<'hidden' | 'pinned'>('hidden');
+  const [deletingTableAccountId, setDeletingTableAccountId] = useState<string | null>(null);
+
+  // 清除自定义卡面图片，恢复默认官方设计
+  const handleClearCardImage = (accountId: string) => {
+    onDirectUpdateAccount(accountId, { cardImageUrl: '', cardPresetId: undefined });
+    showToast('✨ 已清除该卡片套用的艺术卡面，恢复为官方默认质感底色');
+  };
 
   // 双库卡面总数实时与后台数据源双向同步
-  const [totalGalleryCards, setTotalGalleryCards] = useState<number>(() => getTotalGalleryCardsCount());
+  const [totalGalleryCards, setTotalGalleryCards] = useState<number>(5069);
 
   useEffect(() => {
-    const handleGalleryUpdate = () => {
-      setTotalGalleryCards(getTotalGalleryCardsCount());
+    const handleGalleryUpdate = (e?: any) => {
+      if (e?.detail?.total) {
+        setTotalGalleryCards(e.detail.total);
+      } else {
+        fetchDualGalleryStats()
+          .then((stats) => {
+            if (stats.totalCount) setTotalGalleryCards(stats.totalCount);
+          })
+          .catch(() => {});
+      }
     };
     window.addEventListener('gallery-updated', handleGalleryUpdate);
     window.addEventListener('cardart-updated', handleGalleryUpdate);
     window.addEventListener('cardentify-updated', handleGalleryUpdate);
+
+    fetchDualGalleryStats()
+      .then((stats) => {
+        if (stats.totalCount) setTotalGalleryCards(stats.totalCount);
+      })
+      .catch(() => {});
 
     // Initial background sync check
     syncDualLibrariesOnline(false).catch(() => {});
@@ -109,7 +138,11 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
   // Update whenever general gallery modal opens/closes
   useEffect(() => {
-    setTotalGalleryCards(getTotalGalleryCardsCount());
+    fetchDualGalleryStats()
+      .then((stats) => {
+        if (stats.totalCount) setTotalGalleryCards(stats.totalCount);
+      })
+      .catch(() => {});
   }, [isGalleryOpenGeneral]);
 
   // 顶部功能按键折叠/收起菜单状态（响应用户隐藏诉求，保持界面极简）
@@ -1230,8 +1263,19 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                             account={acc}
                             privacyMode={privacyMode}
                             wakeMode={globalWakeMode}
+                            projectName={
+                              acc.projectName ||
+                              (acc.projectId ? projectMap.get(acc.projectId)?.name : undefined)
+                            }
+                            projectColor={
+                              acc.projectId ? projectMap.get(acc.projectId)?.color : undefined
+                            }
+                            onUpdateBadgePosition={(newPos) => {
+                              onDirectUpdateAccount(acc.id, { projectBadgePos: newPos });
+                            }}
                             onEditAccount={onEditAccount}
                             onDeleteAccount={onDeleteAccount}
+                            onClearCardImage={handleClearCardImage}
                             onQuickReconcile={handleOpenQuickReconcile}
                             onOpenRepayment={onOpenRepayment}
                             onOpenNewTx={onOpenNewTx}
@@ -1283,8 +1327,19 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   account={acc}
                   privacyMode={privacyMode}
                   wakeMode={globalWakeMode}
+                  projectName={
+                    acc.projectName ||
+                    (acc.projectId ? projectMap.get(acc.projectId)?.name : undefined)
+                  }
+                  projectColor={
+                    acc.projectId ? projectMap.get(acc.projectId)?.color : undefined
+                  }
+                  onUpdateBadgePosition={(newPos) => {
+                    onDirectUpdateAccount(acc.id, { projectBadgePos: newPos });
+                  }}
                   onEditAccount={onEditAccount}
                   onDeleteAccount={onDeleteAccount}
+                  onClearCardImage={handleClearCardImage}
                   onQuickReconcile={handleOpenQuickReconcile}
                   onOpenRepayment={onOpenRepayment}
                   onOpenNewTx={onOpenNewTx}
@@ -1430,17 +1485,34 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => {
-                              if (confirm(`确定删除「${acc.name}」吗？`)) {
-                                onDeleteAccount(acc.id);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50"
-                            title="删除"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {deletingTableAccountId === acc.id ? (
+                            <div className="flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200">
+                              <span className="text-[10px] text-rose-700 font-bold whitespace-nowrap">删除卡面?</span>
+                              <button
+                                onClick={() => {
+                                  onDeleteAccount(acc.id);
+                                  setDeletingTableAccountId(null);
+                                }}
+                                className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                确定
+                              </button>
+                              <button
+                                onClick={() => setDeletingTableAccountId(null)}
+                                className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] cursor-pointer"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setDeletingTableAccountId(acc.id)}
+                              className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                              title="删除此账户卡面"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

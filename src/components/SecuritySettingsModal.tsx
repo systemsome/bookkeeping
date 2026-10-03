@@ -46,17 +46,22 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const [cardArtCount, setCardArtCount] = useState<number>(2589);
-  const [cardentifyCount, setCardentifyCount] = useState<number>(639);
+  const [cardArtCount, setCardArtCount] = useState<number>(4414);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(655);
 
   useEffect(() => {
-    const handleUpdate = () => {
-      fetchDualGalleryStats()
-        .then((stats) => {
-          if (stats.cardartCount) setCardArtCount(stats.cardartCount);
-          if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
-        })
-        .catch(() => {});
+    const handleUpdate = (e?: any) => {
+      if (e?.detail) {
+        if (e.detail.cardArtCount) setCardArtCount(e.detail.cardArtCount);
+        if (e.detail.cardentifyCount) setCardentifyCount(e.detail.cardentifyCount);
+      } else {
+        fetchDualGalleryStats()
+          .then((stats) => {
+            if (stats.cardartCount) setCardArtCount(stats.cardartCount);
+            if (stats.cardentifyCount) setCardentifyCount(stats.cardentifyCount);
+          })
+          .catch(() => {});
+      }
     };
 
     window.addEventListener('gallery-updated', handleUpdate);
@@ -390,7 +395,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
                   className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium transition-colors"
                 >
                   <Palette className="w-3 h-3" />
-                  <span>CardArt ({cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '2,589+款'})</span>
+                  <span>CardArt ({cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '4,414款'})</span>
                   <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                 </a>
                 <span className="text-slate-300 dark:text-slate-700">·</span>
@@ -401,7 +406,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
                   className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-400 hover:underline font-medium transition-colors"
                 >
                   <Sparkles className="w-3 h-3" />
-                  <span>Cardentify ({cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '639款'})</span>
+                  <span>Cardentify ({cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '655款'})</span>
                   <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                 </a>
               </div>

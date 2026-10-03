@@ -39,10 +39,12 @@ import {
   ProjectStatus,
   TransactionType,
   UserProfile,
+  ProjectBadgePosition,
 } from '../types';
 import { calculateProjectStats } from '../lib/storage';
 import { formatCurrency } from '../lib/formatters';
 import { CategoryIcon } from './CategoryIcon';
+import { AccountCardFace } from './AccountCardFace';
 
 interface ProjectsDashboardProps {
   projects?: LedgerProject[];
@@ -60,6 +62,7 @@ interface ProjectsDashboardProps {
   onCreateProject?: () => void;
   onEditProject?: (project: LedgerProject) => void;
   onTriggerSync?: () => Promise<void>;
+  onUpdateAccount?: (account: FinancialAccount) => void;
 }
 
 export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
@@ -78,6 +81,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   onCreateProject,
   onEditProject,
   onTriggerSync,
+  onUpdateAccount,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -266,6 +270,38 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
     return list.sort((a, b) => b.net - a.net);
   }, [activeProject, activeProjectTransactions, activeProjectStats]);
+
+  // Accounts involved with this active project (explicitly linked or have transactions)
+  const involvedAccounts = useMemo(() => {
+    if (!activeProject) return [];
+    const involvedIds = new Set<string>();
+    if (Array.isArray(activeProject.linkedAccountIds)) {
+      activeProject.linkedAccountIds.forEach((id) => involvedIds.add(id));
+    }
+    (accounts || []).forEach((acc) => {
+      if (acc.projectId === activeProject.id) involvedIds.add(acc.id);
+    });
+    (activeProjectTransactions || []).forEach((tx) => {
+      if (tx.accountId) involvedIds.add(tx.accountId);
+      if (tx.targetAccountId) involvedIds.add(tx.targetAccountId);
+    });
+    if (involvedIds.size === 0 && accounts && accounts.length > 0) {
+      accounts.slice(0, 3).forEach((acc) => involvedIds.add(acc.id));
+    }
+    return (accounts || []).filter((acc) => involvedIds.has(acc.id));
+  }, [activeProject, accounts, activeProjectTransactions]);
+
+  const handleBatchMoveBadge = (pos: ProjectBadgePosition) => {
+    if (!activeProject || !onUpdateAccount) return;
+    involvedAccounts.forEach((acc) => {
+      onUpdateAccount({
+        ...acc,
+        projectBadgePos: pos,
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+      });
+    });
+  };
 
   // Toggle project status between ACTIVE and COMPLETED
   const handleToggleProjectStatus = (proj: LedgerProject) => {
@@ -531,6 +567,145 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             </div>
           </div>
         )}
+
+        {/* ================= 4. PROJECT INVOLVED ACCOUNTS / CARDS WITH MOVABLE BADGES ================= */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    该账本项目关联账本 / 卡片
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-mono">
+                    {involvedAccounts.length} 个账本
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  所有参与此项目收支核算的账本卡片均展示专属项目角标，点击或拖动角标可自由移动角标位置
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Badge Position Controls for this whole project */}
+            <div className="flex items-center gap-1 self-start sm:self-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+              <span className="text-[11px] text-slate-500 px-1.5">角标位置:</span>
+              <button
+                type="button"
+                onClick={() => handleBatchMoveBadge('top-left')}
+                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
+                title="统一移至左上角"
+              >
+                ↖ 左上
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchMoveBadge('top-right')}
+                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
+                title="统一移至右上角"
+              >
+                ↗ 右上
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchMoveBadge('bottom-left')}
+                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
+                title="统一移至左下角"
+              >
+                ↙ 左下
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchMoveBadge('bottom-right')}
+                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
+                title="统一移至右下角"
+              >
+                ↘ 右下
+              </button>
+            </div>
+          </div>
+
+          {/* Involved Accounts Grid */}
+          {involvedAccounts.length === 0 ? (
+            <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
+              暂无关联账本，在此项目下新增交易流水或在编辑账本时选择此项目，卡片将自动附带该项目角标！
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {involvedAccounts.map((acc) => (
+                <div key={acc.id} className="relative group/acc">
+                  <AccountCardFace
+                    account={acc}
+                    privacyMode={privacyMode}
+                    compact={true}
+                    hideActionRow={true}
+                    projectName={activeProject.name}
+                    projectColor={activeProject.color || '#0d9488'}
+                    onUpdateBadgePosition={(newPos) => {
+                      if (onUpdateAccount) {
+                        onUpdateAccount({
+                          ...acc,
+                          projectBadgePos: newPos,
+                          projectId: activeProject.id,
+                          projectName: activeProject.name,
+                        });
+                      }
+                    }}
+                  />
+                  {/* Card footer corner position switcher bar */}
+                  <div className="mt-2 flex items-center justify-between px-2 text-[10px] text-slate-500 font-mono">
+                    <span className="flex items-center gap-1 font-sans">
+                      <span>角标位于:</span>
+                      <strong className="text-teal-600 dark:text-teal-400">
+                        {acc.projectBadgePos === 'top-right'
+                          ? '↗ 右上角'
+                          : acc.projectBadgePos === 'bottom-left'
+                          ? '↙ 左下角'
+                          : acc.projectBadgePos === 'bottom-right'
+                          ? '↘ 右下角'
+                          : '↖ 左上角'}
+                      </strong>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as ProjectBadgePosition[]).map(
+                        (p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateAccount) {
+                                onUpdateAccount({
+                                  ...acc,
+                                  projectBadgePos: p,
+                                  projectId: activeProject.id,
+                                  projectName: activeProject.name,
+                                });
+                              }
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
+                              (acc.projectBadgePos || 'top-left') === p
+                                ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                            }`}
+                            title={`移动角标到 ${p}`}
+                          >
+                            {p === 'top-left' && '↖'}
+                            {p === 'top-right' && '↗'}
+                            {p === 'bottom-left' && '↙'}
+                            {p === 'bottom-right' && '↘'}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Project Expense Category Breakdown */}
         {categoryBreakdown.length > 0 && (

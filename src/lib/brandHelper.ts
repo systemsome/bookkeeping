@@ -1,4 +1,5 @@
-import { AccountCategory } from '../types';
+import { AccountCategory, BankAccountClass } from '../types';
+import { matchLogoHubBank } from './logohubData';
 
 export interface BankBrandInfo {
   id: string;
@@ -13,6 +14,7 @@ export interface BankBrandInfo {
   cardNetwork: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE';
   logoType: string;
   defaultTier: string;
+  bankLogoUrl?: string; // 🏦 官方正版矢量银行徽标URL (来源于 https://logohub.afengblog.com/)
 }
 
 export const BANK_BRANDS: BankBrandInfo[] = [
@@ -225,6 +227,7 @@ export const BANK_BRANDS: BankBrandInfo[] = [
     cardNetwork: 'UNIONPAY',
     logoType: 'mybank',
     defaultTier: '网商普惠经营账户',
+    bankLogoUrl: 'https://logohub.afengblog.com/logos/library/svglogo/pay/Mybank.svg',
   },
   {
     id: 'WEBANK',
@@ -239,6 +242,7 @@ export const BANK_BRANDS: BankBrandInfo[] = [
     cardNetwork: 'UNIONPAY',
     logoType: 'webank',
     defaultTier: '微众活期+ 结算账户',
+    bankLogoUrl: '/api/logos/webank.svg',
   },
   {
     id: 'AIBANK',
@@ -253,6 +257,7 @@ export const BANK_BRANDS: BankBrandInfo[] = [
     cardNetwork: 'UNIONPAY',
     logoType: 'aibank',
     defaultTier: '百信智惠账户',
+    bankLogoUrl: '/api/logos/aibank.svg',
   },
   {
     id: 'ALIPAY',
@@ -288,12 +293,13 @@ export const BANK_BRANDS: BankBrandInfo[] = [
     shortName: '余额宝',
     englishName: 'YUE BAO MONEY FUND',
     category: 'YUEBAO',
-    primaryColor: '#f97316',
+    primaryColor: '#ff5b00',
     secondaryColor: '#c2410c',
-    gradientClass: 'from-[#f97316] via-[#ea580c] to-[#9a3412]',
+    gradientClass: 'from-[#ff5b00] via-[#ea580c] to-[#9a3412]',
     cardSkin: 'gold-metallic',
     cardNetwork: 'NONE',
     logoType: 'yuebao',
+    bankLogoUrl: 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg',
     defaultTier: '货币基金理财账户',
   },
   {
@@ -489,6 +495,7 @@ export interface CategoryPreset {
   cardNetwork: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE';
   primaryColor: string;
   logoType: string;
+  bankLogoUrl?: string;
   balance?: string;
   creditLimit?: string;
   usedCredit?: string;
@@ -607,8 +614,9 @@ export function getDefaultPresetForCategory(category: AccountCategory): Category
         cardTier: '货币基金理财账户',
         cardSkin: 'gold-metallic',
         cardNetwork: 'NONE',
-        primaryColor: '#f97316',
+        primaryColor: '#ff5b00',
         logoType: 'yuebao',
+        bankLogoUrl: 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg',
         balance: '0',
       };
     case 'GOLD':
@@ -696,86 +704,106 @@ export function getBrandsForCategory(
   category: AccountCategory,
   activeTab: 'RECOMMENDED' | 'BANKS' | 'DIGITAL' | 'CREDIT' | 'ALL' = 'RECOMMENDED'
 ): BankBrandInfo[] {
+  let list: BankBrandInfo[] = [];
+
   if (activeTab === 'BANKS') {
-    return BANK_BRANDS.filter(
+    list = BANK_BRANDS.filter(
       (b) => b.category === 'DEBIT_CARD' || ['CMB', 'ICBC', 'CCB', 'ABC', 'BOC', 'BOCOM', 'CITIC', 'PINGAN', 'SPDB', 'PSBC', 'CMBC', 'CEB', 'CIB', 'CGB', 'HXB', 'NBCB', 'BOB', 'BOS', 'MYBANK', 'WEBANK', 'AIBANK'].includes(b.id)
     );
-  }
-
-  if (activeTab === 'DIGITAL') {
-    return BANK_BRANDS.filter(
-      (b) => ['ALIPAY', 'WECHAT', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+  } else if (activeTab === 'DIGITAL') {
+    list = BANK_BRANDS.filter(
+      (b) => ['YUEBAO', 'ALIPAY', 'WECHAT', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
     );
-  }
-
-  if (activeTab === 'CREDIT') {
-    return BANK_BRANDS.filter(
+  } else if (activeTab === 'CREDIT') {
+    list = BANK_BRANDS.filter(
       (b) => ['HUABEI', 'JD_BAITIAO', 'CMB', 'ICBC', 'CCB', 'CITIC', 'PINGAN', 'SPDB', 'PAYABLE', 'RECEIVABLE'].includes(b.id)
     );
+  } else if (activeTab === 'ALL') {
+    list = BANK_BRANDS;
+  } else {
+    // RECOMMENDED Mode: Dynamically select brands tailored strictly for this category
+    switch (category) {
+      case 'DEBIT_CARD':
+      case 'CREDIT_CARD':
+        list = BANK_BRANDS.filter(
+          (b) => ['CMB', 'ICBC', 'CCB', 'ABC', 'BOC', 'BOCOM', 'CITIC', 'PINGAN', 'SPDB', 'PSBC', 'CMBC', 'CEB', 'CIB', 'CGB', 'HXB', 'NBCB', 'BOB', 'BOS', 'MYBANK', 'WEBANK', 'AIBANK'].includes(b.id)
+        );
+        break;
+
+      case 'ALIPAY':
+      case 'WECHAT':
+        list = BANK_BRANDS.filter(
+          (b) => ['WECHAT', 'ALIPAY', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+        );
+        break;
+
+      case 'HUABEI':
+        list = BANK_BRANDS.filter(
+          (b) => ['HUABEI', 'ALIPAY', 'JD_BAITIAO', 'CMB', 'ICBC'].includes(b.id)
+        );
+        break;
+
+      case 'JD_BAITIAO':
+      case 'JD_FINANCE':
+        list = BANK_BRANDS.filter(
+          (b) => ['JD_BAITIAO', 'JD_FINANCE', 'ALIPAY', 'WECHAT'].includes(b.id)
+        );
+        break;
+
+      case 'YUEBAO':
+        list = BANK_BRANDS.filter(
+          (b) => ['YUEBAO', 'ALIPAY', 'WECHAT', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
+        );
+        break;
+
+      case 'GOLD':
+        list = BANK_BRANDS.filter(
+          (b) => ['GOLD', 'ICBC', 'CMB', 'CCB', 'ABC', 'ALIPAY'].includes(b.id)
+        );
+        break;
+
+      case 'FUND':
+        list = BANK_BRANDS.filter(
+          (b) => ['FUND', 'CMB', 'ALIPAY', 'WECHAT', 'ICBC', 'CCB', 'PINGAN'].includes(b.id)
+        );
+        break;
+
+      case 'CASH':
+        list = BANK_BRANDS.filter(
+          (b) => ['CASH', 'ICBC', 'BOC', 'CCB', 'ABC'].includes(b.id)
+        );
+        break;
+
+      case 'RECEIVABLE':
+        list = BANK_BRANDS.filter(
+          (b) => ['RECEIVABLE', 'ALIPAY', 'WECHAT', 'CMB', 'ICBC'].includes(b.id)
+        );
+        break;
+
+      case 'PAYABLE':
+        list = BANK_BRANDS.filter(
+          (b) => ['PAYABLE', 'HUABEI', 'JD_BAITIAO', 'CMB', 'ICBC', 'CCB'].includes(b.id)
+        );
+        break;
+
+      default:
+        list = BANK_BRANDS;
+        break;
+    }
   }
 
-  if (activeTab === 'ALL') {
-    return BANK_BRANDS;
-  }
-
-  // RECOMMENDED Mode: Dynamically select brands tailored strictly for this category
-  switch (category) {
-    case 'DEBIT_CARD':
-    case 'CREDIT_CARD':
-      return BANK_BRANDS.filter(
-        (b) => ['CMB', 'ICBC', 'CCB', 'ABC', 'BOC', 'BOCOM', 'CITIC', 'PINGAN', 'SPDB', 'PSBC', 'CMBC', 'CEB', 'CIB', 'CGB', 'HXB', 'NBCB', 'BOB', 'BOS', 'MYBANK', 'WEBANK', 'AIBANK'].includes(b.id)
-      );
-
-    case 'ALIPAY':
-    case 'WECHAT':
-      return BANK_BRANDS.filter(
-        (b) => ['WECHAT', 'ALIPAY', 'APPLEPAY', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
-      );
-
-    case 'HUABEI':
-      return BANK_BRANDS.filter(
-        (b) => ['HUABEI', 'ALIPAY', 'JD_BAITIAO', 'CMB', 'ICBC'].includes(b.id)
-      );
-
-    case 'JD_BAITIAO':
-    case 'JD_FINANCE':
-      return BANK_BRANDS.filter(
-        (b) => ['JD_BAITIAO', 'JD_FINANCE', 'ALIPAY', 'WECHAT'].includes(b.id)
-      );
-
-    case 'YUEBAO':
-      return BANK_BRANDS.filter(
-        (b) => ['YUEBAO', 'ALIPAY', 'WECHAT', 'MYBANK', 'WEBANK', 'JD_FINANCE'].includes(b.id)
-      );
-
-    case 'GOLD':
-      return BANK_BRANDS.filter(
-        (b) => ['GOLD', 'ICBC', 'CMB', 'CCB', 'ABC', 'ALIPAY'].includes(b.id)
-      );
-
-    case 'FUND':
-      return BANK_BRANDS.filter(
-        (b) => ['FUND', 'CMB', 'ALIPAY', 'WECHAT', 'ICBC', 'CCB', 'PINGAN'].includes(b.id)
-      );
-
-    case 'CASH':
-      return BANK_BRANDS.filter(
-        (b) => ['CASH', 'ICBC', 'BOC', 'CCB', 'ABC'].includes(b.id)
-      );
-
-    case 'RECEIVABLE':
-      return BANK_BRANDS.filter(
-        (b) => ['RECEIVABLE', 'ALIPAY', 'WECHAT', 'CMB', 'ICBC'].includes(b.id)
-      );
-
-    case 'PAYABLE':
-      return BANK_BRANDS.filter(
-        (b) => ['PAYABLE', 'HUABEI', 'JD_BAITIAO', 'CMB', 'ICBC', 'CCB'].includes(b.id)
-      );
-
-    default:
-      return BANK_BRANDS;
-  }
+  // 🏦 永久调用 https://logohub.afengblog.com/ 官方矢量库数据绑定各品牌 Logo
+  return list.map((b) => {
+    const logohubMatch =
+      matchLogoHubBank(b.name) ||
+      matchLogoHubBank(b.shortName) ||
+      matchLogoHubBank(b.id) ||
+      matchLogoHubBank(b.logoType);
+    return {
+      ...b,
+      bankLogoUrl: b.bankLogoUrl || logohubMatch?.logoUrl,
+    };
+  });
 }
 
 /**
@@ -1635,6 +1663,57 @@ export function getCleanSingleBrandCardTitle(
 }
 
 /**
+ * 📌 央行统一规定：储蓄卡个人结算账户功能权限级别
+ */
+export interface BankAccountClassDefinition {
+  id: BankAccountClass;
+  label: string;
+  name: string;
+  shortLabel: string;
+  tag: string;
+  badgeClass: string;
+  features: string;
+  limitations: string;
+  iconText: string;
+}
+
+export const BANK_ACCOUNT_CLASSES: BankAccountClassDefinition[] = [
+  {
+    id: 'CLASS_1',
+    label: 'Ⅰ类户 (全功能实体卡)',
+    name: 'Ⅰ类户',
+    shortLabel: 'Ⅰ类户',
+    tag: '全功能无限制',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+    features: '存取款、转账、理财、消费无金额限制',
+    limitations: '同一个人在同一家银行只能开立 1 个',
+    iconText: '✅',
+  },
+  {
+    id: 'CLASS_2',
+    label: 'Ⅱ类户 (虚拟/实体限额卡)',
+    name: 'Ⅱ类户',
+    shortLabel: 'Ⅱ类户',
+    tag: '理财投资限额',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
+    features: '支持理财、投资、限额消费和缴费',
+    limitations: '日支付限额 1 万元，年累计限额 20 万元',
+    iconText: '⚠️',
+  },
+  {
+    id: 'CLASS_3',
+    label: 'Ⅲ类户 (微型零钱包)',
+    name: 'Ⅲ类户',
+    shortLabel: 'Ⅲ类户',
+    tag: '微型快捷支付',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800',
+    features: '仅用于小额、快捷支付',
+    limitations: '账户余额上限通常不超过 2000 元',
+    iconText: '💡',
+  },
+];
+
+/**
  * COMMON CARD TIERS AND PRESETS
  */
 export interface CardTierDefinition {
@@ -1642,16 +1721,101 @@ export interface CardTierDefinition {
   label: string;
   value: string;
   badgeClass: string;
+  subText?: string;
+  ladderOrder?: number;
 }
 
-export const COMMON_CARD_TIERS: CardTierDefinition[] = [
-  { id: 'STANDARD', label: '普卡 / 标准卡', value: '标准卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200' },
-  { id: 'GOLD', label: '金卡', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { id: 'PLATINUM', label: '白金卡', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  { id: 'DIAMOND', label: '钻石卡', value: '钻石卡', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { id: 'BLACK', label: '黑金卡 / 无限卡', value: '黑金卡', badgeClass: 'bg-zinc-900 text-amber-300 border-zinc-700' },
-  { id: 'VIP', label: '贵宾理财卡', value: '贵宾理财卡', badgeClass: 'bg-rose-50 text-rose-700 border-rose-200' },
+/**
+ * 💳 储蓄卡客户资产与卡片权益级别
+ */
+export const DEBIT_CARD_TIERS: CardTierDefinition[] = [
+  { id: 'STANDARD', label: '普卡 (Classic)', value: '普卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', subText: '基础储蓄与结算', ladderOrder: 1 },
+  { id: 'GOLD', label: '金卡 (Gold / 理财金)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200', subText: '专属理财/免排队礼遇', ladderOrder: 2 },
+  { id: 'PLATINUM', label: '白金卡 (Platinum)', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', subText: '贵宾室/费率全免特权', ladderOrder: 3 },
+  { id: 'DIAMOND', label: '钻石卡 (Diamond)', value: '钻石卡', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200', subText: '高净值客群尊享通道', ladderOrder: 4 },
+  { id: 'PRIVATE_BANKING', label: '私行卡 (Private Banking)', value: '私行卡', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200', subText: '私人银行/财富传承级', ladderOrder: 5 },
 ];
+
+/**
+ * 💳 各大国际卡组织阶梯级别划分 (从基础到高端阶梯式上升)
+ */
+export const CARD_NETWORK_TIERS: Record<string, CardTierDefinition[]> = {
+  // ✅ Visa（维萨）: 普卡 (Classic) ➡️ 金卡 (Gold) ➡️ 白金卡 (Platinum) ➡️ 御玺卡 (Signature) ➡️ 无限卡 (Infinite)
+  VISA: [
+    { id: 'VISA_CLASSIC', label: '普卡 (Classic)', value: '普卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', subText: '全球通用基础卡', ladderOrder: 1 },
+    { id: 'VISA_GOLD', label: '金卡 (Gold)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200', subText: '全球紧急救援与优选折扣', ladderOrder: 2 },
+    { id: 'VISA_PLATINUM', label: '白金卡 (Platinum)', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', subText: '高端商旅与精选礼遇', ladderOrder: 3 },
+    { id: 'VISA_SIGNATURE', label: '御玺卡 (Signature)', value: '御玺卡', badgeClass: 'bg-cyan-50 text-cyan-800 border-cyan-300', subText: '全球礼宾顾问与星级酒店', ladderOrder: 4 },
+    { id: 'VISA_INFINITE', label: '无限卡 (Infinite)', value: '无限卡', badgeClass: 'bg-zinc-900 text-amber-300 border-zinc-700', subText: 'Visa 最高级别/无限专属礼遇', ladderOrder: 5 },
+  ],
+
+  // ✅ Mastercard（万事达卡）: 普卡 (Standard) ➡️ 金卡 (Gold) ➡️ 白金卡 (Platinum) ➡️ 钛金卡 (Titanium) ➡️ 世界卡 (World) ➡️ 世界之极卡 (World Elite)
+  MASTERCARD: [
+    { id: 'MC_STANDARD', label: '普卡 (Standard)', value: '普卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', subText: '万事达标准卡', ladderOrder: 1 },
+    { id: 'MC_GOLD', label: '金卡 (Gold)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200', subText: '无价体验优待', ladderOrder: 2 },
+    { id: 'MC_PLATINUM', label: '白金卡 (Platinum)', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', subText: '精选商旅特权', ladderOrder: 3 },
+    { id: 'MC_TITANIUM', label: '钛金卡 (Titanium)', value: '钛金卡', badgeClass: 'bg-slate-200 text-slate-800 border-slate-400', subText: '新锐品质精致礼遇', ladderOrder: 4 },
+    { id: 'MC_WORLD', label: '世界卡 (World)', value: '世界卡', badgeClass: 'bg-sky-50 text-sky-800 border-sky-300', subText: '环球商旅及度假权益', ladderOrder: 5 },
+    { id: 'MC_WORLD_ELITE', label: '世界之极卡 (World Elite)', value: '世界之极卡', badgeClass: 'bg-zinc-950 text-rose-300 border-zinc-800', subText: '万事达旗舰顶级黑卡', ladderOrder: 6 },
+  ],
+
+  // ✅ 中国银联 (UnionPay): 普卡 ➡️ 金卡 ➡️ 白金卡 ➡️ 钻石卡
+  UNIONPAY: [
+    { id: 'UP_STANDARD', label: '普卡 (Standard)', value: '普卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', subText: '全国及跨国清算通用', ladderOrder: 1 },
+    { id: 'UP_GOLD', label: '金卡 (Gold)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200', subText: '专属积分加倍/日常特惠', ladderOrder: 2 },
+    { id: 'UP_PLATINUM', label: '白金卡 (Platinum)', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', subText: '1元机场高铁停车/贵宾CIP', ladderOrder: 3 },
+    { id: 'UP_DIAMOND', label: '钻石卡 (Diamond)', value: '钻石卡', badgeClass: 'bg-blue-900 text-cyan-200 border-blue-700', subText: '银联最高级/机场礼宾/齿科健康', ladderOrder: 4 },
+  ],
+
+  // ✅ 美国运通 (American Express): 绿卡/金卡/百夫长白金卡 ➡️ 百夫长黑金卡（最高端）
+  AMEX: [
+    { id: 'AMEX_GREEN', label: '绿卡 (Green)', value: '绿卡', badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300', subText: '经典百夫长入门名片', ladderOrder: 1 },
+    { id: 'AMEX_GOLD', label: '金卡 (Gold)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200', subText: '美运餐饮娱乐双倍积分', ladderOrder: 2 },
+    { id: 'AMEX_PLATINUM', label: '百夫长白金卡 (Platinum)', value: '百夫长白金卡', badgeClass: 'bg-slate-200 text-slate-900 border-slate-400', subText: '全球百夫长贵宾室及顶级酒店', ladderOrder: 3 },
+    { id: 'AMEX_CENTURION', label: '百夫长黑金卡 (Centurion)', value: '百夫长黑金卡', badgeClass: 'bg-black text-amber-300 border-zinc-700', subText: '顶级邀请制/全球无尽可能', ladderOrder: 4 },
+  ],
+
+  // ✅ JCB (吉士美): 普卡 ➡️ 金卡 ➡️ 白金卡 ➡️ 至臻/御玺卡
+  JCB: [
+    { id: 'JCB_STANDARD', label: '普卡 (Standard)', value: '普卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', subText: 'JCB标准卡', ladderOrder: 1 },
+    { id: 'JCB_GOLD', label: '金卡 (Gold)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200', subText: '日本及亚太消费优待', ladderOrder: 2 },
+    { id: 'JCB_PLATINUM', label: '白金卡 (Platinum)', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', subText: '金色贵宾室/机场接送', ladderOrder: 3 },
+    { id: 'JCB_ULTIMATE', label: '至臻卡 (Ultimate)', value: '至臻卡', badgeClass: 'bg-zinc-900 text-sky-300 border-zinc-700', subText: 'JCB最高旗舰等级', ladderOrder: 4 },
+  ],
+};
+
+/**
+ * 统一快捷卡片等级列表 (兼顾通用展示与向后兼容)
+ */
+export const COMMON_CARD_TIERS: CardTierDefinition[] = [
+  { id: 'STANDARD', label: '普卡 (Classic)', value: '普卡', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { id: 'GOLD', label: '金卡 (Gold)', value: '金卡', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { id: 'PLATINUM', label: '白金卡 (Platinum)', value: '白金卡', badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  { id: 'DIAMOND', label: '钻石卡 (Diamond)', value: '钻石卡', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { id: 'WORLD', label: '御玺 / 世界卡', value: '御玺卡', badgeClass: 'bg-cyan-50 text-cyan-800 border-cyan-300' },
+  { id: 'BLACK', label: '百夫长黑金 / 无限卡', value: '百夫长黑金卡', badgeClass: 'bg-zinc-900 text-amber-300 border-zinc-700' },
+  { id: 'PRIVATE_BANKING', label: '私行卡 / 财富卡', value: '私行卡', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' },
+];
+
+/**
+ * 根据账户大类与卡组织获取精准的级别阶梯列表
+ */
+export function getTiersForContext(
+  category: AccountCategory,
+  cardNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'
+): CardTierDefinition[] {
+  if (category === 'DEBIT_CARD') {
+    return DEBIT_CARD_TIERS;
+  }
+  if (category === 'CREDIT_CARD') {
+    const net = cardNetwork || 'UNIONPAY';
+    if (CARD_NETWORK_TIERS[net]) {
+      return CARD_NETWORK_TIERS[net];
+    }
+    return CARD_NETWORK_TIERS.UNIONPAY;
+  }
+  return COMMON_CARD_TIERS;
+}
 
 export interface CardTierTheme {
   cardSkin: string;
@@ -1663,86 +1827,135 @@ export interface CardTierTheme {
 }
 
 /**
- * Intelligently derive card visual theme based on the card tier level
+ * Intelligently derive card visual theme based on the card tier level & card network
  */
-export function getTierTheme(tier: string = '', brand?: BankBrandInfo): CardTierTheme {
+export function getTierTheme(
+  tier: string = '',
+  brand?: BankBrandInfo,
+  preferredNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'
+): CardTierTheme {
   const t = (tier || '').toLowerCase();
 
-  // 1. Black / Centurion / Infinite
+  // 1. 百夫长黑金卡 / 世界之极卡 / 无限卡 (顶级殿堂黑金)
   if (
+    t.includes('百夫长黑金') ||
     t.includes('黑金') ||
-    t.includes('百夫长') ||
-    t.includes('无限') ||
-    t.includes('黑卡') ||
-    t.includes('centurion') ||
+    t.includes('世界之极') ||
     t.includes('world elite') ||
-    t.includes('infinite')
+    t.includes('无限卡') ||
+    t.includes('infinite') ||
+    t.includes('centurion black')
   ) {
+    let network: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' =
+      preferredNetwork && preferredNetwork !== 'NONE'
+        ? preferredNetwork
+        : t.includes('世界之极') || t.includes('world elite')
+        ? 'MASTERCARD'
+        : t.includes('无限') || t.includes('infinite')
+        ? 'VISA'
+        : 'AMEX';
+
     return {
       cardSkin: 'platinum-dark',
       cardBgColor: 'linear-gradient(135deg, #18181b 0%, #09090b 55%, #000000 100%)',
       cardPattern: 'mesh',
       cardTextColor: 'light',
-      cardNetwork: 'AMEX',
-      description: '尊爵黑金 / 百夫长纯黑暗纹',
+      cardNetwork: network,
+      description: '殿堂黑金 / 百夫长暗纹曜黑高定',
     };
   }
 
-  // 2. Diamond / Sapphire
-  if (t.includes('钻石') || t.includes('diamond')) {
+  // 2. 运通绿卡 (传奇经典百夫长罗马绿)
+  if (t === '绿卡' || t.includes('运通绿') || t.includes('green')) {
     return {
-      cardSkin: 'midnight-navy',
-      cardBgColor: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 45%, #0f172a 100%)',
+      cardSkin: 'abc-green',
+      cardBgColor: 'linear-gradient(135deg, #064e3b 0%, #047857 50%, #022c22 100%)',
       cardPattern: 'geometric',
       cardTextColor: 'light',
-      cardNetwork: 'UNIONPAY',
-      description: '皇家蓝钻 / 晶辉微光',
+      cardNetwork: preferredNetwork && preferredNetwork !== 'NONE' ? preferredNetwork : 'AMEX',
+      description: '百夫长绿卡 / 传奇经典罗马绿',
     };
   }
 
-  // 3. Platinum (白金卡)
+  // 3. 钛金卡 (Titanium)
+  if (t.includes('钛金') || t.includes('titanium')) {
+    return {
+      cardSkin: 'platinum-dark',
+      cardBgColor: 'linear-gradient(135deg, #64748b 0%, #475569 50%, #1e293b 100%)',
+      cardPattern: 'silk-stripes',
+      cardTextColor: 'light',
+      cardNetwork: preferredNetwork || 'MASTERCARD',
+      description: '航天钛金 / 拉丝精工哑光',
+    };
+  }
+
+  // 4. 御玺卡 (Signature) / 世界卡 (World)
+  if (t.includes('御玺') || t.includes('signature') || t.includes('世界卡') || t.includes('world')) {
+    let network: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'VISA';
+    if (t.includes('世界') || t.includes('world')) network = 'MASTERCARD';
+    else if (preferredNetwork && preferredNetwork !== 'NONE') network = preferredNetwork;
+
+    return {
+      cardSkin: 'midnight-navy',
+      cardBgColor: 'linear-gradient(135deg, #1e1b4b 0%, #1e3a8a 50%, #0f172a 100%)',
+      cardPattern: 'radial-sheen',
+      cardTextColor: 'light',
+      cardNetwork: network,
+      description: '御玺·世界 / 寰宇曜蓝奢享微光',
+    };
+  }
+
+  // 5. 钻石卡 (Diamond) / 私行卡 (Private Banking / 财富卡)
+  if (
+    t.includes('钻石') ||
+    t.includes('diamond') ||
+    t.includes('私行') ||
+    t.includes('私人银行') ||
+    t.includes('private banking') ||
+    t.includes('财富卡') ||
+    t.includes('沃德财富')
+  ) {
+    return {
+      cardSkin: 'midnight-navy',
+      cardBgColor: 'linear-gradient(135deg, #2e1065 0%, #1e1b4b 45%, #09090b 100%)',
+      cardPattern: 'geometric',
+      cardTextColor: 'light',
+      cardNetwork: preferredNetwork || 'UNIONPAY',
+      description: '皇家钻石·私行 / 晶辉深曜紫金',
+    };
+  }
+
+  // 6. 白金卡 (Platinum) / 百夫长白金卡
   if (t.includes('白金') || t.includes('platinum')) {
     return {
       cardSkin: 'platinum-dark',
-      cardBgColor: 'linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%)',
+      cardBgColor: 'linear-gradient(135deg, #27272a 0%, #18181b 50%, #09090b 100%)',
       cardPattern: 'radial-sheen',
       cardTextColor: 'light',
-      cardNetwork: 'UNIONPAY',
-      description: '曜石钛黑 / 白金高定高光',
+      cardNetwork: preferredNetwork || brand?.cardNetwork || 'UNIONPAY',
+      description: '曜石钛银 / 白金高定高光',
     };
   }
 
-  // 4. Gold (金卡)
-  if (t.includes('金卡') || t.includes('gold')) {
+  // 7. 金卡 (Gold) / 金葵花 / 理财金
+  if (t.includes('金卡') || t.includes('gold') || t.includes('金葵花') || t.includes('理财金')) {
     return {
       cardSkin: 'gold-metallic',
       cardBgColor: 'linear-gradient(135deg, #f59e0b 0%, #d97706 45%, #78350f 100%)',
       cardPattern: 'waves',
       cardTextColor: 'dark',
-      cardNetwork: 'UNIONPAY',
+      cardNetwork: preferredNetwork || brand?.cardNetwork || 'UNIONPAY',
       description: '24K璀璨纯金 / 流金波浪',
     };
   }
 
-  // 5. VIP / Sunflower / Wealth (贵宾理财 / 金葵花)
-  if (t.includes('金葵花') || t.includes('理财金') || t.includes('沃德') || t.includes('财富') || t.includes('贵宾')) {
-    return {
-      cardSkin: 'gold-metallic',
-      cardBgColor: 'linear-gradient(135deg, #78350f 0%, #451a03 50%, #1c0a00 100%)',
-      cardPattern: 'radial-sheen',
-      cardTextColor: 'light',
-      cardNetwork: 'UNIONPAY',
-      description: '尊贵私行 / 金葵花专属贵宾',
-    };
-  }
-
-  // 6. Standard / Young / Default
+  // 8. 普卡 (Classic / Standard) / 默认
   return {
     cardSkin: brand?.cardSkin || 'classic-cmb',
     cardBgColor: '',
     cardPattern: 'radial-sheen',
     cardTextColor: 'light',
-    cardNetwork: brand?.cardNetwork || 'UNIONPAY',
+    cardNetwork: preferredNetwork || brand?.cardNetwork || 'UNIONPAY',
     description: '官方标准品牌卡面',
   };
 }

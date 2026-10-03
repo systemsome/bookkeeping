@@ -31,6 +31,8 @@ import { detectBrandInfo, CARD_SKINS } from '../lib/brandHelper';
 import { BrandLogo, CardNetworkBadge, EMVChip, ContactlessIcon } from './BrandLogo';
 import { CardTextureOverlay } from './CardTextureOverlay';
 import { getCardentifyPreset } from '../lib/cardentifyPresets';
+import { TierCardLogo, getCardTierAesthetic } from './AccountCardFace';
+import { matchLogoHubBank } from '../lib/logohubData';
 
 interface AppleWalletViewProps {
   accounts: FinancialAccount[];
@@ -66,6 +68,7 @@ export const AppleWalletView: React.FC<AppleWalletViewProps> = ({
   const [walletFilter, setWalletFilter] = useState<WalletFilter>('ALL');
   const [copiedCardId, setCopiedCardId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [confirmDeleteCardId, setConfirmDeleteCardId] = useState<string | null>(null);
 
   // Active Card Object
   const activeCard = useMemo(() => {
@@ -376,6 +379,44 @@ export const AppleWalletView: React.FC<AppleWalletViewProps> = ({
                 </div>
                 <span className="text-[11px] font-bold">编辑</span>
               </button>
+
+              {confirmDeleteCardId === activeCard.id ? (
+                <div className="flex flex-col items-center justify-center p-2 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 animate-in fade-in duration-150">
+                  <span className="text-[10px] text-rose-700 dark:text-rose-300 font-bold mb-1">确定删除?</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteAccount(activeCard.id);
+                        setConfirmDeleteCardId(null);
+                        setActiveCardId(null);
+                      }}
+                      className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                    >
+                      确定
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteCardId(null)}
+                      className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded text-[10px] cursor-pointer"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteCardId(activeCard.id)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-all active:scale-95 border border-slate-200/60 dark:border-slate-700/60 cursor-pointer"
+                  title="删除此卡片"
+                >
+                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 hover:bg-rose-500 hover:text-white flex items-center justify-center mb-1.5 shadow-xs transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <span className="text-[11px] font-bold">删除</span>
+                </button>
+              )}
             </div>
 
             {/* Card Credential & Security Details */}
@@ -575,10 +616,19 @@ const WalletCardFace: React.FC<WalletCardFaceProps> = ({
   const textColorClass = isDarkMode ? 'text-slate-900' : 'text-white';
   const textSubClass = isDarkMode ? 'text-slate-600' : 'text-white/80';
 
+  const effectiveBankLogoUrl =
+    account.bankLogoUrl ||
+    matchLogoHubBank(account.bankName || '')?.logoUrl ||
+    matchLogoHubBank(brand.name)?.logoUrl ||
+    matchLogoHubBank(brand.shortName)?.logoUrl ||
+    matchLogoHubBank(account.name)?.logoUrl;
+
   const isCredit =
     account.category === 'CREDIT_CARD' ||
     account.category === 'JD_BAITIAO' ||
     account.category === 'HUABEI';
+
+  const aesthetic = getCardTierAesthetic(account.cardTier, account.cardNetwork, isCredit);
 
   const creditLimit = account.creditLimit || 0;
   const usedCredit = account.usedCredit !== undefined ? account.usedCredit : account.balance || 0;
@@ -618,25 +668,41 @@ const WalletCardFace: React.FC<WalletCardFaceProps> = ({
         {/* Left: Bank Logo & Name */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {hasCardImage ? (
-            /* When official artwork is active: Clean frosted pill with bank name */
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full backdrop-blur-md bg-black/45 border border-white/20 text-white shadow-xs max-w-[220px] truncate">
+            /* When official artwork is active: Clean frosted pill with bank name and LogoHub logo + TierCardLogo */
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full backdrop-blur-md bg-black/45 border border-white/20 text-white shadow-xs max-w-[240px] truncate select-none">
+              {effectiveBankLogoUrl && (
+                <div className="w-4 h-4 rounded-full bg-white flex items-center justify-center p-0.5 shrink-0 overflow-hidden shadow-2xs aspect-square border border-white/20">
+                  <img src={effectiveBankLogoUrl} alt="" className="w-full h-full object-contain" />
+                </div>
+              )}
               <span className="text-[11px] font-bold truncate">
                 {account.bankName || preset?.bankName || brand.shortName || brand.name || account.name}
               </span>
+              <TierCardLogo
+                tierType={aesthetic.tierType}
+                tierLabel={aesthetic.tierLabel}
+              />
             </div>
           ) : (
             <div className="flex items-center gap-2 min-w-0">
               {account.showBrandLogo && (
                 <BrandLogo
                   type={preset?.logoType || brand.logoType}
+                  logoUrl={effectiveBankLogoUrl}
                   size={isThumbnail ? 'sm' : 'md'}
                   className="shadow-sm ring-1 ring-white/20 shrink-0"
                 />
               )}
               <div className="min-w-0">
-                <h3 className="font-bold text-xs sm:text-sm tracking-wide truncate max-w-[150px]">
-                  {account.bankName || preset?.bankName || brand.name}
-                </h3>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-bold text-xs sm:text-sm tracking-wide truncate max-w-[150px]">
+                    {account.bankName || preset?.bankName || brand.name}
+                  </h3>
+                  <TierCardLogo
+                    tierType={aesthetic.tierType}
+                    tierLabel={aesthetic.tierLabel}
+                  />
+                </div>
                 <p className={`text-[9px] uppercase tracking-wider font-mono truncate ${textSubClass}`}>
                   {account.name}
                 </p>
@@ -674,20 +740,17 @@ const WalletCardFace: React.FC<WalletCardFaceProps> = ({
             <EMVChip size="md" className="shadow-sm" />
             <ContactlessIcon className={isDarkMode ? 'text-slate-700' : 'text-white/80'} />
           </div>
-          {account.cardTier && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full backdrop-blur-md bg-white/20 text-white border border-white/20">
-              {account.cardTier}
-            </span>
-          )}
         </div>
       )}
 
-      {/* 4. Bottom Footer: Masked Number & Holder (Visible in hero or full display) */}
+      {/* 4. Bottom Footer: Masked Number, Holder & Expiry */}
       <div className="relative z-10 p-3.5 sm:p-4 mt-auto flex items-end justify-between text-xs font-mono">
         <div>
-          <span className="text-xs sm:text-sm font-bold tracking-widest drop-shadow-sm">
-            •••• &nbsp;•••• &nbsp;•••• &nbsp;{account.cardNumberLast4 || '8888'}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs sm:text-sm font-bold tracking-widest drop-shadow-sm">
+              •••• &nbsp;•••• &nbsp;•••• &nbsp;{account.cardNumberLast4 || '8888'}
+            </span>
+          </div>
           <div className="text-[9px] uppercase tracking-wider font-sans mt-0.5 opacity-80">
             {account.holderName || 'ZHANG WEI'}
           </div>

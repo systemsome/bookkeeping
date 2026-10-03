@@ -144,3 +144,53 @@ input[type="number"] {
   box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.25), 0 6px 12px -4px rgba(0, 0, 0, 0.15);
 }
 
+/* Card Tier Artistic Visual Styles (卡片等级艺术风格与质感微光) */
+.card-art-black {
+  position: relative;
+  background: linear-gradient(135deg, #18181b 0%, #09090b 45%, #020202 100%);
+  border-color: rgba(251, 191, 36, 0.35) !important;
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(251, 191, 36, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
+
+.card-art-platinum {
+  position: relative;
+  background: linear-gradient(135deg, #334155 0%, #1e293b 50%, #0f172a 100%);
+  border-color: rgba(226, 232, 240, 0.45) !important;
+  box-shadow: 0 14px 32px -8px rgba(30, 41, 59, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+}
+
+.card-art-gold {
+  position: relative;
+  background: linear-gradient(135deg, #b45309 0%, #92400e 35%, #78350f 70%, #451a03 100%);
+  border-color: rgba(251, 191, 36, 0.55) !important;
+  box-shadow: 0 14px 32px -8px rgba(180, 83, 9, 0.45), 0 0 0 1px rgba(251, 191, 36, 0.25), inset 0 1px 2px rgba(254, 240, 138, 0.35);
+}
+
+.card-art-diamond {
+  position: relative;
+  background: linear-gradient(135deg, #1e1b4b 0%, #172554 45%, #030712 100%);
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  box-shadow: 0 14px 32px -8px rgba(30, 58, 138, 0.5), 0 0 0 1px rgba(56, 189, 248, 0.25), inset 0 1px 2px rgba(186, 230, 253, 0.3);
+}
+
+.card-art-world {
+  position: relative;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #020617 100%);
+  border-color: rgba(129, 140, 248, 0.45) !important;
+  box-shadow: 0 14px 32px -8px rgba(15, 23, 42, 0.6), 0 0 0 1px rgba(129, 140, 248, 0.2);
+}
+
+.card-art-green {
+  position: relative;
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #022c22 100%);
+  border-color: rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 14px 32px -8px rgba(6, 78, 59, 0.45), 0 0 0 1px rgba(52, 211, 153, 0.2);
+}
+
+.card-art-standard {
+  position: relative;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+

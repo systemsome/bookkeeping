@@ -165,7 +165,8 @@ export function getAllUnifiedCards(): UnifiedCardItem[] {
 
 // Get dynamic total card count across both databases (Cardentify + CardArt synced)
 export function getTotalGalleryCardsCount(): number {
-  return getAllCardentifyCards().length + getAllCardArtCards().length;
+  const local = getAllCardentifyCards().length + getAllCardArtCards().length;
+  return Math.max(3228, local);
 }
 
 // Convert Cardentify card to CardFacePreset format for backwards compatibility
@@ -501,10 +502,11 @@ export function matchBestCardentifyCard(
   name: string,
   bankName?: string,
   category?: string,
-  cardTier?: string
+  cardTier?: string,
+  cardNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' | string
 ): UnifiedCardItem | undefined {
   const isCredit = category === 'CREDIT_CARD';
-  const query = `${bankName || ''} ${name || ''} ${cardTier || ''}`.toLowerCase();
+  const query = `${bankName || ''} ${name || ''} ${cardTier || ''} ${cardNetwork || ''}`.toLowerCase();
   const allCards = getAllUnifiedCards();
 
   // 1. Bank matching
@@ -628,38 +630,127 @@ export function matchBestCardentifyCard(
       }
     }
 
+    // 1.5. Card Network Brand matching
+    if (cardNetwork && cardNetwork !== 'NONE') {
+      const netKey = String(cardNetwork).toLowerCase();
+      const bBrand = (c.brand || '').toLowerCase();
+      const bTags = (c.tags || []).join(' ').toLowerCase();
+
+      if (netKey === 'visa') {
+        if (bBrand.includes('visa') || cName.includes('visa') || bTags.includes('visa') || cName.includes('维萨')) {
+          score += 75;
+        } else if (bBrand.includes('unionpay') || bBrand.includes('银联')) {
+          score -= 30;
+        }
+      } else if (netKey === 'mastercard') {
+        if (bBrand.includes('master') || cName.includes('master') || bTags.includes('master') || cName.includes('万事达')) {
+          score += 75;
+        } else if (bBrand.includes('unionpay') || bBrand.includes('银联')) {
+          score -= 30;
+        }
+      } else if (netKey === 'amex') {
+        if (bBrand.includes('amex') || bBrand.includes('american') || cName.includes('运通') || bTags.includes('amex') || cName.includes('百夫长')) {
+          score += 75;
+        } else if (bBrand.includes('unionpay') || bBrand.includes('银联')) {
+          score -= 30;
+        }
+      } else if (netKey === 'jcb') {
+        if (bBrand.includes('jcb') || cName.includes('jcb') || bTags.includes('jcb')) {
+          score += 75;
+        } else if (bBrand.includes('unionpay') || bBrand.includes('银联')) {
+          score -= 30;
+        }
+      } else if (netKey === 'unionpay') {
+        if (bBrand.includes('unionpay') || bBrand.includes('银联') || cName.includes('银联') || bTags.includes('银联')) {
+          score += 40;
+        }
+      }
+    }
+
     // 2. High-precision Card Tier matching
     if (targetTier) {
-      // Platinum (白金)
-      if (targetTier.includes('白金') || targetTier.includes('platinum')) {
+      // Signature (御玺卡)
+      if (targetTier.includes('御玺') || targetTier.includes('signature')) {
+        if (cName.includes('御玺') || cTier.includes('御玺') || cTags.includes('signature')) {
+          score += 60;
+        }
+      }
+      // World / World Elite (世界卡 / 世界之极)
+      else if (targetTier.includes('世界之极') || targetTier.includes('world elite')) {
+        if (cName.includes('世界之极') || cTier.includes('世界之极') || cTags.includes('world elite')) {
+          score += 65;
+        } else if (cName.includes('世界') || cTier.includes('世界')) {
+          score += 35;
+        }
+      }
+      else if (targetTier.includes('世界') || targetTier.includes('world')) {
+        if (cName.includes('世界') || cTier.includes('世界') || cTags.includes('world')) {
+          score += 55;
+        }
+      }
+      // Infinite (无限卡)
+      else if (targetTier.includes('无限') || targetTier.includes('infinite')) {
+        if (cName.includes('无限') || cTier.includes('无限') || cTags.includes('infinite')) {
+          score += 65;
+        }
+      }
+      // Titanium (钛金卡)
+      else if (targetTier.includes('钛金') || targetTier.includes('titanium')) {
+        if (cName.includes('钛金') || cTier.includes('钛金') || cTags.includes('titanium')) {
+          score += 60;
+        }
+      }
+      // Centurion Green (绿卡)
+      else if (targetTier.includes('绿卡') || targetTier.includes('green')) {
+        if (cName.includes('绿卡') || cName.includes('绿色') || cTags.includes('green') || cName.includes('运通绿')) {
+          score += 55;
+        }
+      }
+      // Platinum (白金 / 百夫长白金)
+      else if (targetTier.includes('白金') || targetTier.includes('platinum')) {
         if (cName.includes('白金') || cTier.includes('白金') || cTags.includes('platinum')) {
           score += 45;
         } else if (cName.includes('金卡') && !cName.includes('白金')) {
           score -= 20; // Ordinary gold card is not platinum
         }
       }
-      // Black / Centurion / Infinite (黑金 / 黑卡 / 百夫长)
+      // Black / Centurion (黑金 / 黑卡 / 百夫长黑金)
       else if (
         targetTier.includes('黑金') ||
         targetTier.includes('百夫长') ||
-        targetTier.includes('无限') ||
         targetTier.includes('黑卡') ||
         targetTier.includes('centurion')
       ) {
-        if (cName.includes('黑金') || cName.includes('百夫长') || cName.includes('无限') || cName.includes('黑卡') || cName.includes('black') || cTier.includes('黑')) {
-          score += 50;
+        if (cName.includes('黑金') || cName.includes('百夫长') || cName.includes('黑卡') || cName.includes('black') || cTier.includes('黑')) {
+          score += 55;
         }
       }
       // Diamond (钻石)
       else if (targetTier.includes('钻石') || targetTier.includes('diamond')) {
         if (cName.includes('钻石') || cTier.includes('钻石') || cTags.includes('diamond')) {
-          score += 50;
+          score += 55;
         }
       }
-      // VIP Banking (金葵花 / 理财金 / 沃德 / 财富)
-      else if (targetTier.includes('金葵花') || targetTier.includes('理财金') || targetTier.includes('沃德') || targetTier.includes('财富') || targetTier.includes('贵宾')) {
-        if (cName.includes('金葵花') || cName.includes('理财金') || cName.includes('沃德') || cName.includes('财富') || cName.includes('贵宾')) {
-          score += 50;
+      // Private Banking / VIP (私行卡 / 金葵花 / 理财金 / 沃德 / 财富)
+      else if (
+        targetTier.includes('私行') ||
+        targetTier.includes('私人银行') ||
+        targetTier.includes('金葵花') ||
+        targetTier.includes('理财金') ||
+        targetTier.includes('沃德') ||
+        targetTier.includes('财富') ||
+        targetTier.includes('贵宾')
+      ) {
+        if (
+          cName.includes('私行') ||
+          cName.includes('私人银行') ||
+          cName.includes('金葵花') ||
+          cName.includes('理财金') ||
+          cName.includes('沃德') ||
+          cName.includes('财富') ||
+          cName.includes('贵宾')
+        ) {
+          score += 55;
         }
       }
       // Gold (金卡，不含白金)

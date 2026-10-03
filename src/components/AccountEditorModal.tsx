@@ -19,7 +19,7 @@ import {
   SlidersHorizontal,
   SunMoon,
 } from 'lucide-react';
-import { FinancialAccount, AccountCategory } from '../types';
+import { FinancialAccount, AccountCategory, BankAccountClass } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
 import {
   BANK_BRANDS,
@@ -33,6 +33,10 @@ import {
   getDefaultPresetForCategory,
   getBrandsForCategory,
   COMMON_CARD_TIERS,
+  DEBIT_CARD_TIERS,
+  CARD_NETWORK_TIERS,
+  BANK_ACCOUNT_CLASSES,
+  getTiersForContext,
   getTierTheme,
 } from '../lib/brandHelper';
 import {
@@ -49,8 +53,10 @@ import {
   getCachedGoldRate,
   GoldMarketRate,
 } from '../lib/goldRates';
+import { fetchDualGalleryStats } from '../lib/gallerySync';
 import { AccountCardFace } from './AccountCardFace';
 import { BrandLogo, CardNetworkBadge } from './BrandLogo';
+import { matchLogoHubBank } from '../lib/logohubData';
 
 interface AccountEditorModalProps {
   initialAccount?: FinancialAccount | null;
@@ -74,7 +80,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   );
   const [name, setName] = useState(initialAccount?.name || '');
   const [bankName, setBankName] = useState(initialAccount?.bankName || '');
+  const [bankLogoUrl, setBankLogoUrl] = useState<string>(
+    initialAccount?.bankLogoUrl || matchLogoHubBank(initialAccount?.bankName || initialAccount?.name)?.logoUrl || ''
+  );
   const [cardNumberLast4, setCardNumberLast4] = useState(initialAccount?.cardNumberLast4 || '');
+  const [accountClass, setAccountClass] = useState<BankAccountClass>(
+    initialAccount?.accountClass || 'CLASS_1'
+  );
   const [holderName, setHolderName] = useState(initialAccount?.holderName || '持卡人姓名');
   const [cardTier, setCardTier] = useState(initialAccount?.cardTier || '');
   const [cardSkin, setCardSkin] = useState(initialAccount?.cardSkin || '');
@@ -88,6 +100,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [cardNetwork, setCardNetwork] = useState<'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'>(
     initialAccount?.cardNetwork || 'UNIONPAY'
   );
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const [balance, setBalance] = useState<string>(
     initialAccount?.balance !== undefined ? initialAccount.balance.toString() : '0'
@@ -122,16 +135,31 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
   const [isFetchingGold, setIsFetchingGold] = useState<boolean>(false);
   const [isCardentifyGalleryOpen, setIsCardentifyGalleryOpen] = useState<boolean>(false);
-  const [totalGalleryCardsCount, setTotalGalleryCardsCount] = useState<number>(() => getTotalGalleryCardsCount());
+  const [totalGalleryCardsCount, setTotalGalleryCardsCount] = useState<number>(5069);
 
   // Real-time listener for dual-library gallery updates
   useEffect(() => {
-    const handleGalleryUpdate = () => {
-      setTotalGalleryCardsCount(getTotalGalleryCardsCount());
+    const handleGalleryUpdate = (e?: any) => {
+      if (e?.detail?.total) {
+        setTotalGalleryCardsCount(e.detail.total);
+      } else {
+        fetchDualGalleryStats()
+          .then((stats) => {
+            if (stats.totalCount) setTotalGalleryCardsCount(stats.totalCount);
+          })
+          .catch(() => {});
+      }
     };
     window.addEventListener('gallery-updated', handleGalleryUpdate);
     window.addEventListener('cardart-updated', handleGalleryUpdate);
     window.addEventListener('cardentify-updated', handleGalleryUpdate);
+
+    fetchDualGalleryStats()
+      .then((stats) => {
+        if (stats.totalCount) setTotalGalleryCardsCount(stats.totalCount);
+      })
+      .catch(() => {});
+
     return () => {
       window.removeEventListener('gallery-updated', handleGalleryUpdate);
       window.removeEventListener('cardart-updated', handleGalleryUpdate);
@@ -141,7 +169,11 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
 
   // Update whenever gallery modal closes or opens
   useEffect(() => {
-    setTotalGalleryCardsCount(getTotalGalleryCardsCount());
+    fetchDualGalleryStats()
+      .then((stats) => {
+        if (stats.totalCount) setTotalGalleryCardsCount(stats.totalCount);
+      })
+      .catch(() => {});
   }, [isCardentifyGalleryOpen]);
 
   // Auto fetch latest gold market price
@@ -185,16 +217,18 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     }
   };
 
-  // Intelligent Auto-select Card Face based on Card Tier & Bank
+  // Intelligent Auto-select Card Face based on Card Tier & Bank & Network
   const applyCardTierAndFace = (
     newTier: string,
     targetBank?: string,
     targetName?: string,
-    targetCategory?: AccountCategory
+    targetCategory?: AccountCategory,
+    targetNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'
   ) => {
     const effectiveBank = targetBank !== undefined ? targetBank : bankName;
     const effectiveCategory = targetCategory !== undefined ? targetCategory : category;
     const effectiveName = targetName !== undefined ? targetName : (name || `${effectiveBank || ''}${newTier}`);
+    const effectiveNetwork = targetNetwork !== undefined ? targetNetwork : cardNetwork;
 
     setCardTier(newTier);
 
@@ -203,7 +237,8 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       effectiveName,
       effectiveBank,
       effectiveCategory,
-      newTier
+      newTier,
+      effectiveNetwork
     );
 
     if (matchedCard) {
@@ -214,29 +249,36 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setCardPresetId(presetId);
       setCardImageUrl(matchedCard.imageUrl);
 
-      let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
-      const brandUp = (matchedCard.brand || '').toUpperCase();
-      if (brandUp.includes('VISA')) net = 'VISA';
-      else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
-      else if (brandUp.includes('AMEX')) net = 'AMEX';
-      else if (brandUp.includes('JCB')) net = 'JCB';
+      // CRITICAL FIX: If user explicitly specified cardNetwork, PRESERVE IT!
+      // Do not overwrite user's selected card organization (e.g., VISA/MASTERCARD/AMEX) back to UnionPay!
+      let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' =
+        effectiveNetwork && effectiveNetwork !== 'NONE' ? effectiveNetwork : 'UNIONPAY';
+
+      if (!effectiveNetwork || effectiveNetwork === 'NONE') {
+        const brandUp = (matchedCard.brand || '').toUpperCase();
+        if (brandUp.includes('VISA')) net = 'VISA';
+        else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
+        else if (brandUp.includes('AMEX') || brandUp.includes('AMERICAN')) net = 'AMEX';
+        else if (brandUp.includes('JCB')) net = 'JCB';
+        else if (brandUp.includes('UNIONPAY') || brandUp.includes('银联')) net = 'UNIONPAY';
+      }
       setCardNetwork(net);
 
       const brandInfo = detectBrandInfo(effectiveName, effectiveBank, effectiveCategory);
-      const tierTheme = getTierTheme(newTier, brandInfo);
+      const tierTheme = getTierTheme(newTier, brandInfo, net);
       setCardSkin(tierTheme.cardSkin);
       setCardPattern(tierTheme.cardPattern);
       setCardTextColor(tierTheme.cardTextColor);
       setCardBgColor('');
 
-      setAutoGenMsg(`✨ 已根据「${newTier}」智能匹配「${matchedCard.name}」高清卡面`);
-      setTimeout(() => setAutoGenMsg(''), 3500);
+      setAutoGenMsg(`✨ 已根据「${newTier}」智能联动「${matchedCard.name}」高清卡面与卡面艺廊`);
+      setTimeout(() => setAutoGenMsg(''), 4000);
       return;
     }
 
     // 2. If no exact HD card face image exists, apply tier-specific luxury skin & gradient
     const brandInfo = detectBrandInfo(effectiveName, effectiveBank, effectiveCategory);
-    const tierTheme = getTierTheme(newTier, brandInfo);
+    const tierTheme = getTierTheme(newTier, brandInfo, effectiveNetwork);
 
     if (!cardImageUrl) {
       setCardPresetId('');
@@ -245,12 +287,14 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setCardPattern(tierTheme.cardPattern);
       setCardTextColor(tierTheme.cardTextColor);
     }
-    if (tierTheme.cardNetwork && (!cardNetwork || cardNetwork === 'NONE')) {
+    if (effectiveNetwork && effectiveNetwork !== 'NONE') {
+      setCardNetwork(effectiveNetwork);
+    } else if (tierTheme.cardNetwork && (!cardNetwork || cardNetwork === 'NONE')) {
       setCardNetwork(tierTheme.cardNetwork);
     }
 
-    setAutoGenMsg(`🎨 已根据「${newTier}」自动适配 ${tierTheme.description}`);
-    setTimeout(() => setAutoGenMsg(''), 3500);
+    setAutoGenMsg(`🎨 已根据「${newTier}」自动联动 ${tierTheme.description}`);
+    setTimeout(() => setAutoGenMsg(''), 4000);
   };
 
   // Handle category switching with complete intelligent auto-matching
@@ -293,6 +337,12 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setBalance(preset.balance);
     }
 
+    if (preset.bankLogoUrl) {
+      setBankLogoUrl(preset.bankLogoUrl);
+    } else {
+      setBankLogoUrl('');
+    }
+
     // Automatically select card face based on tier
     applyCardTierAndFace(preset.cardTier, preset.bankName, preset.name, newCategory);
   };
@@ -305,6 +355,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setBankName(preset.bankName);
       setCardNetwork(preset.cardNetwork);
       setColor(preset.primaryColor);
+      if (preset.bankLogoUrl) {
+        setBankLogoUrl(preset.bankLogoUrl);
+      }
       applyCardTierAndFace(preset.cardTier, preset.bankName, preset.name, category);
     }
   }, [isEdit]);
@@ -332,14 +385,28 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
 
   const handleResetToDefaultSkin = () => {
     setCardBgColor('');
+    setCardImageUrl('');
+    setCardPresetId('');
     const brand = detectBrandInfo(name, bankName, category);
     setCardSkin(brand.cardSkin);
-    setAutoGenMsg(`↺ 已恢复「${brand.name}」官方默认卡面`);
+    setAutoGenMsg(`↺ 已恢复「${brand.name}」官方默认卡面并清除自定义卡面图`);
     setTimeout(() => setAutoGenMsg(''), 3500);
   };
 
   // Apply a brand preset directly with context awareness and tier-based cardface selection
-  const handleSelectBrandPreset = (brand: BankBrandInfo) => {
+  const handleSelectBrandPreset = (brand: BankBrandInfo, explicitLogoUrl?: string) => {
+    // 🏦 调用 https://logohub.afengblog.com/ 数据库数据获取官方矢量徽标URL并永久写入
+    const finalLogoUrl =
+      explicitLogoUrl ||
+      brand.bankLogoUrl ||
+      matchLogoHubBank(brand.name)?.logoUrl ||
+      matchLogoHubBank(brand.shortName)?.logoUrl ||
+      matchLogoHubBank(brand.id)?.logoUrl ||
+      '';
+    if (finalLogoUrl) {
+      setBankLogoUrl(finalLogoUrl);
+    }
+
     const isDedicatedCategoryBrand = [
       'HUABEI',
       'JD_BAITIAO',
@@ -381,7 +448,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setCardTier('9999足金积存账户');
       setCardSkin('gold-metallic');
       setColor(brand.primaryColor);
-      setAutoGenMsg(`✨ 已应用「${brand.shortName}」贵金属积存官方卡面与LOGO`);
+      setAutoGenMsg(`✨ 已应用「${brand.shortName}」贵金属积存官方卡面与LogoHub徽标`);
       setTimeout(() => setAutoGenMsg(''), 3500);
       return;
     }
@@ -392,7 +459,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       setCardTier('公募ETF/混合基金组合');
       setCardSkin(brand.cardSkin);
       setColor(brand.primaryColor);
-      setAutoGenMsg(`✨ 已应用「${brand.shortName}」公募基金理财卡面与LOGO`);
+      setAutoGenMsg(`✨ 已应用「${brand.shortName}」公募基金理财卡面与LogoHub徽标`);
       setTimeout(() => setAutoGenMsg(''), 3500);
       return;
     }
@@ -408,9 +475,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     applyCardTierAndFace(curTier, bName, accName, 'DEBIT_CARD');
   };
 
-  // Bank name input handler: updates bank name only, no longer forced real-time exclusive logo linkage
+  // Bank name input handler: updates bank name only, auto-queries LogoHub for vector logo
   const handleBankNameChange = (newBankVal: string) => {
     setBankName(newBankVal);
+    const matched = matchLogoHubBank(newBankVal);
+    if (matched?.logoUrl) {
+      setBankLogoUrl(matched.logoUrl);
+    }
   };
 
   const isCredit = category === 'CREDIT_CARD' || category === 'JD_BAITIAO' || category === 'HUABEI';
@@ -430,7 +501,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     name: name || '资产卡片名称',
     category,
     bankName: bankName || undefined,
+    bankLogoUrl: bankLogoUrl || undefined,
     cardNumberLast4: cardNumberLast4 || undefined,
+    accountClass: category === 'DEBIT_CARD' ? accountClass : undefined,
     balance: calcBalance,
     creditLimit: isCredit ? parseFloat(creditLimit) || 0 : undefined,
     usedCredit: isCredit ? parseFloat(usedCredit) || 0 : undefined,
@@ -459,13 +532,22 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = name.trim() || bankName.trim() || (ACCOUNT_CATEGORY_CONFIG[category]?.label || '银行卡账户');
+    const isYuebao = category === 'YUEBAO' || bankName.trim() === '余额宝' || finalName.includes('余额宝');
+    const finalBankLogoUrl = isYuebao
+      ? 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg'
+      : (bankLogoUrl.trim() ||
+         matchLogoHubBank(bankName.trim())?.logoUrl ||
+         matchLogoHubBank(finalName)?.logoUrl ||
+         undefined);
 
     const saved: FinancialAccount = {
       id: initialAccount?.id || 'acc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       name: finalName,
       category,
       bankName: bankName.trim() || undefined,
+      bankLogoUrl: finalBankLogoUrl,
       cardNumberLast4: cardNumberLast4.trim() || undefined,
+      accountClass: category === 'DEBIT_CARD' ? accountClass : undefined,
       balance: calcBalance,
       creditLimit: isCredit ? parseFloat(creditLimit) || 0 : undefined,
       usedCredit: isCredit ? parseFloat(usedCredit) || 0 : undefined,
@@ -624,19 +706,25 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 modal-custom-scrollbar">
               {getBrandsForCategory(category, brandFilterTab).map((b) => {
                 const isSelected = bankName === b.shortName || name.includes(b.shortName);
+                const logoUrl =
+                  b.bankLogoUrl ||
+                  (b.id === 'YUEBAO' ? 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg' : '') ||
+                  matchLogoHubBank(b.name)?.logoUrl ||
+                  matchLogoHubBank(b.shortName)?.logoUrl ||
+                  matchLogoHubBank(b.id)?.logoUrl;
                 return (
                   <button
                     key={b.id}
                     type="button"
-                    onClick={() => handleSelectBrandPreset(b)}
+                    onClick={() => handleSelectBrandPreset(b, logoUrl)}
                     className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
                       isSelected
                         ? 'bg-slate-900 text-white border-slate-900 shadow-sm scale-102 ring-2 ring-blue-500/30'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
                     }`}
-                    title={`点击快速套用「${b.name}」官方卡面、LOGO与品牌底色`}
+                    title={`点击快速套用「${b.name}」LogoHub官方矢量徽标、卡面与品牌底色`}
                   >
-                    <BrandLogo type={b.logoType} size="sm" />
+                    <BrandLogo type={b.logoType} logoUrl={logoUrl} size="sm" className="w-5 h-5 shrink-0" />
                     <span>{b.shortName}</span>
                   </button>
                 );
@@ -807,11 +895,20 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 </label>
                 <select
                   value={cardNetwork}
-                  onChange={(e) => setCardNetwork(e.target.value as any)}
+                  onChange={(e) => {
+                    const newNet = e.target.value as any;
+                    setCardNetwork(newNet);
+                    if (category === 'CREDIT_CARD') {
+                      const ladders = CARD_NETWORK_TIERS[newNet] || CARD_NETWORK_TIERS.UNIONPAY;
+                      const hasTier = ladders.some((l) => cardTier && (cardTier === l.value || l.value.includes(cardTier) || cardTier.includes(l.value)));
+                      const targetTier = hasTier ? cardTier : (ladders.length > 0 ? ladders[Math.min(2, ladders.length - 1)].value : '普卡');
+                      applyCardTierAndFace(targetTier, undefined, undefined, category, newNet);
+                    }
+                  }}
                   className="w-full px-2 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none font-bold"
                 >
                   <option value="UNIONPAY">中国银联 UnionPay</option>
-                  <option value="VISA">VISA</option>
+                  <option value="VISA">VISA (维萨)</option>
                   <option value="MASTERCARD">万事达 Mastercard</option>
                   <option value="AMEX">美国运通 AMEX</option>
                   <option value="JCB">JCB (吉士美)</option>
@@ -820,44 +917,206 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
               </div>
             </div>
 
-            {/* Quick Card Tier Chips · Automatically Selects Corresponding Card Face */}
-            <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-slate-50 to-indigo-50/70 border border-indigo-100/90 space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-1">
-                <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>卡片等级快捷切换（自动联动对应卡面艺廊与质感）</span>
-                </span>
-                <span className="text-[10px] text-slate-400">点击自动匹配对应卡面</span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {COMMON_CARD_TIERS.map((tierItem) => {
-                  const isCurrent =
-                    cardTier === tierItem.value ||
-                    (tierItem.id === 'PLATINUM' && cardTier.includes('白金')) ||
-                    (tierItem.id === 'GOLD' && cardTier.includes('金卡') && !cardTier.includes('白金')) ||
-                    (tierItem.id === 'BLACK' && (cardTier.includes('黑') || cardTier.includes('百夫长') || cardTier.includes('无限'))) ||
-                    (tierItem.id === 'DIAMOND' && cardTier.includes('钻石')) ||
-                    (tierItem.id === 'VIP' && (cardTier.includes('金葵花') || cardTier.includes('理财金') || cardTier.includes('沃德') || cardTier.includes('贵宾'))) ||
-                    (tierItem.id === 'STANDARD' && (cardTier.includes('普卡') || cardTier.includes('标准') || cardTier.includes('借记')));
+            {/* 💳 储蓄卡与信用卡级别设置（简洁规范设计） */}
+            {category === 'DEBIT_CARD' ? (
+              <div className="space-y-2.5">
+                {/* 维度一：央行账户功能权限级别（简洁化 3 栏控制） */}
+                <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>账户功能级别</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-700/80 font-medium">央行统一监管规范</span>
+                  </div>
 
-                  return (
-                    <button
-                      key={tierItem.id}
-                      type="button"
-                      onClick={() => applyCardTierAndFace(tierItem.value)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all active:scale-95 border flex items-center gap-1.5 ${
-                        isCurrent
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-bold scale-102 ring-2 ring-indigo-500/20'
-                          : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/60 shadow-2xs'
-                      }`}
-                    >
-                      <span>{tierItem.label}</span>
-                      {isCurrent && <Check className="w-3 h-3 text-white" />}
-                    </button>
-                  );
-                })}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {BANK_ACCOUNT_CLASSES.map((cls) => {
+                      const isSelected = accountClass === cls.id;
+                      return (
+                        <button
+                          key={cls.id}
+                          type="button"
+                          onClick={() => setAccountClass(cls.id)}
+                          className={`p-2 rounded-xl text-center transition-all border flex flex-col items-center justify-center gap-0.5 ${
+                            isSelected
+                              ? 'bg-white text-emerald-900 border-emerald-500 shadow-xs font-bold ring-2 ring-emerald-500/20'
+                              : 'bg-white/70 text-slate-700 border-emerald-200/60 hover:bg-white hover:border-emerald-300'
+                          }`}
+                          title={`${cls.label} · ${cls.features} · ${cls.limitations}`}
+                        >
+                          <div className="flex items-center gap-1 text-xs font-bold">
+                            <span>{cls.shortLabel}</span>
+                            {isSelected && <Check className="w-3 h-3 text-emerald-600 shrink-0" />}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-normal truncate max-w-full">
+                            {cls.id === 'CLASS_1' ? '全功能·无限制' : cls.id === 'CLASS_2' ? '理财限额·日1万' : '零钱快捷·≤2千'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 维度二：客户资产与卡片权益级别（简洁化） */}
+                <div className="p-3 rounded-2xl bg-indigo-50/60 border border-indigo-100/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>储蓄卡权益级别</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">点击自动匹配质感卡面</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {DEBIT_CARD_TIERS.map((tierItem) => {
+                      const isCurrent =
+                        cardTier === tierItem.value ||
+                        (tierItem.id === 'PLATINUM' && cardTier.includes('白金')) ||
+                        (tierItem.id === 'GOLD' && cardTier.includes('金卡') && !cardTier.includes('白金')) ||
+                        (tierItem.id === 'DIAMOND' && cardTier.includes('钻石')) ||
+                        (tierItem.id === 'PRIVATE_BANKING' && (cardTier.includes('私行') || cardTier.includes('财富') || cardTier.includes('金葵花') || cardTier.includes('理财金'))) ||
+                        (tierItem.id === 'STANDARD' && (cardTier.includes('普卡') || cardTier.includes('标准') || cardTier.includes('借记')));
+
+                      return (
+                        <button
+                          key={tierItem.id}
+                          type="button"
+                          onClick={() => applyCardTierAndFace(tierItem.value, undefined, undefined, 'DEBIT_CARD', cardNetwork)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1 ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-500/20 font-bold'
+                              : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/50'
+                          }`}
+                          title={tierItem.subText}
+                        >
+                          <span>{tierItem.label.split(' ')[0]}</span>
+                          {isCurrent && <Check className="w-3 h-3 text-white" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : isCredit ? (
+              /* 💳 信用卡卡组织与权益级别阶梯（简洁化 & 卡组织多选修复） */
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-50/60 via-slate-50 to-indigo-50/60 border border-rose-200/70 space-y-2.5 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-rose-600" />
+                    <span>信用卡组织与权益级别</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    当前组织: <strong className="text-rose-700">{cardNetwork === 'VISA' ? 'VISA (维萨)' : cardNetwork === 'MASTERCARD' ? '万事达卡' : cardNetwork === 'AMEX' ? '美国运通' : cardNetwork === 'JCB' ? 'JCB' : '中国银联'}</strong>
+                  </span>
+                </div>
+
+                {/* 卡组织快速切换分段选项卡 */}
+                <div className="grid grid-cols-5 gap-1 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80">
+                  {[
+                    { id: 'UNIONPAY', name: '中国银联' },
+                    { id: 'VISA', name: 'VISA' },
+                    { id: 'MASTERCARD', name: '万事达' },
+                    { id: 'AMEX', name: '美国运通' },
+                    { id: 'JCB', name: 'JCB' },
+                  ].map((netItem) => {
+                    const isNetActive = cardNetwork === netItem.id;
+                    return (
+                      <button
+                        key={netItem.id}
+                        type="button"
+                        onClick={() => {
+                          const newNet = netItem.id as any;
+                          setCardNetwork(newNet);
+                          const ladders = CARD_NETWORK_TIERS[newNet] || CARD_NETWORK_TIERS.UNIONPAY;
+                          const hasTier = ladders.some((l) => cardTier && (cardTier === l.value || l.value.includes(cardTier) || cardTier.includes(l.value)));
+                          const targetTier = hasTier ? cardTier : (ladders.length > 0 ? ladders[Math.min(2, ladders.length - 1)].value : '普卡');
+                          applyCardTierAndFace(targetTier, undefined, undefined, 'CREDIT_CARD', newNet);
+                        }}
+                        className={`py-1 px-1 rounded-lg text-[11px] font-bold transition-all text-center truncate ${
+                          isNetActive
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                        }`}
+                      >
+                        {netItem.name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 对应卡组织的阶梯级别快捷按钮 */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  {(CARD_NETWORK_TIERS[cardNetwork] || CARD_NETWORK_TIERS.UNIONPAY).map((tierItem, idx, arr) => {
+                    const isCurrent =
+                      cardTier === tierItem.value ||
+                      (tierItem.id.includes('INFINITE') && (cardTier.includes('无限') || cardTier.includes('infinite'))) ||
+                      (tierItem.id.includes('WORLD_ELITE') && (cardTier.includes('世界之极') || cardTier.includes('world elite'))) ||
+                      (tierItem.id.includes('CENTURION') && (cardTier.includes('百夫长黑金') || cardTier.includes('黑金'))) ||
+                      (tierItem.id.includes('SIGNATURE') && (cardTier.includes('御玺') || cardTier.includes('signature'))) ||
+                      (tierItem.id.includes('WORLD') && !tierItem.id.includes('ELITE') && (cardTier.includes('世界') && !cardTier.includes('极'))) ||
+                      (tierItem.id.includes('TITANIUM') && (cardTier.includes('钛金') || cardTier.includes('titanium'))) ||
+                      (tierItem.id.includes('GREEN') && (cardTier.includes('绿卡') || cardTier.includes('green'))) ||
+                      (tierItem.id.includes('PLATINUM') && cardTier.includes('白金')) ||
+                      (tierItem.id.includes('DIAMOND') && cardTier.includes('钻石')) ||
+                      (tierItem.id.includes('GOLD') && cardTier.includes('金卡') && !cardTier.includes('白金')) ||
+                      (tierItem.id.includes('STANDARD') && (cardTier.includes('普卡') || cardTier.includes('标准')));
+
+                    return (
+                      <React.Fragment key={tierItem.id}>
+                        <button
+                          type="button"
+                          onClick={() => applyCardTierAndFace(tierItem.value, undefined, undefined, 'CREDIT_CARD', cardNetwork)}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1 ${
+                            isCurrent
+                              ? 'bg-rose-600 text-white border-rose-600 shadow-xs font-bold ring-2 ring-rose-500/20'
+                              : 'bg-white text-slate-700 border-slate-200/90 hover:border-rose-300 hover:bg-rose-50/60'
+                          }`}
+                          title={`${tierItem.label} · ${tierItem.subText || ''}`}
+                        >
+                          <span>{tierItem.label.split(' ')[0]}</span>
+                          {isCurrent && <Check className="w-3 h-3 text-white" />}
+                        </button>
+                        {idx < arr.length - 1 && (
+                          <span className="text-slate-300 text-xs font-bold select-none">→</span>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* 通用卡片等级（简洁化） */
+              <div className="p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100/80 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>卡片等级快捷切换</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">点击自动匹配质感卡面</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {COMMON_CARD_TIERS.map((tierItem) => {
+                    const isCurrent = cardTier === tierItem.value || cardTier.includes(tierItem.value);
+                    return (
+                      <button
+                        key={tierItem.id}
+                        type="button"
+                        onClick={() => applyCardTierAndFace(tierItem.value, undefined, undefined, category, cardNetwork)}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1 ${
+                          isCurrent
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-bold ring-2 ring-indigo-500/20'
+                            : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/60'
+                        }`}
+                      >
+                        <span>{tierItem.label.split(' ')[0]}</span>
+                        {isCurrent && <Check className="w-3 h-3 text-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Specific fields for Credit Card / BaiTiao */}
             {isCredit ? (
@@ -1554,19 +1813,37 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-slate-100 bg-slate-50/95 backdrop-blur-md flex items-center justify-between gap-3 z-20">
         <div>
           {isEdit && onDelete && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(`确定要从资产库中移除「${name}」吗？`)) {
-                  onDelete(initialAccount.id);
-                  onClose();
-                }
-              }}
-              className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>删除此卡片</span>
-            </button>
+            confirmDelete ? (
+              <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-in fade-in duration-150">
+                <span className="text-xs text-rose-800 font-semibold">确定移除此卡片？</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(initialAccount.id);
+                    onClose();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                >
+                  确定删除
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-medium text-xs border border-slate-200 transition-colors cursor-pointer"
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>删除此卡片</span>
+              </button>
+            )
           )}
         </div>
 
@@ -1598,6 +1875,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       onClose={() => setIsCardentifyGalleryOpen(false)}
       currentImageUrl={cardImageUrl}
       defaultBankQuery={bankName || name}
+      defaultTier={cardTier}
       onSelectCard={(card) => {
         setCardImageUrl(card.imageUrl);
         const presetId = String(card.id).startsWith('card') ? String(card.id) : `cardentify-${card.id}`;

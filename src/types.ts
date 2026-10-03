@@ -21,11 +21,17 @@ export type AssetGroup =
   | 'CASH'            // 现金
   | 'LEND_BORROW';    // 借贷
 
+export type BankAccountClass =
+  | 'CLASS_1'  // Ⅰ类户（全功能实体卡，存取转理消无金额限制，同银行限1个）
+  | 'CLASS_2'  // Ⅱ类户（虚拟/实体限额卡，理财投资，日限1万，年限20万）
+  | 'CLASS_3'; // Ⅲ类户（微型零钱包，小额快捷支付，余额通常≤2000元）
+
 export interface FinancialAccount {
   id: string;
   name: string;
   category: AccountCategory;
   bankName?: string;
+  bankLogoUrl?: string; // 🏦 官方正版矢量银行徽标URL (来源于 https://logohub.afengblog.com/ 并持久化写入数据库)
   cardNumberLast4?: string;
   balance: number; // 现有余额 / 市值 / 欠款金额 / 借出金额
   creditLimit?: number; // 信用总额度 (信用卡 & 京东白条专用)
@@ -38,6 +44,9 @@ export interface FinancialAccount {
   notes?: string;
   updatedAt: string;
   
+  // 储蓄卡央行账户功能权限级别 (Ⅰ类户 / Ⅱ类户 / Ⅲ类户)
+  accountClass?: BankAccountClass;
+
   // Card Face Customization fields (inspired by Apple Pay & no2ac/Cardentify)
   holderName?: string; // 持卡人姓名 (如 "张伟" / "ZHANG WEI")
   cardNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'; // 卡组织 (银联 / VISA / 万事达 / 美国运通 / JCB / 无)
@@ -229,4 +238,6 @@ export interface ProjectFinancialStats {
 }
 
 export type CloudSyncStatus = 'syncing' | 'synced' | 'error' | 'offline';
+
+export type ProjectBadgePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 

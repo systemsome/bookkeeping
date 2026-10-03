@@ -1,6 +1,7 @@
 import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats } from '../types';
 import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './constants';
 import { matchBestCardentifyPreset, matchBestCardentifyCard } from './cardentifyPresets';
+import { matchLogoHubBank } from './logohubData';
 import { sortTransactions } from './formatters';
 import { mergeAccounts, mergeTransactions, mergeProjects } from './backup';
 import { getStoredCloudflareConfig, saveCloudflareConfig, syncWithCloudflare } from './cloudflareSync';
@@ -298,6 +299,26 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
             cardBgColor: preset.cardStyle.background,
             cardTier: updatedAcc.cardTier || preset.cardTier,
             cardNetwork: updatedAcc.cardNetwork || preset.cardNetwork,
+          };
+        }
+      }
+
+      // Automatically enrich and correct LogoHub official bank vector logo
+      const currentMatchedLogo = matchLogoHubBank(updatedAcc.bankName || updatedAcc.name);
+      if (currentMatchedLogo?.logoUrl) {
+        // If no logoUrl yet, or if it had the BOC mismatch bug, or if Yuebao had generic alipay logo
+        const isBocBug =
+          updatedAcc.bankLogoUrl?.includes('BOC.svg') &&
+          !updatedAcc.bankName?.includes('中国银行') &&
+          !updatedAcc.name?.includes('中国银行');
+        const isYuebaoAlipayFallback =
+          (updatedAcc.category === 'YUEBAO' || (updatedAcc.name || '').includes('余额宝')) &&
+          updatedAcc.bankLogoUrl?.includes('alipay.svg');
+        if (!updatedAcc.bankLogoUrl || isBocBug || isYuebaoAlipayFallback) {
+          needsResave = true;
+          updatedAcc = {
+            ...updatedAcc,
+            bankLogoUrl: currentMatchedLogo.logoUrl,
           };
         }
       }

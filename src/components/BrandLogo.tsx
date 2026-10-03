@@ -1,30 +1,57 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { matchLogoHubBank } from '../lib/logohubData';
 
 export interface BrandLogoProps {
   type: string;
+  logoUrl?: string;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
 /**
  * 官方标准级银行与金融机构正版矢量LOGO
- * 同步收录自 Cardentify (github.com/no2ac/Cardentify), cards.no2.ac 与 cardart.cc
+ * 优先调用 https://logohub.afengblog.com/ 官方正版矢量库数据
+ * 内置高保真离线矢量兜底
  */
 export const BrandLogo: React.FC<BrandLogoProps> = ({
   type,
+  logoUrl,
   size = 'md',
   className = '',
 }) => {
+  const [imgError, setImgError] = useState(false);
   const sizeMap = {
-    xs: 'w-4 h-4',
-    sm: 'w-5 h-5 sm:w-6 sm:h-6',
-    md: 'w-7 h-7 sm:w-8 sm:h-8',
-    lg: 'w-9 h-9 sm:w-10 sm:h-10',
-    xl: 'w-12 h-12 sm:w-14 sm:h-14',
+    xs: 'w-3.5 h-3.5',
+    sm: 'w-5 h-5',
+    md: 'w-7 h-7',
+    lg: 'w-9 h-9',
+    xl: 'w-12 h-12',
   };
 
   const currentSize = sizeMap[size] || sizeMap.md;
   const brandKey = (type || '').toLowerCase().trim();
+
+  // 🏦 优先使用来源于 https://logohub.afengblog.com/ 的正版矢量 SVG
+  const yuebaoOfficialUrl = 'https://logohub.afengblog.com/logos/library/svglogo/pay/yuebao.svg';
+  const effectiveLogoUrl = !imgError
+    ? (logoUrl || (brandKey === 'yuebao' || brandKey === 'yuebaobao' ? yuebaoOfficialUrl : matchLogoHubBank(type)?.logoUrl))
+    : null;
+  if (effectiveLogoUrl) {
+    return (
+      <div
+        className={`${currentSize} aspect-square rounded-full bg-white flex items-center justify-center p-0.5 shadow-2xs shrink-0 select-none overflow-hidden border border-slate-100/90 ${className}`}
+        title={type || '银行徽标'}
+      >
+        <img
+          src={effectiveLogoUrl}
+          alt={type || 'Bank Logo'}
+          className="w-full h-full object-contain pointer-events-none select-none"
+          loading="lazy"
+          onError={() => setImgError(true)}
+        />
+      </div>
+    );
+  }
 
   switch (brandKey) {
     // 1. 招商银行 (CMB) - 招商银行经典C-M-B飞帆标
@@ -412,16 +439,17 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         </div>
       );
 
-    // 25. 微众银行 (WEBANK) - 腾讯前海微众银行
+    // 25. 微众银行 (WEBANK) - 官方正版矢量标 (来自 https://www.bootstrapmb.com/icon/VNNjq2VNNj-10)
     case 'webank':
       return (
         <div
-          className={`${currentSize} rounded-full bg-[#0052D9] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          className={`${currentSize} rounded-full bg-white flex items-center justify-center p-0.5 shadow-2xs shrink-0 select-none overflow-hidden border border-slate-100 ${className}`}
           title="微众银行 WeBank"
         >
-          <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
-            <text x="50" y="46" fill="#FFFFFF" fontSize="28" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">We</text>
-            <text x="50" y="76" fill="#79E2F2" fontSize="22" fontWeight="800" fontFamily="sans-serif" textAnchor="middle">Bank</text>
+          <svg viewBox="-208 -208 1434 1434" className="w-full h-full" aria-hidden="true">
+            <path d="M920.22784 483.43552c-8.448-0.29696-40.9856 9.08288-51.82976 11.2896-17.39264 3.56864-34.82624 7.20384-52.21888 10.57792-88.00768 17.11616-194.8416 28.72832-285.25568 28.80512-18.13504 0.01536-45.21984-2.04288-62.01856-0.32768-9.98912 12.93312-19.79904 24.84736-29.12768 40.064-28.1856 45.9008-46.7968 92.25216-54.62016 148.49536-7.1424 51.79904-3.05152 130.87744 18.5856 178.29376 8.17664 17.88416 25.8048 39.33696 23.46496 44.33408-9.0368 8.6528-27.25888 2.51904-38.93248-0.57856-78.3872-20.79232-159.93344-67.28704-190.63296-148.18304-34.90816-92.06784 3.52256-186.27584 48.92672-265.18016 5.92384-10.29632 13.24544-20.09088 18.19648-29.6448-4.27008-2.90816-33.54624-11.7248-42.01984-15.0528-6.88128-2.7136-12.94848-5.25824-20.12672-8.22272-6.28224-2.62144-12.59008-6.784-19.61472-8.22272-42.40384 55.20896-79.91808 145.41312-91.5968 217.66144-11.23328 69.52448 2.81088 128.02048 38.3744 185.12384 12.73856 20.5056 29.5424 37.20192 33.72032 43.79648-10.368 7.69024-110.35648 32.87552-60.9024 59.81696 40.48384 22.03648 167.66976 30.61248 216.29952 33.77152 123.19232 8.00256 260.57216 14.81728 382.45376 0.49152 48.4864-5.69344 124.96384-17.60256 156.13952-43.57632 26.94144-22.46656 3.584-43.97568-6.5792-68.50048-26.01472-62.75072 14.14144-186.32192 33.4592-249.78432 15.34976-50.36032 29.39904-109.4912 35.85536-165.248zM253.1072 324.64384c8.6528 0.54784 27.2384 6.72768 37.69856 8.87296 11.64288 2.40128 27.56096 6.80448 39.29088 7.424-8.79616-30.52032-10.78272-50.37568 2.58048-83.73248 28.15488-70.23104 93.81888-116.5312 178.51392-120.41728 63.89248-2.93376 110.1824 26.83392 130.77504 68.46976 24.50432 49.59232 10.66496 108.28288-19.67616 152.45312 24.26368 0.384 56.15616-3.69152 80.6912-6.31296a1509.12 1509.12 0 0 0 78.17728-10.5216c49.75616-7.9872 98.88768-18.29888 145.50528-30.99648-7.37792-48.02048-9.60512-73.27232-28.33408-119.54688-13.89568-34.4064-32.29696-65.13664-56.86272-91.01824-44.21632-46.61248-114.50368-84.56192-204.65664-92.38016-157.17376-13.6192-298.4704 49.19296-365.14304 186.76736-4.53632 9.39008-6.99392 18.2272-10.99264 27.10016-24.6528 0.33792-44.32896 0.89088-65.22368 8.66816-44.94848 16.75776-49.34144 49.93024 3.91168 75.66848 16.34816 7.90016 52.6848 18.86208 53.74464 19.50208z" fill="#040000" />
+            <path d="M622.28992 357.71392c-46.7968 4.35712-106.14784 2.58048-153.11872-0.2816-24.18688-1.46432-48.3072-3.24608-72.13056-6.25152-16.59392-2.10432-53.34016-5.49376-66.944-10.24-11.72992-0.61952-27.64288-5.02272-39.29088-7.424-10.46016-2.14528-29.04576-8.32512-37.69856-8.87296-2.8416 4.63872-7.19872 9.73312-10.7264 14.82752-11.34592 16.37376-20.98176 34.59584-29.21984 52.25984-11.55584 24.83712-21.39648 50.88256-30.16704 78.14656 7.02464 1.43872 13.33248 5.60128 19.61472 8.22272 7.17312 2.96448 13.24544 5.51424 20.12672 8.22272 8.4736 3.33312 37.74976 12.14976 42.01984 15.0528l47.08864 11.61216c33.51552 7.83872 68.30592 12.61056 102.58944 16.12288 6.16448 0.62464 53.22752 3.2768 54.47168 4.66944 16.79872-1.7152 43.88352 0.34304 62.01856 0.32768 90.41408-0.0768 197.24288-11.68896 285.25568-28.80512 17.39264-3.3792 34.82624-7.00928 52.21888-10.57792 10.84416-2.20672 43.38176-11.58656 51.82976-11.2896 12.14464-53.5808 25.90208-119.1424 6.43072-173.54752-46.61248 12.6976-95.74912 23.00928-145.50528 30.99648a1513.9584 1513.9584 0 0 1-78.17728 10.5216c-24.52992 2.61632-56.4224 6.69184-80.68608 6.30784z" fill="#D10C18" />
+            <path d="M451.59424 213.14048c-60.53888 8.1664-48.62464 97.2288 11.59168 89.83552 22.36928-2.74432 41.66656-24.07936 38.70208-50.28864-2.6368-23.1424-24.30464-43.05408-50.29376-39.54688z" fill="#040000" />
           </svg>
         </div>
       );
@@ -430,10 +458,14 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     case 'aibank':
       return (
         <div
-          className={`${currentSize} rounded-full bg-[#E11922] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          className={`${currentSize} aspect-square rounded-full bg-white flex items-center justify-center p-0.5 shadow-2xs shrink-0 select-none overflow-hidden border border-slate-100 ${className}`}
           title="百信银行 aiBank"
         >
-          <span className="font-black text-[9px] sm:text-[11px] text-white tracking-tighter">aiBank</span>
+          <svg viewBox="0 0 1024 1024" className="w-full h-full" aria-hidden="true">
+            <rect x="134" y="134" width="756" height="756" rx="378" fill="#E11922" />
+            <text x="512" y="585" fill="#FFFFFF" fontSize="205" fontWeight="900" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif" textAnchor="middle" letterSpacing="-5">aiBank</text>
+            <circle cx="365" cy="430" r="28" fill="#FFD200" />
+          </svg>
         </div>
       );
 
@@ -502,15 +534,14 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 
     // 31. 余额宝 (YUEBAO)
     case 'yuebao':
+    case 'yuebaobao':
       return (
         <div
-          className={`${currentSize} rounded-full bg-gradient-to-tr from-[#FF7A00] to-[#FF9E00] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
+          className={`${currentSize} rounded-full bg-gradient-to-tr from-[#FF5B00] to-[#FF7A00] flex items-center justify-center p-1 shadow-xs shrink-0 select-none overflow-hidden ${className}`}
           title="余额宝 Yuebao"
         >
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-white" aria-hidden="true">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-            <circle cx="50" cy="50" r="18" fill="#FFFFFF" />
-            <line x1="50" y1="16" x2="50" y2="84" stroke="#FFFFFF" strokeWidth="8" />
+          <svg viewBox="0 0 60 60" className="w-full h-full fill-white" aria-hidden="true">
+            <path d="M30.247 14.3c-13.671 0-24.754 10.836-24.754 24.55 0 13.713 11.083 18.405 24.754 18.405C43.917 57.255 55 52.563 55 38.849S43.917 14.301 30.247 14.301m9.487 20.653A1.65 1.65 0 0 1 38.09 36.6h-5.37a.41.41 0 0 0-.413.411v2.9h5.78a1.645 1.645 0 0 1 1.646 1.647v.836a1.65 1.65 0 0 1-1.646 1.647h-5.37a.416.416 0 0 0-.418.417v3.716a1.647 1.647 0 0 1-1.646 1.648h-.832a1.64 1.64 0 0 1-1.646-1.648v-3.716a.416.416 0 0 0-.397-.417h-5.37a1.645 1.645 0 0 1-1.646-1.647v-.836a1.65 1.65 0 0 1 1.646-1.647h5.778v-2.892a.41.41 0 0 0-.408-.414h-5.37a1.645 1.645 0 0 1-1.646-1.647v-.836a1.65 1.65 0 0 1 1.646-1.644h4.921l-5.1-5.106a1.65 1.65 0 0 1 0-2.335l.584-.586a1.65 1.65 0 0 1 2.333 0l4.809 4.815a.416.416 0 0 0 .585 0l4.811-4.818a1.65 1.65 0 0 1 2.333 0l.586.586a1.65 1.65 0 0 1 0 2.335l-5.102 5.106h4.924a1.645 1.645 0 0 1 1.646 1.647zm-9.487-22.298c5.37 0 8.843-1.795 10.792-3.859 1.098-1.287 1.023-2.937-.343-3.926-2.073-1.497-6.054-2.126-10.45-2.126-4.394 0-8.376.63-10.448 2.126-1.367.989-1.442 2.639-.344 3.926 1.949 2.064 5.423 3.86 10.793 3.86" fill="currentColor"/>
           </svg>
         </div>
       );
