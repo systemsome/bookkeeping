@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
+  Search,
   Trash2,
   Check,
   Sparkles,
@@ -45,8 +46,10 @@ import {
   matchBestCardentifyPreset,
   matchBestCardentifyCard,
   getTotalGalleryCardsCount,
+  getAllCardentifyCards,
   CardentifyCard,
 } from '../lib/cardentifyPresets';
+import { getAllCardArtCards, CardArtItem } from '../lib/cardArtSync';
 import { CardentifyGalleryModal } from './CardentifyGalleryModal';
 import {
   fetchLiveGoldRate,
@@ -135,11 +138,20 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
   const [isFetchingGold, setIsFetchingGold] = useState<boolean>(false);
   const [isCardentifyGalleryOpen, setIsCardentifyGalleryOpen] = useState<boolean>(false);
-  const [totalGalleryCardsCount, setTotalGalleryCardsCount] = useState<number>(5069);
+  const [totalGalleryCardsCount, setTotalGalleryCardsCount] = useState<number>(5674);
+
+  // Card Face Local Cache Fuzzy Search State
+  const [faceSearchQuery, setFaceSearchQuery] = useState<string>('');
+  const [faceSourceFilter, setFaceSourceFilter] = useState<'ALL' | 'CARDENTIFY' | 'CARDART'>('ALL');
+  const [selectedFaceBankTag, setSelectedFaceBankTag] = useState<string>('ALL');
+  const [allCardentifyCards, setAllCardentifyCards] = useState<CardentifyCard[]>(() => getAllCardentifyCards());
+  const [allCardArtCards, setAllCardArtCards] = useState<CardArtItem[]>(() => getAllCardArtCards());
 
   // Real-time listener for dual-library gallery updates
   useEffect(() => {
     const handleGalleryUpdate = (e?: any) => {
+      setAllCardentifyCards(getAllCardentifyCards());
+      setAllCardArtCards(getAllCardArtCards());
       if (e?.detail?.total) {
         setTotalGalleryCardsCount(e.detail.total);
       } else {
@@ -169,12 +181,227 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
 
   // Update whenever gallery modal closes or opens
   useEffect(() => {
+    setAllCardentifyCards(getAllCardentifyCards());
+    setAllCardArtCards(getAllCardArtCards());
     fetchDualGalleryStats()
       .then((stats) => {
         if (stats.totalCount) setTotalGalleryCardsCount(stats.totalCount);
       })
       .catch(() => {});
   }, [isCardentifyGalleryOpen]);
+
+  // Unified card faces from local cache for fuzzy matching
+  const unifiedFaceCards = useMemo(() => {
+    const list: Array<{
+      id: string;
+      rawId: string;
+      name: string;
+      englishName: string;
+      bankName: string;
+      cardNetwork: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE';
+      cardTier: string;
+      imageUrl: string;
+      dominantColor?: string;
+      source: 'cardentify' | 'cardart';
+      sourceLabel: string;
+      tags: string[];
+    }> = [];
+
+    // 1. Process Cardentify cached cards
+    allCardentifyCards.forEach((c) => {
+      const bUp = (c.brand || '').toUpperCase();
+      let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+      if (bUp.includes('VISA')) net = 'VISA';
+      else if (bUp.includes('MASTER')) net = 'MASTERCARD';
+      else if (bUp.includes('AMEX') || bUp.includes('AMERICAN EXPRESS')) net = 'AMEX';
+      else if (bUp.includes('JCB')) net = 'JCB';
+      else if (bUp.includes('UNIONPAY')) net = 'UNIONPAY';
+
+      const tier = c.name.includes('白金')
+        ? '白金卡'
+        : c.name.includes('钻石')
+        ? '钻石卡'
+        : c.name.includes('黑金') || c.name.includes('无限')
+        ? '无限卡'
+        : c.name.includes('金卡')
+        ? '金卡'
+        : '标准卡';
+
+      list.push({
+        id: `cardentify-${c.id}`,
+        rawId: c.id,
+        name: c.name,
+        englishName: c.englishName || '',
+        bankName: c.issuerName || c.bankName || '官方银行',
+        cardNetwork: net,
+        cardTier: tier,
+        imageUrl: c.imageUrl,
+        source: 'cardentify',
+        sourceLabel: 'Cardentify 官方',
+        tags: [c.name, c.englishName || '', c.issuerName || '', c.brand || '', c.type || '', ...(c.tags || [])],
+      });
+    });
+
+    // 2. Process CardArt cached cards
+    allCardArtCards.forEach((c) => {
+      const full = `${c.title} ${c.titleEn || ''} ${c.authorName || ''}`.toUpperCase();
+      let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
+      if (full.includes('VISA')) net = 'VISA';
+      else if (full.includes('MASTER')) net = 'MASTERCARD';
+      else if (full.includes('AMEX') || full.includes('AMERICAN EXPRESS') || full.includes('百夫长') || full.includes('运通')) net = 'AMEX';
+      else if (full.includes('JCB')) net = 'JCB';
+      else if (full.includes('UNIONPAY') || full.includes('银联')) net = 'UNIONPAY';
+
+      const tier = c.title.includes('白金')
+        ? '白金卡'
+        : c.title.includes('黑金') || c.title.includes('百夫长')
+        ? '百夫长黑金'
+        : c.title.includes('金卡')
+        ? '金卡'
+        : '创意卡面';
+
+      list.push({
+        id: `cardart-${c.id}`,
+        rawId: c.id,
+        name: c.title,
+        englishName: c.titleEn || (c.authorHandle ? `@${c.authorHandle}` : 'CardArt Community'),
+        bankName: c.issuerName || 'CardArt 创意卡面',
+        cardNetwork: net,
+        cardTier: tier,
+        imageUrl: c.imageUrl,
+        dominantColor: c.dominantColor,
+        source: 'cardart',
+        sourceLabel: 'CardArt 原创',
+        tags: [c.title, c.titleEn || '', c.authorName || '', c.issuerName || '', c.brand || '', c.type || '', ...(c.tags || [])],
+      });
+    });
+
+    return list;
+  }, [allCardentifyCards, allCardArtCards]);
+
+  // Filtered card faces based on user search query, bank tag, and source
+  const filteredFaceCards = useMemo(() => {
+    let list = unifiedFaceCards;
+
+    // Filter by source
+    if (faceSourceFilter === 'CARDENTIFY') {
+      list = list.filter((c) => c.source === 'cardentify');
+    } else if (faceSourceFilter === 'CARDART') {
+      list = list.filter((c) => c.source === 'cardart');
+    }
+
+    // Filter by quick bank tag
+    if (selectedFaceBankTag !== 'ALL') {
+      if (selectedFaceBankTag === 'VISA') {
+        list = list.filter((c) => c.cardNetwork === 'VISA');
+      } else if (selectedFaceBankTag === 'MASTERCARD') {
+        list = list.filter((c) => c.cardNetwork === 'MASTERCARD');
+      } else if (selectedFaceBankTag === 'AMEX') {
+        list = list.filter((c) => c.cardNetwork === 'AMEX');
+      } else if (selectedFaceBankTag === 'UNIONPAY') {
+        list = list.filter((c) => c.cardNetwork === 'UNIONPAY');
+      } else if (selectedFaceBankTag === 'TRANSIT') {
+        list = list.filter((c) => {
+          const t = `${c.name} ${c.bankName} ${c.englishName}`.toLowerCase();
+          return t.includes('八达通') || t.includes('suica') || t.includes('西瓜卡') || t.includes('交通') || t.includes('icoca');
+        });
+      } else {
+        list = list.filter((c) => c.bankName.includes(selectedFaceBankTag) || c.name.includes(selectedFaceBankTag));
+      }
+    }
+
+    // Fuzzy matching by query
+    const q = faceSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return list;
+    }
+
+    // Bank & network alias dictionary
+    const aliasMap: Record<string, string[]> = {
+      '招商': ['招商', '招行', 'cmb'],
+      '招行': ['招商', '招行', 'cmb'],
+      'cmb': ['招商', '招行', 'cmb'],
+      '工商': ['工商', '工行', 'icbc'],
+      '工行': ['工商', '工行', 'icbc'],
+      'icbc': ['工商', '工行', 'icbc'],
+      '建设': ['建设', '建行', 'ccb'],
+      '建行': ['建设', '建行', 'ccb'],
+      'ccb': ['建设', '建行', 'ccb'],
+      '农业': ['农业', '农行', 'abc'],
+      '农行': ['农业', '农行', 'abc'],
+      'abc': ['农业', '农行', 'abc'],
+      '中国银行': ['中国银行', '中行', 'boc'],
+      '中行': ['中国银行', '中行', 'boc'],
+      'boc': ['中国银行', '中行', 'boc'],
+      '交通': ['交通银行', '交行', 'bocom'],
+      '交行': ['交通银行', '交行', 'bocom'],
+      'bocom': ['交通银行', '交行', 'bocom'],
+      '中信': ['中信银行', '中信', 'citic'],
+      'citic': ['中信银行', '中信', 'citic'],
+      '浦发': ['浦发银行', '浦发', 'spdb'],
+      'spdb': ['浦发银行', '浦发', 'spdb'],
+      '民生': ['民生银行', '民生', 'cmbc'],
+      'cmbc': ['民生银行', '民生', 'cmbc'],
+      '广发': ['广发银行', '广发', 'cgb'],
+      'cgb': ['广发银行', '广发', 'cgb'],
+      '平安': ['平安银行', '平安', 'pab'],
+      'pab': ['平安银行', '平安', 'pab'],
+      '光大': ['光大银行', '光大', 'ceb'],
+      'ceb': ['光大银行', '光大', 'ceb'],
+      '兴业': ['兴业银行', '兴业', 'cib'],
+      'cib': ['兴业银行', '兴业', 'cib'],
+      '邮储': ['邮储银行', '邮政', 'psbc'],
+      'psbc': ['邮储银行', '邮政', 'psbc'],
+      '汇丰': ['汇丰银行', '汇丰', 'hsbc'],
+      'hsbc': ['汇丰银行', '汇丰', 'hsbc'],
+      '渣打': ['渣打银行', '渣打', 'scb'],
+      'scb': ['渣打银行', '渣打', 'scb'],
+      '花旗': ['花旗银行', '花旗', 'citi'],
+      'citi': ['花旗银行', '花旗', 'citi'],
+      '运通': ['运通', 'amex', '百夫长', 'centurion'],
+      'amex': ['运通', 'amex', '百夫长', 'centurion'],
+      '百夫长': ['运通', 'amex', '百夫长', 'centurion'],
+      '银联': ['银联', 'unionpay'],
+      'unionpay': ['银联', 'unionpay'],
+      'visa': ['visa', '维萨'],
+      '维萨': ['visa', '维萨'],
+      '万事达': ['master', 'mastercard', '万事达'],
+      'mastercard': ['master', 'mastercard', '万事达'],
+      'jcb': ['jcb'],
+      '八达通': ['八达通', 'octopus'],
+      'octopus': ['八达通', 'octopus'],
+      'suica': ['suica', '西瓜卡'],
+      '西瓜卡': ['suica', '西瓜卡'],
+      'icoca': ['icoca'],
+    };
+
+    const searchTerms = [q];
+    for (const [key, aliases] of Object.entries(aliasMap)) {
+      if (q.includes(key)) {
+        aliases.forEach((a) => {
+          if (!searchTerms.includes(a)) searchTerms.push(a);
+        });
+      }
+    }
+
+    return list.filter((card) => {
+      const bankLower = (card.bankName || '').toLowerCase();
+      const nameLower = (card.name || '').toLowerCase();
+      const enLower = (card.englishName || '').toLowerCase();
+      const netLower = (card.cardNetwork || '').toLowerCase();
+      const tagsText = (card.tags || []).join(' ').toLowerCase();
+
+      return searchTerms.some((term) => {
+        return (
+          bankLower.includes(term) ||
+          nameLower.includes(term) ||
+          enLower.includes(term) ||
+          netLower.includes(term) ||
+          tagsText.includes(term)
+        );
+      });
+    });
+  }, [unifiedFaceCards, faceSearchQuery, faceSourceFilter, selectedFaceBankTag]);
 
   // Auto fetch latest gold market price
   useEffect(() => {
@@ -1393,82 +1620,297 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                   </div>
                 </div>
 
-                {/* Cardentify Official HD Card Faces Carousel */}
-                <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50/50 via-slate-50 to-indigo-50/50 border border-indigo-100 space-y-2">
-                  <div className="flex items-center justify-between">
+                {/* Upgraded HD Card Faces Selector with Local Cache Fuzzy Search */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/50 via-slate-50 to-indigo-50/50 border border-indigo-100 space-y-3">
+                  {/* Selector Header */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                       <span className="text-base">🍎</span>
-                      <span>Cardentify 精选官方原版卡面 (直接点击套用)</span>
+                      <span>CardArt & Cardentify 官方/原创卡面选择器</span>
+                      <span className="px-1.5 py-0.5 rounded-md bg-indigo-100/70 text-indigo-700 text-[10px] font-semibold font-mono">
+                        {totalGalleryCardsCount.toLocaleString()} 款已同步
+                      </span>
                     </span>
                     <button
                       type="button"
                       onClick={() => setIsCardentifyGalleryOpen(true)}
                       className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5"
                     >
-                      <span>查看全部 557+ 张 &gt;</span>
+                      <span>打开全屏艺廊 &gt;</span>
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1.5 modal-custom-scrollbar">
-                    {CARDENTIFY_PRESETS.map((p) => {
-                      const isSelected = cardImageUrl === p.cardImageUrl || cardPresetId === p.id;
-                      return (
+                  {/* Fuzzy Search Input Box */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={faceSearchQuery}
+                      onChange={(e) => setFaceSearchQuery(e.target.value)}
+                      placeholder="模糊搜索银行 (如 招行/工行/建行)、卡组织 (银联/VISA/运通) 或卡名..."
+                      className="w-full pl-8 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all"
+                    />
+                    {faceSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setFaceSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                        title="清除搜索"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Source Toggle Tabs & Fast Bank Filter Pills */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <span className="text-[10px] font-semibold text-slate-400 shrink-0">来源:</span>
+                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs">
                         <button
-                          key={p.id}
                           type="button"
-                          onClick={() => {
-                            setCardPresetId(p.id);
-                            if (p.cardImageUrl) setCardImageUrl(p.cardImageUrl);
-                            setCardBgColor(p.cardStyle.background);
-                            setCardPattern(p.cardStyle.patternType || 'radial-sheen');
-                            setCardTextColor(p.textColorMode);
-                            setCardTier(p.cardTier);
-                            setCardNetwork(p.cardNetwork);
-                            if (!bankName) setBankName(p.bankName);
-                            setAutoGenMsg(`🍎 已应用 Cardentify 卡面: 「${p.name}」`);
-                            setTimeout(() => setAutoGenMsg(''), 3500);
-                          }}
-                          className={`p-2 rounded-xl border text-left shrink-0 w-36 transition-all relative overflow-hidden group/item ${
-                            isSelected
-                              ? 'border-indigo-600 ring-2 ring-indigo-500/30 bg-white shadow-sm scale-102'
-                              : 'border-slate-200 hover:border-slate-300 bg-white/80 hover:bg-white'
+                          onClick={() => setFaceSourceFilter('ALL')}
+                          className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                            faceSourceFilter === 'ALL'
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          <div
-                            className="w-full h-11 rounded-lg mb-1.5 relative overflow-hidden flex flex-col justify-between p-1.5 text-white shadow-2xs border border-white/20 bg-slate-900"
-                          >
-                            {p.cardImageUrl ? (
-                              <img
-                                src={p.cardImageUrl}
-                                alt={p.name}
-                                className="absolute inset-0 w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div
-                                className="absolute inset-0"
-                                style={{ background: p.cardStyle.background }}
-                              />
-                            )}
-                            <div className="relative z-10 flex items-center justify-between">
-                              <span className="text-[8px] font-bold truncate max-w-[70px] drop-shadow-md text-white">
-                                {p.bankName}
-                              </span>
-                              <span className="text-[7px] uppercase font-mono tracking-tighter text-white drop-shadow-md">
-                                {p.cardNetwork}
-                              </span>
-                            </div>
-                            <span className="relative z-10 text-[7px] truncate text-white drop-shadow-md">{p.cardTier}</span>
-                          </div>
-                          <div className="text-[11px] font-bold text-slate-800 truncate leading-tight">
-                            {p.name}
-                          </div>
-                          <div className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">
-                            {p.englishName}
-                          </div>
+                          全部双库
                         </button>
-                      );
-                    })}
+                        <button
+                          type="button"
+                          onClick={() => setFaceSourceFilter('CARDENTIFY')}
+                          className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+                            faceSourceFilter === 'CARDENTIFY'
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <span>🍎 Cardentify 官方</span>
+                          <span className="text-[9px] opacity-75 font-mono">({allCardentifyCards.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFaceSourceFilter('CARDART')}
+                          className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+                            faceSourceFilter === 'CARDART'
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <span>🎨 CardArt 原创</span>
+                          <span className="text-[9px] opacity-75 font-mono">({allCardArtCards.length})</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Filter Tag Pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 modal-custom-scrollbar text-[11px]">
+                      {[
+                        { label: '全部', val: 'ALL' },
+                        { label: '招商银行', val: '招商' },
+                        { label: '工商银行', val: '工商' },
+                        { label: '建设银行', val: '建设' },
+                        { label: '农业银行', val: '农业' },
+                        { label: '中国银行', val: '中国银行' },
+                        { label: '交通银行', val: '交通' },
+                        { label: '中信银行', val: '中信' },
+                        { label: '美国运通 (Amex)', val: 'AMEX' },
+                        { label: 'VISA', val: 'VISA' },
+                        { label: '万事达', val: 'MASTERCARD' },
+                        { label: '银联', val: 'UNIONPAY' },
+                        { label: '交通卡', val: 'TRANSIT' },
+                      ].map((tag) => {
+                        const active = selectedFaceBankTag === tag.val;
+                        return (
+                          <button
+                            key={tag.val}
+                            type="button"
+                            onClick={() => setSelectedFaceBankTag(tag.val)}
+                            className={`px-2 py-0.5 rounded-lg border shrink-0 transition-all font-medium ${
+                              active
+                                ? 'bg-indigo-50 border-indigo-400 text-indigo-700 font-bold shadow-2xs'
+                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            {tag.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
+
+                  {/* Results: Search Match or Curated Presets */}
+                  {faceSearchQuery.trim() !== '' || selectedFaceBankTag !== 'ALL' ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 pt-0.5">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1">
+                          <span>🔍 模糊匹配结果: 找到</span>
+                          <span className="text-indigo-600 font-bold font-mono">{filteredFaceCards.length}</span>
+                          <span>款已同步高清卡面</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFaceSearchQuery('');
+                            setSelectedFaceBankTag('ALL');
+                          }}
+                          className="text-xs text-indigo-600 hover:underline"
+                        >
+                          重置筛选
+                        </button>
+                      </div>
+
+                      {filteredFaceCards.length > 0 ? (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 modal-custom-scrollbar">
+                          {filteredFaceCards.slice(0, 80).map((c) => {
+                            const isSelected = cardImageUrl === c.imageUrl || cardPresetId === c.id;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setCardPresetId(c.id);
+                                  setCardImageUrl(c.imageUrl);
+                                  if (!bankName || bankName === '银行账户') setBankName(c.bankName);
+                                  setCardNetwork(c.cardNetwork);
+                                  setCardTier(c.cardTier);
+                                  if (c.dominantColor) setCardBgColor(c.dominantColor);
+                                  setAutoGenMsg(`🍎 已应用卡面: 「${c.name}」(${c.bankName})`);
+                                  setTimeout(() => setAutoGenMsg(''), 3500);
+                                }}
+                                className={`p-2 rounded-xl border text-left shrink-0 w-36 transition-all relative overflow-hidden group/item ${
+                                  isSelected
+                                    ? 'border-indigo-600 ring-2 ring-indigo-500/30 bg-white shadow-sm scale-102'
+                                    : 'border-slate-200 hover:border-slate-300 bg-white/80 hover:bg-white'
+                                }`}
+                              >
+                                <div className="w-full h-11 rounded-lg mb-1.5 relative overflow-hidden flex flex-col justify-between p-1.5 text-white shadow-2xs border border-white/20 bg-slate-900">
+                                  <img
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    loading="lazy"
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                  <div className="relative z-10 flex items-center justify-between">
+                                    <span className="text-[8px] font-bold truncate max-w-[70px] drop-shadow-md text-white">
+                                      {c.bankName}
+                                    </span>
+                                    <span className="text-[7px] uppercase font-mono tracking-tighter text-white drop-shadow-md">
+                                      {c.cardNetwork}
+                                    </span>
+                                  </div>
+                                  <div className="relative z-10 flex items-center justify-between">
+                                    <span className="text-[7px] truncate text-white drop-shadow-md">{c.cardTier}</span>
+                                    <span className={`text-[6px] px-1 py-0.2 rounded font-bold ${c.source === 'cardart' ? 'bg-amber-500/80 text-white' : 'bg-emerald-500/80 text-white'}`}>
+                                      {c.source === 'cardart' ? 'CardArt' : '官方'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-[11px] font-bold text-slate-800 truncate leading-tight">
+                                  {c.name}
+                                </div>
+                                <div className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">
+                                  {c.englishName}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center rounded-xl bg-white/80 border border-slate-200 space-y-1.5">
+                          <p className="text-xs text-slate-600 font-medium">未搜到与当前关键词匹配的本地缓存卡面</p>
+                          <p className="text-[11px] text-slate-400">您可以尝试精简关键词，或直接打开全量卡面艺廊进行在线检索。</p>
+                          <button
+                            type="button"
+                            onClick={() => setIsCardentifyGalleryOpen(true)}
+                            className="mt-1 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
+                          >
+                            🎨 打开全屏卡面艺廊
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                          <span>✨ 精选推荐官方原版卡面</span>
+                          <span className="text-slate-400 font-normal">(直接点击套用)</span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 modal-custom-scrollbar">
+                        {CARDENTIFY_PRESETS.map((p) => {
+                          const isSelected = cardImageUrl === p.cardImageUrl || cardPresetId === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setCardPresetId(p.id);
+                                if (p.cardImageUrl) setCardImageUrl(p.cardImageUrl);
+                                setCardBgColor(p.cardStyle.background);
+                                setCardPattern(p.cardStyle.patternType || 'radial-sheen');
+                                setCardTextColor(p.textColorMode);
+                                setCardTier(p.cardTier);
+                                setCardNetwork(p.cardNetwork);
+                                if (!bankName) setBankName(p.bankName);
+                                setAutoGenMsg(`🍎 已应用 Cardentify 卡面: 「${p.name}」`);
+                                setTimeout(() => setAutoGenMsg(''), 3500);
+                              }}
+                              className={`p-2 rounded-xl border text-left shrink-0 w-36 transition-all relative overflow-hidden group/item ${
+                                isSelected
+                                  ? 'border-indigo-600 ring-2 ring-indigo-500/30 bg-white shadow-sm scale-102'
+                                  : 'border-slate-200 hover:border-slate-300 bg-white/80 hover:bg-white'
+                              }`}
+                            >
+                              <div
+                                className="w-full h-11 rounded-lg mb-1.5 relative overflow-hidden flex flex-col justify-between p-1.5 text-white shadow-2xs border border-white/20 bg-slate-900"
+                              >
+                                {p.cardImageUrl ? (
+                                  <img
+                                    src={p.cardImageUrl}
+                                    alt={p.name}
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div
+                                    className="absolute inset-0"
+                                    style={{ background: p.cardStyle.background }}
+                                  />
+                                )}
+                                <div className="relative z-10 flex items-center justify-between">
+                                  <span className="text-[8px] font-bold truncate max-w-[70px] drop-shadow-md text-white">
+                                    {p.bankName}
+                                  </span>
+                                  <span className="text-[7px] uppercase font-mono tracking-tighter text-white drop-shadow-md">
+                                    {p.cardNetwork}
+                                  </span>
+                                </div>
+                                <span className="relative z-10 text-[7px] truncate text-white drop-shadow-md">{p.cardTier}</span>
+                              </div>
+                              <div className="text-[11px] font-bold text-slate-800 truncate leading-tight">
+                                {p.name}
+                              </div>
+                              <div className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">
+                                {p.englishName}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="text-[10px] text-slate-400 bg-slate-100/70 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                        <span>💡</span>
+                        <span>支持在上方搜索框直接模糊输入任意银行名、卡组织或关键词，实时搜索本地缓存的所有已同步卡面。</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Micro Customization: Surface Patterns & Text Color Mode */}

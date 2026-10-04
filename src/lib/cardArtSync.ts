@@ -37,33 +37,99 @@ export interface CardArtSyncMeta {
   lastError?: string;
 }
 
+// Module-level in-memory cache for all CardArt items
+let inMemoryCardArtCards: CardArtItem[] | null = null;
+let isFetchingServerCards = false;
+
 // Convert base CardArtCard to CardArtItem
-export function normalizeBaseCard(c: CardArtCard): CardArtItem {
-  const t = (c.title + ' ' + (c.titleEn || '')).toUpperCase();
+export function normalizeBaseCard(c: CardArtCard | any): CardArtItem {
+  const fullText = (c.title + ' ' + (c.titleEn || '') + ' ' + (c.authorName || '')).toUpperCase();
   let brand = 'UnionPay';
-  if (t.includes('VISA')) brand = 'VISA';
-  else if (t.includes('MASTER')) brand = 'Mastercard';
-  else if (t.includes('AMEX') || t.includes('AMERICAN EXPRESS') || t.includes('百夫长') || t.includes('运通')) brand = 'AMEX';
-  else if (t.includes('JCB')) brand = 'JCB';
-  else if (t.includes('SUICA') || t.includes('OCTOPUS') || t.includes('八达通') || t.includes('ICOCA') || t.includes('TRAIN')) brand = 'Transit';
-  else if (t.includes('银联') || t.includes('UNIONPAY')) brand = 'UnionPay';
+  if (fullText.includes('VISA')) brand = 'VISA';
+  else if (fullText.includes('MASTER')) brand = 'Mastercard';
+  else if (fullText.includes('AMEX') || fullText.includes('AMERICAN EXPRESS') || fullText.includes('百夫长') || fullText.includes('运通')) brand = 'AMEX';
+  else if (fullText.includes('JCB')) brand = 'JCB';
+  else if (fullText.includes('SUICA') || fullText.includes('OCTOPUS') || fullText.includes('八达通') || fullText.includes('ICOCA') || fullText.includes('TRAIN')) brand = 'Transit';
+  else if (fullText.includes('银联') || fullText.includes('UNIONPAY')) brand = 'UnionPay';
 
   let type = 'Credit';
-  if (t.includes('借记') || t.includes('储蓄') || t.includes('DEBIT')) type = 'Debit';
-  else if (t.includes('交通') || t.includes('SUICA') || t.includes('八达通') || c.typeSlug === 'transit') type = 'Transit';
+  if (fullText.includes('借记') || fullText.includes('储蓄') || fullText.includes('DEBIT')) type = 'Debit';
+  else if (fullText.includes('交通') || fullText.includes('SUICA') || fullText.includes('八达通') || c.typeSlug === 'transit') type = 'Transit';
 
   let country = c.regionCode || 'GLOBAL';
-  if (t.includes('美国') || t.includes('US') || t.includes('CHASE') || t.includes('LSU') || t.includes('FORDHAM')) country = 'US';
-  else if (t.includes('香港') || t.includes('HK') || t.includes('八达通')) country = 'HK';
-  else if (t.includes('日本') || t.includes('JP') || t.includes('SUICA') || t.includes('和风') || t.includes('青海波') || t.includes('七宝')) country = 'JP';
+  if (fullText.includes('美国') || fullText.includes('US') || fullText.includes('CHASE') || fullText.includes('LSU') || fullText.includes('FORDHAM')) country = 'US';
+  else if (fullText.includes('香港') || fullText.includes('HK') || fullText.includes('八达通')) country = 'HK';
+  else if (fullText.includes('日本') || fullText.includes('JP') || fullText.includes('SUICA') || fullText.includes('和风') || fullText.includes('青海波') || fullText.includes('七宝')) country = 'JP';
 
   let issuerName = 'CardArt 创意卡面';
-  if (c.title.includes('银行')) {
-    issuerName = c.title.split(/[\s·\-_]+/)[0];
-  } else if (c.title.includes('八达通')) {
+  const rawTitle = c.title || '';
+  const searchTags: string[] = [c.title, c.titleEn, c.authorName, brand, type, country].filter(Boolean) as string[];
+
+  if (rawTitle.includes('招商') || rawTitle.includes('招行') || fullText.includes('CMB')) {
+    issuerName = '招商银行';
+    searchTags.push('招商银行', '招商', '招行', 'CMB');
+  } else if (rawTitle.includes('工商') || rawTitle.includes('工行') || fullText.includes('ICBC')) {
+    issuerName = '中国工商银行';
+    searchTags.push('中国工商银行', '工商银行', '工行', 'ICBC');
+  } else if (rawTitle.includes('建设银行') || rawTitle.includes('建行') || fullText.includes('CCB')) {
+    issuerName = '中国建设银行';
+    searchTags.push('中国建设银行', '建设银行', '建行', 'CCB');
+  } else if (rawTitle.includes('农业银行') || rawTitle.includes('农行') || fullText.includes('ABC')) {
+    issuerName = '中国农业银行';
+    searchTags.push('中国农业银行', '农业银行', '农行', 'ABC');
+  } else if (rawTitle.includes('中国银行') || rawTitle.includes('中行') || fullText.includes('BOC')) {
+    issuerName = '中国银行';
+    searchTags.push('中国银行', '中行', 'BOC');
+  } else if (rawTitle.includes('交通银行') || rawTitle.includes('交行') || fullText.includes('BOCOM')) {
+    issuerName = '交通银行';
+    searchTags.push('交通银行', '交行', 'BOCOM');
+  } else if (rawTitle.includes('中信') || fullText.includes('CITIC')) {
+    issuerName = '中信银行';
+    searchTags.push('中信银行', '中信', 'CITIC');
+  } else if (rawTitle.includes('浦发') || fullText.includes('SPDB')) {
+    issuerName = '浦发银行';
+    searchTags.push('浦发银行', '浦发', 'SPDB');
+  } else if (rawTitle.includes('民生') || fullText.includes('CMBC')) {
+    issuerName = '民生银行';
+    searchTags.push('民生银行', '民生', 'CMBC');
+  } else if (rawTitle.includes('广发') || fullText.includes('CGB')) {
+    issuerName = '广发银行';
+    searchTags.push('广发银行', '广发', 'CGB');
+  } else if (rawTitle.includes('平安') || fullText.includes('PAB')) {
+    issuerName = '平安银行';
+    searchTags.push('平安银行', '平安', 'PAB');
+  } else if (rawTitle.includes('光大') || fullText.includes('CEB')) {
+    issuerName = '光大银行';
+    searchTags.push('光大银行', '光大', 'CEB');
+  } else if (rawTitle.includes('兴业') || fullText.includes('CIB')) {
+    issuerName = '兴业银行';
+    searchTags.push('兴业银行', '兴业', 'CIB');
+  } else if (rawTitle.includes('八达通') || fullText.includes('OCTOPUS')) {
     issuerName = '香港八达通';
-  } else if (c.title.includes('百夫长') || c.title.includes('运通')) {
+    searchTags.push('香港八达通', '八达通', 'Octopus', 'HK');
+  } else if (fullText.includes('SUICA') || rawTitle.includes('西瓜卡')) {
+    issuerName = 'JR东日本 (Suica)';
+    searchTags.push('Suica', '西瓜卡', 'JR东日本', '交通卡');
+  } else if (fullText.includes('ICOCA')) {
+    issuerName = 'JR西日本 (ICOCA)';
+    searchTags.push('ICOCA', 'JR西日本', '交通卡');
+  } else if (rawTitle.includes('百夫长') || rawTitle.includes('运通') || fullText.includes('CENTURION')) {
     issuerName = '美国运通 (Amex)';
+    searchTags.push('美国运通', '运通', 'Amex', '百夫长', 'Centurion');
+  } else if (rawTitle.includes('汇丰') || fullText.includes('HSBC')) {
+    issuerName = '汇丰银行';
+    searchTags.push('汇丰银行', '汇丰', 'HSBC');
+  } else if (rawTitle.includes('渣打') || fullText.includes('SCB')) {
+    issuerName = '渣打银行';
+    searchTags.push('渣打银行', '渣打', 'SCB');
+  } else if (rawTitle.includes('花旗') || fullText.includes('CITI')) {
+    issuerName = '花旗银行';
+    searchTags.push('花旗银行', '花旗', 'Citi');
+  } else if (rawTitle.includes('银行')) {
+    const parts = rawTitle.split(/[\s·\-_【】「」]+/);
+    const bankPart = parts.find((p: string) => p.includes('银行')) || parts[0];
+    issuerName = bankPart || 'CardArt 创意卡面';
+    searchTags.push(issuerName);
   } else if (c.authorName) {
     issuerName = `CardArt · ${c.authorName}`;
   }
@@ -75,25 +141,51 @@ export function normalizeBaseCard(c: CardArtCard): CardArtItem {
     brand,
     type,
     country,
-    tags: [c.title, c.titleEn, c.authorName, brand, type, country].filter(Boolean) as string[],
+    tags: Array.from(new Set(searchTags.filter(Boolean))),
   };
 }
 
-// Get all CardArt cards (Base Initial 633 + Dynamic Synced)
+// Get all CardArt cards (Base Initial 633 + Dynamic Synced + In-Memory)
 export function getAllCardArtCards(): CardArtItem[] {
+  if (inMemoryCardArtCards && inMemoryCardArtCards.length > 0) {
+    return inMemoryCardArtCards;
+  }
+
   const baseCards = CARDART_CARDS.map(normalizeBaseCard);
+  const map = new Map<string, CardArtItem>();
+  baseCards.forEach((c) => map.set(c.id, c));
+
   try {
     const raw = localStorage.getItem(CACHE_KEY);
-    const cached: CardArtItem[] = raw ? JSON.parse(raw) : [];
+    if (raw) {
+      const cached: CardArtItem[] = JSON.parse(raw);
+      if (Array.isArray(cached)) {
+        cached.forEach((c) => map.set(c.id, c));
+      }
+    }
+  } catch {}
 
-    const map = new Map<string, CardArtItem>();
-    baseCards.forEach((c) => map.set(c.id, c));
-    cached.forEach((c) => map.set(c.id, c));
+  const list = Array.from(map.values());
+  inMemoryCardArtCards = list;
 
-    return Array.from(map.values());
-  } catch {
-    return baseCards;
+  // Asynchronously trigger server cards load in background if on browser
+  if (typeof window !== 'undefined' && !isFetchingServerCards) {
+    isFetchingServerCards = true;
+    fetch('/api/cardart/cards')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.cards) && data.cards.length > 0) {
+          const normalized = data.cards.map(normalizeBaseCard);
+          cacheCardArtCards(normalized);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        isFetchingServerCards = false;
+      });
   }
+
+  return list;
 }
 
 // Get Sync Metadata
@@ -104,7 +196,7 @@ export function getCardArtSyncMeta(): CardArtSyncMeta {
   } catch {}
   return {
     lastSyncTime: new Date().toISOString(),
-    totalCards: CARDART_CARDS.length,
+    totalCards: inMemoryCardArtCards ? inMemoryCardArtCards.length : 5019,
     status: 'synced',
   };
 }
@@ -117,11 +209,11 @@ export function saveCardArtSyncMeta(meta: Partial<CardArtSyncMeta>) {
   } catch {}
 }
 
-// Save newly discovered or synced cards into cache
+// Save newly discovered or synced cards into cache and in-memory storage
 export function cacheCardArtCards(newCards: CardArtItem[]): number {
   if (!newCards || newCards.length === 0) return 0;
   try {
-    const current = getAllCardArtCards();
+    const current = inMemoryCardArtCards || getAllCardArtCards();
     const map = new Map<string, CardArtItem>();
     current.forEach((c) => map.set(c.id, c));
 
@@ -134,7 +226,18 @@ export function cacheCardArtCards(newCards: CardArtItem[]): number {
     });
 
     const merged = Array.from(map.values());
-    localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
+    inMemoryCardArtCards = merged;
+
+    // Resilient localStorage write: if quota exceeded, store top items
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
+    } catch {
+      try {
+        const compactSubset = merged.slice(0, 500);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(compactSubset));
+      } catch {}
+    }
+
     saveCardArtSyncMeta({
       lastSyncTime: new Date().toISOString(),
       totalCards: merged.length,
@@ -219,24 +322,27 @@ export async function searchCardArtLive(query: string): Promise<CardArtItem[]> {
   const q = query.trim().toLowerCase();
   if (!q) return getAllCardArtCards();
 
-  // Try server search first
+  // Try server search first (which searches cached memory and cardart.cc live explore)
   try {
     const res = await fetch(`/api/cardart/cards?q=${encodeURIComponent(q)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.cards && Array.isArray(data.cards)) {
-        return data.cards.map(normalizeBaseCard);
+      if (data.cards && Array.isArray(data.cards) && data.cards.length > 0) {
+        const normalized = data.cards.map(normalizeBaseCard);
+        cacheCardArtCards(normalized);
+        return normalized;
       }
     }
   } catch {}
 
-  // Local in-memory filter
+  // Local in-memory filter fallback
   const all = getAllCardArtCards();
   return all.filter((c) => {
     const titleMatch = (c.title || '').toLowerCase().includes(q);
     const enMatch = (c.titleEn || '').toLowerCase().includes(q);
     const authorMatch = (c.authorName || '').toLowerCase().includes(q) || (c.authorHandle || '').toLowerCase().includes(q);
     const tagMatch = c.tags && c.tags.some((t) => t.toLowerCase().includes(q));
-    return titleMatch || enMatch || authorMatch || tagMatch;
+    const issuerMatch = (c.issuerName || '').toLowerCase().includes(q);
+    return titleMatch || enMatch || authorMatch || tagMatch || issuerMatch;
   });
 }

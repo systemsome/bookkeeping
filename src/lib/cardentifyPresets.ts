@@ -166,7 +166,7 @@ export function getAllUnifiedCards(): UnifiedCardItem[] {
 // Get dynamic total card count across both databases (Cardentify + CardArt synced)
 export function getTotalGalleryCardsCount(): number {
   const local = getAllCardentifyCards().length + getAllCardArtCards().length;
-  return Math.max(3228, local);
+  return Math.max(5674, local);
 }
 
 // Convert Cardentify card to CardFacePreset format for backwards compatibility

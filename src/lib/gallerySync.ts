@@ -63,7 +63,7 @@ export async function syncDualLibrariesOnline(force = false): Promise<DualSyncRe
         addedEntify = cacheCardentifyCards(data.cardentifyCards);
       }
 
-      const officialArtCount = data.cardartCount || 4414;
+      const officialArtCount = data.cardartCount || 5019;
       const officialEntifyCount = data.cardentifyCount || 655;
       const officialTotal = data.totalCount || (officialArtCount + officialEntifyCount);
       const nowIso = data.lastSyncedAt || new Date().toISOString();
@@ -104,13 +104,13 @@ export async function syncDualLibrariesOnline(force = false): Promise<DualSyncRe
   // Fallback to official synchronized stats
   return {
     success: true,
-    totalCount: 5069,
-    cardArtCount: 4414,
+    totalCount: 5674,
+    cardArtCount: 5019,
     cardentifyCount: 655,
     newCardsCount: 0,
-    message: '双库当前共有 5,069 款高清卡面 (CardArt: 4,414 款 · Cardentify: 655 款)',
+    message: '双库当前共有 5,674 款高清卡面 (CardArt: 5,019 款 · Cardentify: 655 款)',
     timestamp: new Date().toISOString(),
-    sourceBreakdown: { cardart: 4414, cardentify: 655 },
+    sourceBreakdown: { cardart: 5019, cardentify: 655 },
   };
 }
 
@@ -127,7 +127,7 @@ export async function fetchDualGalleryStats(): Promise<{
     const res = await fetch('/api/gallery/stats');
     if (res.ok) {
       const data = await res.json();
-      const artCount = data.cardartCount || 4414;
+      const artCount = data.cardartCount || 5019;
       const entifyCount = data.cardentifyCount || 655;
       const total = data.totalCount || (artCount + entifyCount);
       return {
@@ -140,8 +140,8 @@ export async function fetchDualGalleryStats(): Promise<{
   } catch {}
 
   return {
-    totalCount: 5069,
-    cardartCount: 4414,
+    totalCount: 5674,
+    cardartCount: 5019,
     cardentifyCount: 655,
     lastSyncedAt: new Date().toISOString(),
   };

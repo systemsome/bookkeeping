@@ -32,6 +32,7 @@ import {
   CardArtItem,
   syncWithCardArtOnline,
   getCardArtSyncMeta,
+  searchCardArtLive,
 } from '../lib/cardArtSync';
 import { syncDualLibrariesOnline, fetchDualGalleryStats } from '../lib/gallerySync';
 
@@ -107,6 +108,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
 
   // Real-time synchronization state with CardArt and Cardentify
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isLiveSearching, setIsLiveSearching] = useState<boolean>(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [syncMeta, setSyncMeta] = useState(getCardArtSyncMeta());
   const [cardArtList, setCardArtList] = useState<CardArtItem[]>(() => getAllCardArtCards());
@@ -116,8 +118,8 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     cardartCount: number;
     cardentifyCount: number;
   }>({
-    totalCount: 5069,
-    cardartCount: 4414,
+    totalCount: 5674,
+    cardartCount: 5019,
     cardentifyCount: 655,
   });
 
@@ -217,6 +219,33 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       setSearchTerm(sanitized || defaultBankQuery);
     }
   }, [defaultBankQuery, isOpen]);
+
+  // Proactive real-time live search query directly to cardart.cc / backend
+  useEffect(() => {
+    if (!isOpen) return;
+    const q = searchTerm.trim();
+    if (!q || q.length < 1) return;
+
+    let isCurrent = true;
+    const timer = setTimeout(() => {
+      setIsLiveSearching(true);
+      searchCardArtLive(q)
+        .then((cards) => {
+          if (isCurrent && cards && cards.length > 0) {
+            setCardArtList(getAllCardArtCards());
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (isCurrent) setIsLiveSearching(false);
+        });
+    }, 280);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [searchTerm, isOpen]);
 
   useEffect(() => {
     if (defaultNetwork && defaultNetwork !== 'NONE' && defaultNetwork !== 'ALL' && isOpen) {
@@ -770,6 +799,12 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 shrink-0">
+              {isLiveSearching && (
+                <span className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 animate-pulse font-medium">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>联网检索 cardart.cc...</span>
+                </span>
+              )}
               <span>
                 找到{' '}
                 <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
@@ -1181,7 +1216,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
             <span>点击任意卡片即可直接套用其原版 Apple Pay 卡面、银行名称与卡组织徽标</span>
             <span className="text-slate-300 dark:text-slate-700">|</span>
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-              🟢 已与 cardart.cc 同步 ({syncMeta.totalCards} 张原创卡面就绪)
+              🟢 已与 cardart.cc & cards.no2.ac 实时同步 (CardArt: {galleryStats.cardartCount.toLocaleString()} 款 · Cardentify: {galleryStats.cardentifyCount.toLocaleString()} 款 · 双库共计 {galleryStats.totalCount.toLocaleString()} 款就绪)
             </span>
           </div>
 

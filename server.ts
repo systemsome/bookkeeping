@@ -889,13 +889,21 @@ async function startServer() {
     isCardartSyncing = true;
     const t0 = Date.now();
     try {
-      const allCards: any[] = [];
-      const seenIds = new Set<string>();
+      // Reload disk cards if memory is small
+      if (cardartMemoryCards.length === 0 && fs.existsSync(CARDART_FILE_PATH)) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(CARDART_FILE_PATH, 'utf-8'));
+          if (Array.isArray(parsed)) cardartMemoryCards = parsed;
+        } catch {}
+      }
+
+      const allCards: any[] = [...cardartMemoryCards];
+      const seenIds = new Set<string>(cardartMemoryCards.map(c => c.id));
       let cursor: string | null = null;
       let page = 0;
       let newCount = 0;
 
-      while (page < 35) {
+      while (page < 260) {
         page++;
         let url = 'https://cardart.cc/explore.data';
         if (cursor) {
@@ -942,6 +950,7 @@ async function startServer() {
               sourceUrl: `https://cardart.cc/c/${item.id}`,
             });
             pageNew++;
+            newCount++;
           }
         }
 
@@ -950,14 +959,13 @@ async function startServer() {
         if (ncIdx !== -1 && typeof arr[ncIdx + 1] === 'string') {
           nextCursor = arr[ncIdx + 1];
         }
-        if (!nextCursor || pageNew === 0) break;
+        if (!nextCursor) break;
         cursor = nextCursor;
       }
 
       if (allCards.length > 0) {
         cardartMemoryCards = allCards;
         cardartLastSyncedAt = new Date().toISOString();
-        newCount = allCards.length;
         // Save to disk
         try {
           if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -979,21 +987,146 @@ async function startServer() {
   }
 
   // API Endpoint: Query CardArt Cards with Search, Category Filter, and Sort
-  app.get('/api/cardart/cards', (req, res) => {
+  app.get('/api/cardart/cards', async (req, res) => {
     const q = (req.query.q as string || '').trim().toLowerCase();
     const sort = (req.query.sort as string || 'popular').toLowerCase();
     const tag = (req.query.tag as string || 'ALL').toUpperCase();
 
+    // Reload from disk if in-memory list has fewer cards than file
+    if (fs.existsSync(CARDART_FILE_PATH) && cardartMemoryCards.length < 2000) {
+      try {
+        const raw = fs.readFileSync(CARDART_FILE_PATH, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > cardartMemoryCards.length) {
+          cardartMemoryCards = parsed;
+        }
+      } catch {}
+    }
+
+    // If query is present, query cardart.cc explore endpoint concurrently to fetch latest live matching cards
+    if (q) {
+      try {
+        const liveRes = await fetch(`https://cardart.cc/explore.data?q=${encodeURIComponent(q)}`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (CardArt-Sync-Client)',
+            'Accept': 'application/json',
+          },
+        });
+        if (liveRes.ok) {
+          const arr: any = await liveRes.json();
+          const itemsIdx = arr.indexOf('items');
+          if (itemsIdx !== -1 && Array.isArray(arr[itemsIdx + 1])) {
+            const pageItems = resolveTurboObject(arr, arr[itemsIdx + 1]);
+            const existingIds = new Set(cardartMemoryCards.map((c) => c.id));
+            let newlyFound = 0;
+            for (const item of pageItems) {
+              if (item && item.id && !existingIds.has(item.id)) {
+                existingIds.add(item.id);
+                const cardImg = item.images?.png || `/img/cards/${item.id}/v1/card.png`;
+                const thumbImg = item.images?.w640 || item.images?.w1024 || cardImg;
+                cardartMemoryCards.unshift({
+                  id: item.id,
+                  title: item.title || 'CardArt 设计款',
+                  titleEn: item.titleEn || '',
+                  dominantColor: item.dominantColor || '#1e293b',
+                  imageUrl: cardImg.startsWith('http') ? cardImg : `https://cardart.cc${cardImg}`,
+                  thumbUrl: thumbImg.startsWith('http') ? thumbImg : `https://cardart.cc${thumbImg}`,
+                  authorName: item.author?.name || 'CardArt',
+                  authorHandle: item.author?.handle || '',
+                  likeCount: typeof item.likeCount === 'number' ? item.likeCount : 0,
+                  downloadCount: typeof item.downloadCount === 'number' ? item.downloadCount : 0,
+                  typeSlug: item.typeSlug || 'payment',
+                  regionCode: item.regionCode || 'GLOBAL',
+                  featured: !!item.featured,
+                  source: 'cardart',
+                  sourceUrl: `https://cardart.cc/c/${item.id}`,
+                });
+                newlyFound++;
+              }
+            }
+            if (newlyFound > 0) {
+              try {
+                fs.writeFileSync(CARDART_FILE_PATH, JSON.stringify(cardartMemoryCards, null, 2), 'utf-8');
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[CardArt] Live explore search error:', err);
+      }
+    }
+
     let list = [...cardartMemoryCards];
 
-    // Filter by query
+    // Filter by query (with intelligent bank aliases and tags support)
     if (q) {
+      const aliasMap: Record<string, string[]> = {
+        '招商': ['招商', '招行', 'cmb'],
+        '招行': ['招商', '招行', 'cmb'],
+        'cmb': ['招商', '招行', 'cmb'],
+        '工商': ['工商', '工行', 'icbc'],
+        '工行': ['工商', '工行', 'icbc'],
+        'icbc': ['工商', '工行', 'icbc'],
+        '建设': ['建设', '建行', 'ccb'],
+        '建行': ['建设', '建行', 'ccb'],
+        'ccb': ['建设', '建行', 'ccb'],
+        '农业': ['农业', '农行', 'abc'],
+        '农行': ['农业', '农行', 'abc'],
+        'abc': ['农业', '农行', 'abc'],
+        '中行': ['中国银行', '中行', 'boc'],
+        'boc': ['中国银行', '中行', 'boc'],
+        '交行': ['交通银行', '交行', 'bocom'],
+        'bocom': ['交通银行', '交行', 'bocom'],
+        '中信': ['中信', 'citic'],
+        'citic': ['中信', 'citic'],
+        '浦发': ['浦发', 'spdb'],
+        'spdb': ['浦发', 'spdb'],
+        '民生': ['民生', 'cmbc'],
+        'cmbc': ['民生', 'cmbc'],
+        '广发': ['广发', 'cgb'],
+        'cgb': ['广发', 'cgb'],
+        '平安': ['平安', 'pab'],
+        'pab': ['平安', 'pab'],
+        '光大': ['光大', 'ceb'],
+        'ceb': ['光大', 'ceb'],
+        '兴业': ['兴业', 'cib'],
+        'cib': ['兴业', 'cib'],
+        '邮储': ['邮储', 'psbc'],
+        'psbc': ['邮储', 'psbc'],
+        '汇丰': ['汇丰', 'hsbc'],
+        'hsbc': ['汇丰', 'hsbc'],
+        '渣打': ['渣打', 'scb'],
+        'scb': ['渣打', 'scb'],
+        '花旗': ['花旗', 'citi'],
+        'citi': ['花旗', 'citi'],
+        '运通': ['运通', 'amex', '百夫长', 'centurion'],
+        'amex': ['运通', 'amex', '百夫长', 'centurion'],
+        '银联': ['银联', 'unionpay'],
+        'unionpay': ['银联', 'unionpay'],
+        'visa': ['visa', '维萨'],
+        '维萨': ['visa', '维萨'],
+        '万事达': ['master', 'mastercard', '万事达'],
+        'mastercard': ['master', 'mastercard', '万事达'],
+        'jcb': ['jcb'],
+        '八达通': ['八达通', 'octopus'],
+        'octopus': ['八达通', 'octopus'],
+        'suica': ['suica', '西瓜卡'],
+        '西瓜卡': ['suica', '西瓜卡'],
+        'icoca': ['icoca'],
+      };
+
+      const searchTerms = [q];
+      for (const [key, aliases] of Object.entries(aliasMap)) {
+        if (q.includes(key)) {
+          aliases.forEach((a) => {
+            if (!searchTerms.includes(a)) searchTerms.push(a);
+          });
+        }
+      }
+
       list = list.filter((c) => {
-        const matchTitle = (c.title || '').toLowerCase().includes(q);
-        const matchEn = (c.titleEn || '').toLowerCase().includes(q);
-        const matchAuthor = (c.authorName || '').toLowerCase().includes(q) || (c.authorHandle || '').toLowerCase().includes(q);
-        const matchId = (c.id || '').toLowerCase().includes(q);
-        return matchTitle || matchEn || matchAuthor || matchId;
+        const text = `${c.title || ''} ${c.titleEn || ''} ${c.authorName || ''} ${c.authorHandle || ''} ${c.id || ''} ${c.typeSlug || ''} ${c.regionCode || ''}`.toLowerCase();
+        return searchTerms.some((term) => text.includes(term));
       });
     }
 
@@ -1190,10 +1323,10 @@ async function startServer() {
   // ==========================================
   // Dual-Library Unified Sync & Stats Endpoints
   // Automatically aligns with official website figures:
-  // CardArt (https://cardart.cc/): dynamically parses "4,414 cards and counting"
+  // CardArt (https://cardart.cc/): dynamically parses "5,019 cards and counting"
   // Cardentify (https://cards.no2.ac/): queries /api/cards live collection
   // ==========================================
-  let cardartOfficialCount = 4414;
+  let cardartOfficialCount = 5019;
   let cardentifyOfficialCount = 655;
   let lastOfficialStatsChecked = 0;
 
@@ -1212,7 +1345,7 @@ async function startServer() {
       });
       if (res1.ok) {
         const text1 = await res1.text();
-        const match1 = text1.match(/([0-9,]+)\s+cards\s+and\s+counting/i);
+        const match1 = text1.match(/([0-9,]+)\s+cards\s+(?:and\s+counting)?/i);
         if (match1 && match1[1]) {
           const parsed = parseInt(match1[1].replace(/,/g, ''), 10);
           if (!isNaN(parsed) && parsed > 0) {
