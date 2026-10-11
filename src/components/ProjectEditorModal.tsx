@@ -12,6 +12,8 @@ import {
   Clock,
   Archive,
   Palette,
+  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { LedgerProject, ProjectStatus, UserProfile } from '../types';
 
@@ -67,7 +69,9 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
   const [description, setDescription] = useState(initialProject?.description || '');
   const [category, setCategory] = useState(initialProject?.category || '家装工程');
   const [budget, setBudget] = useState(initialProject?.budget?.toString() || '');
-  const [status, setStatus] = useState<ProjectStatus>(initialProject?.status || 'ACTIVE');
+  const [status, setStatus] = useState<ProjectStatus>(
+    initialProject?.isArchived ? 'ARCHIVED' : (initialProject?.status || 'ACTIVE')
+  );
   const [startDate, setStartDate] = useState(
     initialProject?.startDate || new Date().toISOString().split('T')[0]
   );
@@ -77,6 +81,8 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
       PROJECT_CATEGORIES.find((c) => c.name === category)?.color ||
       '#0d9488'
   );
+
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,6 +98,7 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
       color,
       budget: numBudget && numBudget > 0 ? numBudget : undefined,
       status,
+      isArchived: status === 'ARCHIVED',
       startDate: startDate || undefined,
       endDate: endDate || undefined,
       createdAt: initialProject?.createdAt || new Date().toISOString(),
@@ -293,18 +300,72 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
           {/* Actions */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
             {isEditing && onDelete ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm(`确定删除项目「${name}」吗？已关联的历史账单不会被删除，仅解除项目关联。`)) {
-                    onDelete(initialProject!.id);
-                    onClose();
-                  }
-                }}
-                className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-              >
-                删除项目
-              </button>
+              isConfirmingDelete ? (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 text-xs font-bold pr-1">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>不可逆操作警示</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatus('ARCHIVED');
+                        setIsConfirmingDelete(false);
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors flex items-center gap-1 shadow-2xs"
+                      title="改为归档安全保存"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                      <span>改为归档 (推荐)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDelete(initialProject!.id);
+                        onClose();
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors flex items-center gap-1 shadow-2xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>确认彻底删除</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingDelete(false)}
+                      className="px-2 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatus(status === 'ARCHIVED' ? 'ACTIVE' : 'ARCHIVED');
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors flex items-center gap-1.5 ${
+                      status === 'ARCHIVED'
+                        ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+                        : 'text-amber-700 dark:text-amber-400 bg-amber-50/80 dark:bg-amber-950/40 border-amber-200/80 dark:border-amber-900/60 hover:bg-amber-100'
+                    }`}
+                    title={status === 'ARCHIVED' ? '取消归档恢复为进行中' : '快速将项目归档'}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    <span>{status === 'ARCHIVED' ? '取消归档' : '归档此项目'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(true)}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 transition-colors flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>删除此项目</span>
+                  </button>
+                </div>
+              )
             ) : (
               <div />
             )}

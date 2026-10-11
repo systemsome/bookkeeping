@@ -3,6 +3,7 @@
 
 import { CARDENTIFY_CARDS, CardentifyCard } from './cardentifyData';
 import { getAllCardArtCards, CardArtItem, syncWithCardArtOnline, searchCardArtLive } from './cardArtSync';
+import { saveCardsToStorage, loadCardsFromStorage } from './cardStorage';
 
 export type { CardentifyCard, CardArtItem };
 export { CARDENTIFY_CARDS, syncWithCardArtOnline, searchCardArtLive };
@@ -101,26 +102,43 @@ export function cardArtToUnified(c: CardArtItem): UnifiedCardItem {
 }
 
 const CARDENTIFY_CACHE_KEY = 'cardentify_synced_cards_v2';
+let inMemoryCardentifyCards: CardentifyCard[] | null = null;
 
 // Get all Cardentify cards (Base 557 + dynamically synced from cards.no2.ac)
 export function getAllCardentifyCards(): CardentifyCard[] {
+  if (inMemoryCardentifyCards && inMemoryCardentifyCards.length > 0) {
+    return inMemoryCardentifyCards;
+  }
+
+  const map = new Map<number, CardentifyCard>();
+  CARDENTIFY_CARDS.forEach((c) => map.set(c.id, c));
+
   try {
     const raw = localStorage.getItem(CARDENTIFY_CACHE_KEY);
     const cached: CardentifyCard[] = raw ? JSON.parse(raw) : [];
-    const map = new Map<number, CardentifyCard>();
-    CARDENTIFY_CARDS.forEach((c) => map.set(c.id, c));
     cached.forEach((c) => map.set(c.id, c));
-    return Array.from(map.values());
-  } catch {
-    return CARDENTIFY_CARDS;
+  } catch {}
+
+  const list = Array.from(map.values());
+  inMemoryCardentifyCards = list;
+
+  // Restore full cards from IndexedDB asynchronously
+  if (typeof window !== 'undefined') {
+    loadCardsFromStorage().then((res) => {
+      if (res?.cardentifyCards && res.cardentifyCards.length > list.length) {
+        cacheCardentifyCards(res.cardentifyCards);
+      }
+    }).catch(() => {});
   }
+
+  return list;
 }
 
 // Cache newly discovered or synced Cardentify cards
 export function cacheCardentifyCards(newCards: CardentifyCard[]): number {
   if (!newCards || newCards.length === 0) return 0;
   try {
-    const current = getAllCardentifyCards();
+    const current = inMemoryCardentifyCards || getAllCardentifyCards();
     const map = new Map<number, CardentifyCard>();
     current.forEach((c) => map.set(c.id, c));
 
@@ -133,7 +151,13 @@ export function cacheCardentifyCards(newCards: CardentifyCard[]): number {
     });
 
     const merged = Array.from(map.values());
-    localStorage.setItem(CARDENTIFY_CACHE_KEY, JSON.stringify(merged));
+    inMemoryCardentifyCards = merged;
+
+    saveCardsToStorage(undefined, merged).catch(() => {});
+
+    try {
+      localStorage.setItem(CARDENTIFY_CACHE_KEY, JSON.stringify(merged));
+    } catch {}
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -166,7 +190,7 @@ export function getAllUnifiedCards(): UnifiedCardItem[] {
 // Get dynamic total card count across both databases (Cardentify + CardArt synced)
 export function getTotalGalleryCardsCount(): number {
   const local = getAllCardentifyCards().length + getAllCardArtCards().length;
-  return Math.max(5674, local);
+  return Math.max(8338, local);
 }
 
 // Convert Cardentify card to CardFacePreset format for backwards compatibility

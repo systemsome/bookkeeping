@@ -1959,3 +1959,104 @@ export function getTierTheme(
     description: '官方标准品牌卡面',
   };
 }
+
+// ==========================================
+// Bank & Card Network Search Alias Knowledge Graph
+// Bridges common shorthand (e.g., 工行 -> 中国工商银行, 招行 -> 招商银行, cmb, amex)
+// ==========================================
+export const BANK_SEARCH_ALIASES: Record<string, string[]> = {
+  '工行': ['中国工商银行', '工商银行', '工商', '工行', 'icbc'],
+  '工商': ['中国工商银行', '工商银行', '工商', '工行', 'icbc'],
+  'icbc': ['中国工商银行', '工商银行', '工商', '工行', 'icbc'],
+  '建行': ['中国建设银行', '建设银行', '建设', '建行', 'ccb'],
+  '建设': ['中国建设银行', '建设银行', '建设', '建行', 'ccb'],
+  'ccb': ['中国建设银行', '建设银行', '建设', '建行', 'ccb'],
+  '农行': ['中国农业银行', '农业银行', '农业', '农行', 'abc'],
+  '农业': ['中国农业银行', '农业银行', '农业', '农行', 'abc'],
+  'abc': ['中国农业银行', '农业银行', '农业', '农行', 'abc'],
+  '中行': ['中国银行', '中行', 'boc', 'bank of china'],
+  '中国银行': ['中国银行', '中行', 'boc', 'bank of china'],
+  'boc': ['中国银行', '中行', 'boc', 'bank of china'],
+  '交行': ['交通银行', '交行', 'bocom', 'bank of communications'],
+  '交通': ['交通银行', '交行', 'bocom', 'bank of communications'],
+  'bocom': ['交通银行', '交行', 'bocom', 'bank of communications'],
+  '招行': ['招商银行', '招商', '招行', 'cmb', 'china merchants bank'],
+  '招商': ['招商银行', '招商', '招行', 'cmb', 'china merchants bank'],
+  'cmb': ['招商银行', '招商', '招行', 'cmb', 'china merchants bank'],
+  '中信': ['中信银行', '中信', 'citic', 'china citic bank'],
+  'citic': ['中信银行', '中信', 'citic', 'china citic bank'],
+  '浦发': ['上海浦东发展银行', '浦发银行', '浦发', 'spdb'],
+  'spdb': ['上海浦东发展银行', '浦发银行', '浦发', 'spdb'],
+  '民生': ['中国民生银行', '民生银行', '民生', 'cmbc'],
+  'cmbc': ['中国民生银行', '民生银行', '民生', 'cmbc'],
+  '广发': ['广发银行', '广东发展银行', '广发', 'cgb'],
+  'cgb': ['广发银行', '广东发展银行', '广发', 'cgb'],
+  '平安': ['平安银行', '平安', 'pab', 'ping an'],
+  'pab': ['平安银行', '平安', 'pab', 'ping an'],
+  '光大': ['中国光大银行', '光大银行', '光大', 'ceb'],
+  'ceb': ['中国光大银行', '光大银行', '光大', 'ceb'],
+  '兴业': ['兴业银行', '兴业', 'cib'],
+  'cib': ['兴业银行', '兴业', 'cib'],
+  '邮储': ['中国邮政储蓄银行', '邮储银行', '邮政储蓄', '邮储', 'psbc'],
+  '邮政': ['中国邮政储蓄银行', '邮储银行', '邮政储蓄', '邮储', 'psbc'],
+  'psbc': ['中国邮政储蓄银行', '邮储银行', '邮政储蓄', '邮储', 'psbc'],
+  '微众': ['微众银行', '微众', 'webank'],
+  'webank': ['微众银行', '微众', 'webank'],
+  '网商': ['网商银行', '网商', 'mybank'],
+  'mybank': ['网商银行', '网商', 'mybank'],
+  '百信': ['百信银行', 'aibank'],
+  'aibank': ['百信银行', 'aibank'],
+  '汇丰': ['汇丰银行', '汇丰', 'hsbc'],
+  'hsbc': ['汇丰银行', '汇丰', 'hsbc'],
+  '渣打': ['渣打银行', '渣打', 'scb', 'standard chartered'],
+  'scb': ['渣打银行', '渣打', 'scb', 'standard chartered'],
+  '花旗': ['花旗银行', '花旗', 'citi', 'citibank'],
+  'citi': ['花旗银行', '花旗', 'citi', 'citibank'],
+  '东亚': ['东亚银行', '东亚', 'bea'],
+  '北京银行': ['北京银行', 'bob'],
+  '上海银行': ['上海银行', 'bos'],
+  '江苏银行': ['江苏银行', 'jsb'],
+  '宁波银行': ['宁波银行', 'nbcb'],
+  '南京银行': ['南京银行', 'njcb'],
+  '徽商银行': ['徽商银行', 'hsbank'],
+  '运通': ['美国运通', '运通', 'amex', 'american express', '百夫长', 'centurion'],
+  'amex': ['美国运通', '运通', 'amex', 'american express', '百夫长', 'centurion'],
+  '百夫长': ['美国运通', '运通', 'amex', '百夫长', 'centurion'],
+  'centurion': ['美国运通', '运通', 'amex', '百夫长', 'centurion'],
+  '银联': ['中国银联', '银联', 'unionpay', 'cup'],
+  'unionpay': ['中国银联', '银联', 'unionpay', 'cup'],
+  'cup': ['中国银联', '银联', 'unionpay', 'cup'],
+  'visa': ['visa', '维萨'],
+  '维萨': ['visa', '维萨'],
+  'master': ['mastercard', 'master', '万事达'],
+  'mastercard': ['mastercard', 'master', '万事达'],
+  '万事达': ['mastercard', 'master', '万事达'],
+  'jcb': ['jcb'],
+  '八达通': ['八达通', 'octopus'],
+  'octopus': ['八达通', 'octopus'],
+  '西瓜卡': ['西瓜卡', 'suica'],
+  'suica': ['西瓜卡', 'suica'],
+  'icoca': ['icoca'],
+  'pasmo': ['pasmo'],
+};
+
+export function expandSearchTerms(query: string): string[] {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+  const terms = new Set<string>();
+  terms.add(q);
+
+  const tokens = q.split(/[\s·,，\-_/]+/);
+  tokens.forEach((t) => {
+    if (t) terms.add(t);
+  });
+
+  for (const [key, aliases] of Object.entries(BANK_SEARCH_ALIASES)) {
+    const keyLower = key.toLowerCase();
+    if (q.includes(keyLower) || tokens.some((token) => token === keyLower || keyLower.includes(token))) {
+      aliases.forEach((a) => terms.add(a.toLowerCase()));
+    }
+  }
+
+  return Array.from(terms).filter((t) => t.length > 0);
+}

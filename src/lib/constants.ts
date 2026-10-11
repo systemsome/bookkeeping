@@ -1,4 +1,4 @@
-import { AccountCategory, ExpenseCategory, IncomeCategory, FinancialAccount, Transaction, AssetGroup, LedgerProject } from '../types';
+import { AccountCategory, ExpenseCategory, IncomeCategory, FinancialAccount, Transaction, AssetGroup, LedgerProject, RecurringTask } from '../types';
 
 export const ACCOUNT_CATEGORY_CONFIG: Record<
   AccountCategory,
@@ -713,3 +713,78 @@ export const INITIAL_DEMO_PROJECTS: LedgerProject[] = [
     createdAt: '2026-06-01T10:00:00Z',
   },
 ];
+
+export const INITIAL_DEMO_RECURRING_TASKS: RecurringTask[] = [
+  {
+    id: 'rec-rent-1',
+    name: '每月固定房租与物业费',
+    type: 'EXPENSE',
+    amount: 3500.00,
+    frequency: 'MONTHLY',
+    dayOfMonth: 1,
+    accountId: 'acc-debit-icbc',
+    category: '房租物业',
+    tag: '固定支出',
+    description: '每月1日固定扣除两居室房屋租金',
+    merchant: '房东李女士',
+    enabled: true,
+    autoExecute: true,
+    nextDueDate: '2026-11-01',
+    lastExecutedDate: '2026-10-01',
+    createdAt: '2026-07-01T08:00:00Z',
+  },
+  {
+    id: 'rec-icloud-2',
+    name: 'iCloud+ 2TB 家庭云存储订阅',
+    type: 'EXPENSE',
+    amount: 68.00,
+    frequency: 'MONTHLY',
+    dayOfMonth: 15,
+    accountId: 'acc-credit-cmb',
+    category: '数码软件',
+    tag: '订阅会员',
+    description: 'Apple Services 苹果家庭订阅月度自动扣款',
+    merchant: 'Apple Inc',
+    enabled: true,
+    autoExecute: true,
+    nextDueDate: '2026-10-15',
+    lastExecutedDate: '2026-09-15',
+    createdAt: '2026-07-15T09:00:00Z',
+  },
+  {
+    id: 'rec-salary-3',
+    name: '月度基本薪酬发放',
+    type: 'INCOME',
+    amount: 25000.00,
+    frequency: 'MONTHLY',
+    dayOfMonth: 10,
+    accountId: 'acc-debit-cmb',
+    category: '工资薪酬',
+    tag: '主业收入',
+    description: '每月10日工资自动转账到账',
+    merchant: '未来科技集团股份有限公司',
+    enabled: true,
+    autoExecute: true,
+    nextDueDate: '2026-10-10',
+    lastExecutedDate: '2026-09-10',
+    createdAt: '2026-07-01T08:00:00Z',
+  },
+  {
+    id: 'rec-gym-4',
+    name: '每周健身私教课周卡',
+    type: 'EXPENSE',
+    amount: 200.00,
+    frequency: 'WEEKLY',
+    dayOfWeek: 1, // 周一
+    accountId: 'acc-wechat',
+    category: '运动健康',
+    tag: '会员费',
+    description: '每周一例行体能与力量训练周费',
+    merchant: '威尔士健身会所',
+    enabled: true,
+    autoExecute: false, // 提醒模式
+    nextDueDate: '2026-10-05',
+    createdAt: '2026-08-01T10:00:00Z',
+  },
+];
+

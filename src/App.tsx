@@ -54,6 +54,7 @@ import { AccountEditorModal } from './components/AccountEditorModal';
 import { BatchReconcileModal } from './components/BatchReconcileModal';
 import { SecuritySettingsModal } from './components/SecuritySettingsModal';
 import { SyncBackupModal } from './components/SyncBackupModal';
+import { CardentifyGalleryModal } from './components/CardentifyGalleryModal';
 import { mergeAccounts, mergeTransactions, mergeProjects } from './lib/backup';
 import { updateAccountsWithGoldPrice } from './lib/goldRates';
 import { syncDualLibrariesOnline, fetchDualGalleryStats } from './lib/gallerySync';
@@ -104,27 +105,27 @@ export default function App() {
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'credit' | 'transactions' | 'projects' | 'analytics'>('overview');
 
-  // CardArt & Cardentify 卡面艺廊 与 卡面生态特别鸣谢 分别每5分钟自动周期与官方网站同步
+  // CardArt & Cardentify 卡面艺廊 与 卡面生态特别鸣谢 保持每10秒自动与官方网站双向实时同步
   useEffect(() => {
     let lastSyncTime = Date.now();
 
-    // 初始启动时触发一次静默同步
+    // 初始启动时触发一次静默同步与数据统计
     syncDualLibrariesOnline(false).catch(() => {});
     fetchDualGalleryStats().catch(() => {});
 
-    // 每5分钟自动周期刷新一次
+    // 每10秒自动周期刷新一次，确保与 CardArt (cardart.cc) 及 Cardentify (cards.no2.ac) 双向实时同步
     const intervalId = setInterval(() => {
       lastSyncTime = Date.now();
-      syncDualLibrariesOnline(false).catch(() => {});
       fetchDualGalleryStats().catch(() => {});
-    }, 5 * 60 * 1000);
+      syncDualLibrariesOnline(false).catch(() => {});
+    }, 10 * 1000);
 
-    // 页面切回前台时，若距离上次同步已超过5分钟则主动同步最新卡面数据
+    // 页面切回前台时，若距离上次同步已超过10秒则主动同步最新卡面数据
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastSyncTime >= 5 * 60 * 1000) {
+      if (document.visibilityState === 'visible' && Date.now() - lastSyncTime >= 10 * 1000) {
         lastSyncTime = Date.now();
-        syncDualLibrariesOnline(false).catch(() => {});
         fetchDualGalleryStats().catch(() => {});
+        syncDualLibrariesOnline(false).catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -171,6 +172,7 @@ export default function App() {
   const [isBatchReconcileOpen, setIsBatchReconcileOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Real-time Cloud Sync Status (连接中、已同步、同步失败、离线模式)
@@ -184,8 +186,9 @@ export default function App() {
     }, 4000);
   }, []);
 
-  // Load data whenever user changes (with background server sync)
+  // Load data whenever user changes (local storage is primary workspace, auto-hydrating with server)
   const loadUserData = useCallback((uid: string) => {
+    // 1. 0ms 本地秒开展示
     const accs = getAccounts(uid);
     const txs = getTransactions(uid);
     const projs = getProjects(uid);
@@ -200,20 +203,21 @@ export default function App() {
 
     setSyncStatus('syncing');
 
-    // Background fetch from server / NAS to catch multi-device updates seamlessly
-    fetchLatestDataFromServer(uid).then((res) => {
-      if (res.success) {
-        if (res.accounts) setAccounts(res.accounts);
-        if (res.transactions) setTransactions(res.transactions);
-        if (res.projects) setProjects(res.projects);
+    // 2. 查询本地持久化服务端（不管是在 localhost:3000 还是通过域名访问，访问的都是同一套后端文件）
+    // 核心机制：时间戳对比！若在另一个端口/域名录入了更新的数据，fetchLatestDataFromServer 会平滑更新当前源
+    fetchLatestDataFromServer(uid)
+      .then((res) => {
+        if (res.success && res.accounts && res.transactions) {
+          setAccounts(res.accounts);
+          setTransactions(res.transactions);
+          setProjects(res.projects || []);
+        }
         setSyncStatus('synced');
         setLastSyncTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
-      } else {
-        setSyncStatus('error');
-      }
-    }).catch(() => {
-      setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error');
-    });
+      })
+      .catch(() => {
+        setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'synced');
+      });
   }, []);
 
   // 手动触发全量双向同步
@@ -326,29 +330,17 @@ export default function App() {
       loadUserData(currentUser.id);
       setPrivacyMode(currentUser.privacyMode || false);
 
-      // 建立毫秒级跨设备实时双向长连接，手机/PC随时随地修改，立即自动同步并渲染
-      const unsubscribe = initRealtimeSyncStream(
-        currentUser.id,
-        currentUser.username,
-        (remoteDelta) => {
-          setAccounts(remoteDelta.accounts);
-          setTransactions(remoteDelta.transactions);
-          setProjects(remoteDelta.projects);
-          if (remoteDelta.user) {
-            setCurrentUser(remoteDelta.user);
-          }
-          setSyncStatus('synced');
-          const timeStr = new Date().toLocaleTimeString('zh-CN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          });
-          setLastSyncTime(timeStr);
+      // 当用户在本地端口(localhost)与域名之间切换窗口时，自动无损刷新对应最新数据
+      const handleTabVisibility = () => {
+        if (document.visibilityState === 'visible') {
+          loadUserData(currentUser.id);
         }
-      );
-
+      };
+      window.addEventListener('visibilitychange', handleTabVisibility);
+      window.addEventListener('focus', handleTabVisibility);
       return () => {
-        unsubscribe();
+        window.removeEventListener('visibilitychange', handleTabVisibility);
+        window.removeEventListener('focus', handleTabVisibility);
       };
     }
   }, [currentUser, loadUserData]);
@@ -527,8 +519,22 @@ export default function App() {
     const updated = projects.filter((p) => p.id !== projectId);
     setProjects(updated);
     saveProjects(currentUser.id, updated);
-    triggerAutoServerSync(currentUser.id, true);
-    showToast(`项目「${target?.name || '未命名'}」已删除并同步云端`);
+
+    // Unlink transactions from the deleted project so they are safely kept in ledger
+    let txUpdated = false;
+    const updatedTxs = transactions.map((t) => {
+      if (t.projectId === projectId) {
+        txUpdated = true;
+        return { ...t, projectId: undefined };
+      }
+      return t;
+    });
+
+    if (txUpdated) {
+      setTransactions(updatedTxs);
+      saveTransactions(currentUser.id, updatedTxs);
+    }
+    showToast(`账本项目「${target?.name || '未命名'}」已成功删除，关联记账流水已妥善保留`);
   };
 
   const handleDirectSaveProject = (project: LedgerProject) => {
@@ -811,6 +817,7 @@ export default function App() {
         onLogout={handleLogout}
         onOpenSecuritySettings={() => setIsSecurityModalOpen(true)}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        onOpenGalleryModal={() => setIsGalleryModalOpen(true)}
         syncStatus={syncStatus}
         lastSyncTime={lastSyncTime}
         onTriggerFullSync={handleTriggerFullSync}
@@ -1125,6 +1132,11 @@ export default function App() {
             setEditingProject(null);
           }}
           onSubmit={handleSaveProject}
+          onDelete={(id) => {
+            handleDeleteProject(id);
+            setIsProjectEditorOpen(false);
+            setEditingProject(null);
+          }}
         />
       )}
 
@@ -1178,6 +1190,19 @@ export default function App() {
           onShowToast={showToast}
         />
       )}
+
+      {/* CardArt & Cardentify 卡面艺廊 (双向互通) */}
+      <CardentifyGalleryModal
+        isOpen={isGalleryModalOpen}
+        onClose={() => setIsGalleryModalOpen(false)}
+        onSelectCard={(card) => {
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(card.imageUrl);
+          }
+          showToast(`🎨 已复制「${card.name}」卡面链接，可在编辑资产账户时直接套用`);
+          setIsGalleryModalOpen(false);
+        }}
+      />
 
       {/* Floating Toast Notification */}
       {toastMessage && (

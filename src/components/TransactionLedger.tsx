@@ -32,6 +32,7 @@ import {
   ArrowUpDown,
   RotateCcw,
   FolderKanban,
+  CalendarClock,
 } from 'lucide-react';
 import { Transaction, FinancialAccount, TransactionType, LedgerProject } from '../types';
 import {
@@ -62,6 +63,8 @@ interface TransactionLedgerProps {
     syncAccountBalances: boolean
   ) => void;
   onShowToast: (msg: string) => void;
+  onOpenRecurringTasks?: () => void;
+  recurringTasksCount?: number;
 }
 
 export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
@@ -75,6 +78,8 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   onRefundTransaction,
   onImportTransactions,
   onShowToast,
+  onOpenRecurringTasks,
+  recurringTasksCount,
 }) => {
   // Today helpers
   const today = useMemo(() => {
@@ -108,6 +113,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
   // Modals for Upload, Export & Receipt
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receiptSingleTxId, setReceiptSingleTxId] = useState<string | null>(null);
@@ -442,6 +448,24 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             <span>账单小票</span>
             <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
           </button>
+
+          {/* Recurring Tasks Button */}
+          {onOpenRecurringTasks && (
+            <button
+              id="btn-ledger-recurring"
+              onClick={onOpenRecurringTasks}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+              title="管理每月固定房租、订阅会员、薪资等周期自动记账任务"
+            >
+              <CalendarClock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>周期任务</span>
+              {typeof recurringTasksCount === 'number' && recurringTasksCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-600 text-white font-bold">
+                  {recurringTasksCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Upload Button */}
           <button
@@ -1198,14 +1222,27 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`确定删除记录 “${tx.description || tx.category}” 吗？`)) {
+                            if (confirmDeleteId === tx.id) {
                               onDeleteTransaction(tx.id);
+                              setConfirmDeleteId(null);
+                            } else {
+                              setConfirmDeleteId(tx.id);
+                              setTimeout(() => {
+                                setConfirmDeleteId((cur) => (cur === tx.id ? null : cur));
+                              }, 3500);
                             }
                           }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                          title="删除此记录"
+                          className={`p-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                            confirmDeleteId === tx.id
+                              ? 'bg-rose-600 text-white hover:bg-rose-700 px-2'
+                              : 'text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                          }`}
+                          title={confirmDeleteId === tx.id ? '点击确认删除此记录' : '删除此记录'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
+                          {confirmDeleteId === tx.id && (
+                            <span className="text-[10px] font-bold">确认删除</span>
+                          )}
                         </button>
                       </div>
                     </div>

@@ -1,5 +1,5 @@
-import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats } from '../types';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './constants';
+import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats, RecurringTask } from '../types';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS } from './constants';
 import { matchBestCardentifyPreset, matchBestCardentifyCard } from './cardentifyPresets';
 import { matchLogoHubBank } from './logohubData';
 import { sortTransactions } from './formatters';
@@ -13,9 +13,27 @@ const STORAGE_KEYS = {
   ACCOUNTS_PREFIX: 'asset_manager_accs_',
   TRANSACTIONS_PREFIX: 'asset_manager_txs_',
   PROJECTS_PREFIX: 'asset_manager_projs_',
+  RECURRING_TASKS_PREFIX: 'asset_manager_recurring_tasks_',
   IS_LOCKED: 'asset_manager_is_locked_v1',
   LAST_ACTIVITY: 'asset_manager_last_act_v1',
   DEVICE_ID: 'asset_manager_device_id_v1',
+  LAST_UPDATED_PREFIX: 'asset_manager_last_upd_',
+};
+
+export const setLocalLastUpdated = (userId: string, timestamp?: string): string => {
+  const ts = timestamp || new Date().toISOString();
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.LAST_UPDATED_PREFIX}${userId}`, ts);
+  } catch {}
+  return ts;
+};
+
+export const getLocalLastUpdated = (userId: string): string => {
+  try {
+    return localStorage.getItem(`${STORAGE_KEYS.LAST_UPDATED_PREFIX}${userId}`) || '';
+  } catch {
+    return '';
+  }
 };
 
 export const getDeviceId = (): string => {
@@ -95,6 +113,7 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
     const accounts = getAccounts(userId);
     const transactions = getTransactions(userId);
     const projects = getProjects(userId);
+    const recurringTasks = getRecurringTasks(userId);
     const user: UserProfile = getCurrentUser() || getStoredUsers().find((u) => u.id === userId) || {
       id: userId,
       username: 'user',
@@ -107,7 +126,7 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
 
     // 1. 同步至 Express / NAS 服务端持久化文件存储 (0ms立即推送到云端)
     try {
-      await syncDataToServer(userId, accounts, transactions, projects, user);
+      await syncDataToServer(userId, accounts, transactions, projects, user, recurringTasks);
     } catch (e) {
       console.warn('Server sync attempt:', e);
     }
@@ -341,6 +360,7 @@ export const getAccounts = (userId: string): FinancialAccount[] => {
 export const saveAccounts = (userId: string, accounts: FinancialAccount[]) => {
   try {
     localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(accounts || []));
+    setLocalLastUpdated(userId);
   } catch (err) {
     console.warn('LocalStorage saveAccounts warning:', err);
   }
@@ -371,6 +391,7 @@ export const saveTransactions = (userId: string, transactions: Transaction[]) =>
   const sorted = sortTransactions(transactions || []);
   try {
     localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(sorted));
+    setLocalLastUpdated(userId);
   } catch (err) {
     console.warn('LocalStorage saveTransactions warning:', err);
   }
@@ -400,8 +421,38 @@ export const getProjects = (userId: string): LedgerProject[] => {
 export const saveProjects = (userId: string, projects: LedgerProject[]) => {
   try {
     localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(projects));
+    setLocalLastUpdated(userId);
   } catch (err) {
     console.warn('LocalStorage saveProjects warning:', err);
+  }
+  triggerAutoServerSync(userId, true);
+};
+
+export const getRecurringTasks = (userId: string): RecurringTask[] => {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`);
+    if (!raw) {
+      if (userId === DEFAULT_DEMO_USER.id) {
+        localStorage.setItem(
+          `${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`,
+          JSON.stringify(INITIAL_DEMO_RECURRING_TASKS)
+        );
+        return INITIAL_DEMO_RECURRING_TASKS;
+      }
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveRecurringTasks = (userId: string, tasks: RecurringTask[]) => {
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`, JSON.stringify(tasks));
+  } catch (err) {
+    console.warn('LocalStorage saveRecurringTasks warning:', err);
   }
   triggerAutoServerSync(userId, true);
 };
@@ -638,7 +689,8 @@ export const syncDataToServer = async (
   accounts: FinancialAccount[],
   transactions: Transaction[],
   projects: LedgerProject[] = [],
-  user?: UserProfile
+  user?: UserProfile,
+  recurringTasks?: RecurringTask[]
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const res = await fetch('/api/sync', {
@@ -651,6 +703,7 @@ export const syncDataToServer = async (
         accounts,
         transactions,
         projects,
+        recurringTasks: Array.isArray(recurringTasks) ? recurringTasks : getRecurringTasks(userId),
       }),
     });
     const data = await res.json();
@@ -661,132 +714,22 @@ export const syncDataToServer = async (
 };
 
 /**
- * 建立毫秒级跨设备实时长连接 (Server-Sent Events)
- * 无论手机端或电脑端何时修改，其他设备均能在毫秒内自动感知并无缝更新页面数据
+ * 跨端实时同步流 (已按用户需求关闭多端实时自动同步，避免本地与域名间数据覆盖冲突)
+ * 本地数据作为唯一权威工作区，需要同步时由用户主动触发「全量云端双向同步」
  */
 export const initRealtimeSyncStream = (
-  userId: string,
-  username: string | undefined,
-  onRemoteUpdate: (payload: {
+  _userId: string,
+  _username: string | undefined,
+  _onRemoteUpdate: (payload: {
     accounts: FinancialAccount[];
     transactions: Transaction[];
     projects: LedgerProject[];
+    recurringTasks?: RecurringTask[];
     user?: UserProfile;
     lastUpdated?: string;
   }) => void
 ): (() => void) => {
-  if (!userId || typeof window === 'undefined' || typeof EventSource === 'undefined') {
-    return () => {};
-  }
-
-  let eventSource: EventSource | null = null;
-  let reconnectTimer: any = null;
-  let isClosed = false;
-
-  const connect = () => {
-    if (isClosed) return;
-    try {
-      const url = `/api/sync/stream?userId=${encodeURIComponent(userId)}&username=${encodeURIComponent(username || '')}`;
-      eventSource = new EventSource(url);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data && data.type === 'SYNC_UPDATE') {
-            const currentDeviceId = getDeviceId();
-            // 如果来自当前设备自身发出的变更，已在本地乐观更新，跳过避免重复渲染
-            if (data.senderDeviceId && data.senderDeviceId === currentDeviceId) {
-              return;
-            }
-
-            const incomingAccounts: FinancialAccount[] = Array.isArray(data.accounts) ? data.accounts : [];
-            const incomingTransactions: Transaction[] = Array.isArray(data.transactions)
-              ? sortTransactions<Transaction>(data.transactions)
-              : [];
-            const incomingProjects: LedgerProject[] = Array.isArray(data.projects) ? data.projects : [];
-
-            // 毫秒级写入本地缓存并持久化
-            try {
-              localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(incomingAccounts));
-              localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(incomingTransactions));
-              localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(incomingProjects));
-              if (data.user) {
-                const users = getStoredUsers();
-                const idx = users.findIndex((u) => u.id === userId || u.username.toLowerCase() === data.user.username?.toLowerCase());
-                if (idx >= 0) {
-                  users[idx] = { ...users[idx], ...data.user };
-                } else {
-                  users.push(data.user);
-                }
-                saveUsers(users);
-              }
-            } catch (err) {
-              console.warn('[RealtimeSync] Local storage update warning:', err);
-            }
-
-            // 实时通知 UI 自动更新
-            onRemoteUpdate({
-              accounts: incomingAccounts,
-              transactions: incomingTransactions,
-              projects: incomingProjects,
-              user: data.user,
-              lastUpdated: data.lastUpdated,
-            });
-          }
-        } catch {
-          // ignore parsing error
-        }
-      };
-
-      eventSource.onerror = () => {
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-        if (!isClosed) {
-          if (reconnectTimer) clearTimeout(reconnectTimer);
-          reconnectTimer = setTimeout(connect, 2500);
-        }
-      };
-    } catch {
-      if (!isClosed) {
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 2500);
-      }
-    }
-  };
-
-  connect();
-
-  // 手机锁屏恢复或从后台切换回前台时，即刻校验并补全最新数据
-  const handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible') {
-      fetchLatestDataFromServer(userId).then((res) => {
-        if (res.success && res.accounts && res.transactions) {
-          onRemoteUpdate({
-            accounts: res.accounts,
-            transactions: res.transactions,
-            projects: res.projects || [],
-            user: res.user,
-          });
-        }
-      }).catch(() => {});
-    }
-  };
-
-  window.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('focus', handleVisibilityChange);
-
-  return () => {
-    isClosed = true;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-    window.removeEventListener('visibilitychange', handleVisibilityChange);
-    window.removeEventListener('focus', handleVisibilityChange);
-  };
+  return () => {};
 };
 
 /**
@@ -794,54 +737,73 @@ export const initRealtimeSyncStream = (
  */
 export const fetchLatestDataFromServer = async (
   userId: string
-): Promise<{ success: boolean; accounts?: FinancialAccount[]; transactions?: Transaction[]; projects?: LedgerProject[]; user?: UserProfile }> => {
+): Promise<{ success: boolean; accounts?: FinancialAccount[]; transactions?: Transaction[]; projects?: LedgerProject[]; recurringTasks?: RecurringTask[]; user?: UserProfile; lastUpdated?: string }> => {
   try {
     const res = await fetch(`/api/sync?userId=${encodeURIComponent(userId)}`);
     if (!res.ok) return { success: false };
     const data = await res.json();
     if (data && data.success) {
+      const serverAccs = Array.isArray(data.accounts) ? data.accounts : [];
+      const serverTxs = Array.isArray(data.transactions) ? data.transactions : [];
+      const serverProjs = Array.isArray(data.projects) ? data.projects : [];
+      const serverRec = Array.isArray(data.recurringTasks) ? data.recurringTasks : [];
+      const serverLastUpdated = data.lastUpdated || '';
+
+      const localUpdated = getLocalLastUpdated(userId);
       const localAccs = getAccounts(userId);
       const localTxs = getTransactions(userId);
       const localProjs = getProjects(userId);
 
-      // 双向智能合并，防止本地刚创建的项目被服务端空数组覆盖冲刷
-      const serverAccs = Array.isArray(data.accounts) ? data.accounts : [];
-      const serverTxs = Array.isArray(data.transactions) ? data.transactions : [];
-      const serverProjs = Array.isArray(data.projects) ? data.projects : [];
+      // 核心判断逻辑：
+      // 1. 如果当前端口/域名的本地缓存为空（例如在 localhost 记账后切换到自定义域名，新源首开），直接拉取服务端的最新全量数据
+      // 2. 如果服务端时间戳严格晚于当前客户端记录的最后更新时间戳（说明用户在另一个端口或域名上进行了更新），直接无缝采用服务端的最新全量数据
+      const isLocalEmpty = localAccs.length === 0 && localTxs.length === 0 && localProjs.length === 0;
+      const isServerNewer = !!serverLastUpdated && (!localUpdated || serverLastUpdated > localUpdated);
 
-      const finalAccs = mergeAccounts(localAccs, serverAccs);
-      const finalTxs = mergeTransactions(localTxs, serverTxs);
-      const finalProjs = mergeProjects(localProjs, serverProjs);
-
-      localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(finalAccs));
-      localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(finalTxs));
-      localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(finalProjs));
-
-      // 若本地有云端尚无的新项目或数据，立即回写同步至服务端，确保云端永远保有全量
-      if (
-        finalProjs.length > serverProjs.length ||
-        finalAccs.length > serverAccs.length ||
-        finalTxs.length > serverTxs.length
-      ) {
-        syncDataToServer(userId, finalAccs, finalTxs, finalProjs, getCurrentUser() || undefined).catch(() => {});
-      }
-
-      if (data.user) {
-        const users = getStoredUsers();
-        const idx = users.findIndex((u) => u.id === userId || u.username.toLowerCase() === data.user.username?.toLowerCase());
-        if (idx >= 0) {
-          users[idx] = { ...users[idx], ...data.user };
-        } else {
-          users.push(data.user);
+      if (isServerNewer || (isLocalEmpty && (serverAccs.length > 0 || serverTxs.length > 0 || serverProjs.length > 0))) {
+        localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(serverAccs));
+        localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(serverTxs));
+        localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(serverProjs));
+        localStorage.setItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`, JSON.stringify(serverRec));
+        if (serverLastUpdated) {
+          setLocalLastUpdated(userId, serverLastUpdated);
         }
-        saveUsers(users);
+
+        if (data.user) {
+          const users = getStoredUsers();
+          const idx = users.findIndex((u) => u.id === userId || u.username.toLowerCase() === data.user.username?.toLowerCase());
+          if (idx >= 0) {
+            users[idx] = { ...users[idx], ...data.user };
+          } else {
+            users.push(data.user);
+          }
+          saveUsers(users);
+        }
+
+        return {
+          success: true,
+          accounts: serverAccs,
+          transactions: serverTxs,
+          projects: serverProjs,
+          recurringTasks: serverRec,
+          user: data.user,
+          lastUpdated: serverLastUpdated,
+        };
       }
+
+      // 如果当前本地已包含更新的数据，则以当前本地为主，并确保服务端也同步拥有最新全量
+      if (localAccs.length > 0 || localTxs.length > 0 || localProjs.length > 0) {
+        syncDataToServer(userId, localAccs, localTxs, localProjs, getCurrentUser() || undefined, getRecurringTasks(userId)).catch(() => {});
+      }
+
       return {
         success: true,
-        accounts: finalAccs,
-        transactions: finalTxs,
-        projects: finalProjs,
+        accounts: localAccs,
+        transactions: localTxs,
+        projects: localProjs,
+        recurringTasks: getRecurringTasks(userId),
         user: data.user,
+        lastUpdated: localUpdated || serverLastUpdated,
       };
     }
     return { success: false };
@@ -1203,6 +1165,8 @@ export const updateAccountBalanceDirectly = (
 export const clearAllUserData = (userId: string) => {
   saveAccounts(userId, []);
   saveTransactions(userId, []);
+  saveProjects(userId, []);
+  saveRecurringTasks(userId, []);
 };
 
 export const deleteTransaction = (

@@ -1,7 +1,6 @@
-// CardArt (https://cardart.cc) Real-time Sync & Integration Engine
-// Maintains live synchronization with cardart.cc official card library & /api/cardart/* backend routes
-
 import { CARDART_CARDS, CardArtCard } from './cardartData';
+import { expandSearchTerms } from './brandHelper';
+import { saveCardsToStorage, loadCardsFromStorage } from './cardStorage';
 
 export interface CardArtItem {
   id: string;
@@ -168,21 +167,29 @@ export function getAllCardArtCards(): CardArtItem[] {
   const list = Array.from(map.values());
   inMemoryCardArtCards = list;
 
-  // Asynchronously trigger server cards load in background if on browser
-  if (typeof window !== 'undefined' && !isFetchingServerCards) {
-    isFetchingServerCards = true;
-    fetch('/api/cardart/cards')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data.cards) && data.cards.length > 0) {
-          const normalized = data.cards.map(normalizeBaseCard);
-          cacheCardArtCards(normalized);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        isFetchingServerCards = false;
-      });
+  // Asynchronously restore full IndexedDB store & trigger server cards load in background
+  if (typeof window !== 'undefined') {
+    loadCardsFromStorage().then((res) => {
+      if (res?.cardartCards && res.cardartCards.length > list.length) {
+        cacheCardArtCards(res.cardartCards);
+      }
+    }).catch(() => {});
+
+    if (!isFetchingServerCards) {
+      isFetchingServerCards = true;
+      fetch('/api/cardart/cards')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.cards) && data.cards.length > 0) {
+            const normalized = data.cards.map(normalizeBaseCard);
+            cacheCardArtCards(normalized);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          isFetchingServerCards = false;
+        });
+    }
   }
 
   return list;
@@ -196,7 +203,7 @@ export function getCardArtSyncMeta(): CardArtSyncMeta {
   } catch {}
   return {
     lastSyncTime: new Date().toISOString(),
-    totalCards: inMemoryCardArtCards ? inMemoryCardArtCards.length : 5019,
+    totalCards: inMemoryCardArtCards ? inMemoryCardArtCards.length : 7589,
     status: 'synced',
   };
 }
@@ -228,15 +235,13 @@ export function cacheCardArtCards(newCards: CardArtItem[]): number {
     const merged = Array.from(map.values());
     inMemoryCardArtCards = merged;
 
-    // Resilient localStorage write: if quota exceeded, store top items
+    // Persist full collection to IndexedDB (zero quota limitation)
+    saveCardsToStorage(merged).catch(() => {});
+
+    // Safe localStorage write: store up to 500 cards preview for instant sync
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
-    } catch {
-      try {
-        const compactSubset = merged.slice(0, 500);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(compactSubset));
-      } catch {}
-    }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(merged.slice(0, 500)));
+    } catch {}
 
     saveCardArtSyncMeta({
       lastSyncTime: new Date().toISOString(),
@@ -322,7 +327,9 @@ export async function searchCardArtLive(query: string): Promise<CardArtItem[]> {
   const q = query.trim().toLowerCase();
   if (!q) return getAllCardArtCards();
 
-  // Try server search first (which searches cached memory and cardart.cc live explore)
+  const searchTerms = expandSearchTerms(q);
+
+  // Try server search first (which searches cached memory and cardart.cc live explore with pagination and aliases)
   try {
     const res = await fetch(`/api/cardart/cards?q=${encodeURIComponent(q)}`);
     if (res.ok) {
@@ -335,14 +342,17 @@ export async function searchCardArtLive(query: string): Promise<CardArtItem[]> {
     }
   } catch {}
 
-  // Local in-memory filter fallback
+  // Local in-memory filter fallback with expanded alias terms
   const all = getAllCardArtCards();
   return all.filter((c) => {
-    const titleMatch = (c.title || '').toLowerCase().includes(q);
-    const enMatch = (c.titleEn || '').toLowerCase().includes(q);
-    const authorMatch = (c.authorName || '').toLowerCase().includes(q) || (c.authorHandle || '').toLowerCase().includes(q);
-    const tagMatch = c.tags && c.tags.some((t) => t.toLowerCase().includes(q));
-    const issuerMatch = (c.issuerName || '').toLowerCase().includes(q);
-    return titleMatch || enMatch || authorMatch || tagMatch || issuerMatch;
+    const fullText = (
+      (c.title || '') + ' ' +
+      (c.titleEn || '') + ' ' +
+      (c.authorName || '') + ' ' +
+      (c.authorHandle || '') + ' ' +
+      (c.issuerName || '') + ' ' +
+      (c.tags?.join(' ') || '')
+    ).toLowerCase();
+    return searchTerms.some((term) => fullText.includes(term));
   });
 }

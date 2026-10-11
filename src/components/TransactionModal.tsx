@@ -423,18 +423,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   // Reset categories to factory defaults
   const handleResetCategoriesToDefault = (targetType: 'EXPENSE' | 'INCOME') => {
-    if (confirm(`确定要恢复${targetType === 'EXPENSE' ? '支出' : '收入'}类别为系统预设分类吗？`)) {
-      if (targetType === 'EXPENSE') {
-        setExpenseCategories([...EXPENSE_CATEGORIES]);
-        saveStoredExpenseCategories([...EXPENSE_CATEGORIES]);
-        setCategory(EXPENSE_CATEGORIES[0].name);
-      } else {
-        setIncomeCategories([...INCOME_CATEGORIES]);
-        saveStoredIncomeCategories([...INCOME_CATEGORIES]);
-        setCategory(INCOME_CATEGORIES[0].name);
-      }
-      setIsManagingCategories(false);
+    if (targetType === 'EXPENSE') {
+      setExpenseCategories([...EXPENSE_CATEGORIES]);
+      saveStoredExpenseCategories([...EXPENSE_CATEGORIES]);
+      setCategory(EXPENSE_CATEGORIES[0].name);
+    } else {
+      setIncomeCategories([...INCOME_CATEGORIES]);
+      saveStoredIncomeCategories([...INCOME_CATEGORIES]);
+      setCategory(INCOME_CATEGORIES[0].name);
     }
+    setIsManagingCategories(false);
   };
 
   // Add custom tag handler

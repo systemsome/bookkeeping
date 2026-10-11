@@ -76,6 +76,7 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
   // JSON File State
   const [importedBackup, setImportedBackup] = useState<BackupPackage | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
 
   // Save configs when changed
   const handleSaveCfConfig = (newConfig: CloudflareSyncConfig) => {
@@ -591,7 +592,9 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
                   <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-200/80 space-y-3 animate-in fade-in duration-150">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs text-purple-950">备份文件解析成功</span>
-                      <span className="text-[11px] text-purple-700">导出时间: {new Date(importedBackup.exportedAt).toLocaleString()}</span>
+                      <span className="text-[11px] text-purple-700">
+                        导出时间: {importedBackup.exportedAt ? new Date(importedBackup.exportedAt).toLocaleString() : '本地文件'}
+                      </span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-purple-900">
@@ -621,17 +624,35 @@ export const SyncBackupModal: React.FC<SyncBackupModalProps> = ({
                       >
                         智能合并导入（推荐，保留现有）
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm('确定要全量覆盖当前数据吗？现有未备份的账目将被替换。')) {
-                            handleApplyJsonRestore(false);
-                          }
-                        }}
-                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-semibold text-xs border border-rose-200 transition-colors"
-                      >
-                        全量覆盖恢复
-                      </button>
+                      {confirmOverwrite ? (
+                        <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmOverwrite(false);
+                              handleApplyJsonRestore(false);
+                            }}
+                            className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs active:scale-95 transition-all"
+                          >
+                            确认彻底覆盖
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmOverwrite(false)}
+                            className="py-2.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium text-xs transition-colors"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmOverwrite(true)}
+                          className="py-2.5 px-3 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-semibold text-xs border border-rose-200 transition-colors"
+                        >
+                          全量覆盖恢复
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

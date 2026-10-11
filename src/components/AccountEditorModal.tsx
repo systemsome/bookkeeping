@@ -90,7 +90,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [accountClass, setAccountClass] = useState<BankAccountClass>(
     initialAccount?.accountClass || 'CLASS_1'
   );
-  const [holderName, setHolderName] = useState(initialAccount?.holderName || '持卡人姓名');
+  const [holderName, setHolderName] = useState(initialAccount?.holderName || '');
   const [cardTier, setCardTier] = useState(initialAccount?.cardTier || '');
   const [cardSkin, setCardSkin] = useState(initialAccount?.cardSkin || '');
   const [cardBgColor, setCardBgColor] = useState(initialAccount?.cardBgColor || '');
@@ -98,7 +98,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [cardTextColor, setCardTextColor] = useState<'light' | 'dark'>(initialAccount?.cardTextColor || 'light');
   const [cardImageUrl, setCardImageUrl] = useState(initialAccount?.cardImageUrl || '');
   const [cardPresetId, setCardPresetId] = useState(initialAccount?.cardPresetId || '');
-  const [cardExpiry, setCardExpiry] = useState(initialAccount?.cardExpiry || '08/29');
+  const [cardExpiry, setCardExpiry] = useState(initialAccount?.cardExpiry || '');
   const [showBrandLogo, setShowBrandLogo] = useState<boolean>(initialAccount?.showBrandLogo || false);
   const [cardNetwork, setCardNetwork] = useState<'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE'>(
     initialAccount?.cardNetwork || 'UNIONPAY'
@@ -106,25 +106,25 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const [balance, setBalance] = useState<string>(
-    initialAccount?.balance !== undefined ? initialAccount.balance.toString() : '0'
+    initialAccount?.balance !== undefined ? initialAccount.balance.toString() : ''
   );
   const [creditLimit, setCreditLimit] = useState<string>(
-    initialAccount?.creditLimit !== undefined ? initialAccount.creditLimit.toString() : '20000'
+    initialAccount?.creditLimit !== undefined ? initialAccount.creditLimit.toString() : ''
   );
   const [usedCredit, setUsedCredit] = useState<string>(
-    initialAccount?.usedCredit !== undefined ? initialAccount.usedCredit.toString() : '0'
+    initialAccount?.usedCredit !== undefined ? initialAccount.usedCredit.toString() : ''
   );
   const [billDay, setBillDay] = useState<string>(
-    initialAccount?.billDay !== undefined ? initialAccount.billDay.toString() : '5'
+    initialAccount?.billDay !== undefined ? initialAccount.billDay.toString() : ''
   );
   const [dueDay, setDueDay] = useState<string>(
-    initialAccount?.dueDay !== undefined ? initialAccount.dueDay.toString() : '25'
+    initialAccount?.dueDay !== undefined ? initialAccount.dueDay.toString() : ''
   );
   const [goldGrams, setGoldGrams] = useState<string>(
-    initialAccount?.goldGrams !== undefined ? initialAccount.goldGrams.toString() : '50'
+    initialAccount?.goldGrams !== undefined ? initialAccount.goldGrams.toString() : ''
   );
   const [goldUnitPrice, setGoldUnitPrice] = useState<string>(
-    initialAccount?.goldUnitPrice !== undefined ? initialAccount.goldUnitPrice.toString() : '600'
+    initialAccount?.goldUnitPrice !== undefined ? initialAccount.goldUnitPrice.toString() : ''
   );
   const [counterparty, setCounterparty] = useState(initialAccount?.counterparty || '');
   const [dueDate, setDueDate] = useState(initialAccount?.dueDate || '');
@@ -1361,9 +1361,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                       id="acc-input-credit-limit"
                       type="number"
                       step="100"
-                      required
                       value={creditLimit}
                       onChange={(e) => setCreditLimit(e.target.value)}
+                      placeholder="如 20000"
                       className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none font-semibold"
                     />
                   </div>
@@ -1375,9 +1375,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                       id="acc-input-used-credit"
                       type="number"
                       step="0.01"
-                      required
                       value={usedCredit}
                       onChange={(e) => setUsedCredit(e.target.value)}
+                      placeholder="0.00"
                       className="w-full px-3.5 py-2 rounded-xl bg-white border border-rose-300 text-rose-700 text-sm focus:outline-none font-bold"
                     />
                   </div>
@@ -1392,6 +1392,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                       max="31"
                       value={billDay}
                       onChange={(e) => setBillDay(e.target.value)}
+                      placeholder="如 5"
                       className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none"
                     />
                   </div>
@@ -1403,6 +1404,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                       max="31"
                       value={dueDay}
                       onChange={(e) => setDueDay(e.target.value)}
+                      placeholder="如 25"
                       className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none font-semibold text-rose-600"
                     />
                   </div>

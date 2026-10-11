@@ -33,8 +33,11 @@ import {
   syncWithCardArtOnline,
   getCardArtSyncMeta,
   searchCardArtLive,
+  cacheCardArtCards,
+  normalizeBaseCard,
 } from '../lib/cardArtSync';
-import { syncDualLibrariesOnline, fetchDualGalleryStats } from '../lib/gallerySync';
+import { syncDualLibrariesOnline, fetchDualGalleryStats, searchDualGalleryLive } from '../lib/gallerySync';
+import { expandSearchTerms } from '../lib/brandHelper';
 
 export interface UnifiedGalleryCard {
   id: string | number;
@@ -63,7 +66,7 @@ export interface UnifiedGalleryCard {
 interface CardentifyGalleryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectCard: (card: UnifiedGalleryCard | CardentifyCard) => void;
+  onSelectCard?: (card: UnifiedGalleryCard | CardentifyCard) => void;
   currentImageUrl?: string;
   defaultBankQuery?: string;
   defaultTier?: string;
@@ -118,51 +121,72 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     cardartCount: number;
     cardentifyCount: number;
   }>({
-    totalCount: 5674,
-    cardartCount: 5019,
-    cardentifyCount: 655,
+    totalCount: 8338,
+    cardartCount: 7589,
+    cardentifyCount: 749,
   });
 
-  // Proactive auto-sync whenever the gallery modal is opened
+  // Proactive auto-sync whenever the gallery modal is open, repeated every 10 seconds
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
-    syncDualLibrariesOnline(false)
-      .then((res) => {
-        if (isMounted) {
-          setCardArtList(getAllCardArtCards());
-          setCardentifyList(getAllCardentifyCards());
-          setSyncMeta(getCardArtSyncMeta());
-          setGalleryStats({
-            totalCount: res.totalCount,
-            cardartCount: res.cardArtCount,
-            cardentifyCount: res.cardentifyCount,
-          });
-          if (res.newCardsCount > 0) {
-            setSyncToast(res.message);
-            setTimeout(() => {
-              if (isMounted) setSyncToast(null);
-            }, 3500);
-          }
-        }
-      })
-      .catch(() => {});
 
-    fetchDualGalleryStats()
-      .then((stats) => {
-        if (isMounted) {
-          setGalleryStats({
-            totalCount: stats.totalCount,
-            cardartCount: stats.cardartCount,
-            cardentifyCount: stats.cardentifyCount,
-          });
-        }
-      })
-      .catch(() => {});
+    const performAutoSync = () => {
+      syncDualLibrariesOnline(false)
+        .then((res) => {
+          if (isMounted) {
+            setCardArtList(getAllCardArtCards());
+            setCardentifyList(getAllCardentifyCards());
+            setSyncMeta(getCardArtSyncMeta());
+            setGalleryStats({
+              totalCount: res.totalCount,
+              cardartCount: res.cardArtCount,
+              cardentifyCount: res.cardentifyCount,
+            });
+            if (res.newCardsCount > 0) {
+              setSyncToast(res.message);
+              setTimeout(() => {
+                if (isMounted) setSyncToast(null);
+              }, 3500);
+            }
+          }
+        })
+        .catch(() => {});
+
+      fetchDualGalleryStats()
+        .then((stats) => {
+          if (isMounted) {
+            setGalleryStats({
+              totalCount: stats.totalCount,
+              cardartCount: stats.cardartCount,
+              cardentifyCount: stats.cardentifyCount,
+            });
+          }
+        })
+        .catch(() => {});
+
+      // Asynchronously fetch all server-cached CardArt cards
+      fetch('/api/cardart/cards')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.cards?.length && isMounted) {
+            cacheCardArtCards(data.cards.map(normalizeBaseCard));
+            setCardArtList(getAllCardArtCards());
+          }
+        })
+        .catch(() => {});
+    };
+
+    // Execute immediately on open
+    performAutoSync();
+
+    // 10-second periodic bidirectional auto-sync with CardArt and Cardentify
+    const intervalId = setInterval(performAutoSync, 10 * 1000);
 
     return () => {
       isMounted = false;
+      clearInterval(intervalId);
     };
   }, [isOpen]);
 
@@ -175,9 +199,9 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
 
       if (e?.detail) {
         setGalleryStats({
-          totalCount: e.detail.total || 5069,
-          cardartCount: e.detail.cardArtCount || 4414,
-          cardentifyCount: e.detail.cardentifyCount || 655,
+          totalCount: e.detail.total || 8338,
+          cardartCount: e.detail.cardArtCount || 7589,
+          cardentifyCount: e.detail.cardentifyCount || 749,
         });
       } else {
         fetchDualGalleryStats()
@@ -220,7 +244,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     }
   }, [defaultBankQuery, isOpen]);
 
-  // Proactive real-time live search query directly to cardart.cc / backend
+  // Proactive real-time live search query directly to cardart.cc & cards.no2.ac backend
   useEffect(() => {
     if (!isOpen) return;
     const q = searchTerm.trim();
@@ -229,17 +253,18 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     let isCurrent = true;
     const timer = setTimeout(() => {
       setIsLiveSearching(true);
-      searchCardArtLive(q)
-        .then((cards) => {
-          if (isCurrent && cards && cards.length > 0) {
-            setCardArtList(getAllCardArtCards());
+      searchDualGalleryLive(q)
+        .then((res) => {
+          if (isCurrent && res.success) {
+            setCardArtList([...getAllCardArtCards()]);
+            setCardentifyList([...getAllCardentifyCards()]);
           }
         })
         .catch(() => {})
         .finally(() => {
           if (isCurrent) setIsLiveSearching(false);
         });
-    }, 280);
+    }, 200);
 
     return () => {
       isCurrent = false;
@@ -380,18 +405,23 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       list = allUnifiedCards;
     }
 
-    // 2. Filter by search query
+    // 2. Filter by search query with intelligent bank & keyword alias expansion
     if (q) {
+      const searchTerms = expandSearchTerms(q);
       list = list.filter((card) => {
-        const matchesName = card.name.toLowerCase().includes(q);
-        const matchesIssuer = (card.issuerName || '').toLowerCase().includes(q);
-        const matchesEnglish = (card.issuerEnglish || '').toLowerCase().includes(q);
-        const matchesAuthor =
-          (card.authorName || '').toLowerCase().includes(q) ||
-          (card.authorHandle || '').toLowerCase().includes(q);
-        const matchesBin = card.bins && card.bins.some((b) => b.includes(q));
-        const matchesTags = card.tags && card.tags.some((t) => t.toLowerCase().includes(q));
-        return matchesName || matchesIssuer || matchesEnglish || matchesAuthor || matchesBin || matchesTags;
+        const fullText = (
+          card.name + ' ' +
+          (card.titleEn || '') + ' ' +
+          (card.issuerName || '') + ' ' +
+          (card.issuerEnglish || '') + ' ' +
+          (card.authorName || '') + ' ' +
+          (card.authorHandle || '') + ' ' +
+          (card.tags?.join(' ') || '') + ' ' +
+          (card.bins?.join(' ') || '') + ' ' +
+          (card.brand || '') + ' ' +
+          (card.type || '')
+        ).toLowerCase();
+        return searchTerms.some((term) => fullText.includes(term));
       });
     }
 
@@ -557,9 +587,14 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
       list = list.filter((card) => card.type === selectedType);
     }
 
-    // 7. Bank chip filter
+    // 7. Bank chip filter with alias expansion
     if (selectedBankFilter !== 'ALL') {
-      list = list.filter((card) => card.issuerName === selectedBankFilter);
+      const bankTerms = expandSearchTerms(selectedBankFilter);
+      list = list.filter((card) => {
+        if (card.issuerName === selectedBankFilter) return true;
+        const text = (card.name + ' ' + (card.issuerName || '') + ' ' + (card.titleEn || '') + ' ' + (card.tags?.join(' ') || '')).toLowerCase();
+        return bankTerms.some((t) => text.includes(t));
+      });
     }
 
     // 8. Sorting
@@ -648,7 +683,7 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                 {/* Real-time synchronization badge */}
                 <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-medium border border-emerald-200/80 dark:border-emerald-800">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>实时同步 cardart.cc & cards.no2.ac</span>
+                  <span>10秒实时双向同步 cardart.cc & cards.no2.ac</span>
                 </div>
               </div>
 
@@ -1017,24 +1052,54 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
         {/* Card Gallery Grid */}
         <div className="flex-1 overflow-y-auto modal-custom-scrollbar p-4 sm:p-6 bg-slate-100/70 dark:bg-slate-950/50">
           {filteredCards.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 dark:text-slate-500 space-y-3">
-              <CreditCard className="w-12 h-12 mx-auto stroke-1 opacity-50" />
-              <p className="text-sm font-medium">没有找到匹配「{searchTerm}」的卡面设计</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setActiveSource('ALL');
-                  setSelectedStyle('ALL');
-                  setSelectedCountry('ALL');
-                  setSelectedBrand('ALL');
-                  setSelectedType('ALL');
-                  setSelectedBankFilter('ALL');
-                }}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors"
-              >
-                查看全部 {allUnifiedCards.length.toLocaleString()} 款双库卡面
-              </button>
+            <div className="py-16 text-center text-slate-400 dark:text-slate-500 space-y-4">
+              {isLiveSearching ? (
+                <div className="flex flex-col items-center gap-3">
+                  <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    正在与 cardart.cc & cards.no2.ac 双库实时检索「{searchTerm}」...
+                  </p>
+                  <p className="text-xs text-slate-400">已联网匹配官方发卡行与原创设计卡面</p>
+                </div>
+              ) : (
+                <>
+                  <CreditCard className="w-12 h-12 mx-auto stroke-1 opacity-50" />
+                  <p className="text-sm font-medium">没有找到匹配「{searchTerm}」的卡面设计</p>
+                  <div className="max-w-md mx-auto pt-2">
+                    <p className="text-xs text-slate-400 mb-2">可尝试热门机构快捷检索：</p>
+                    <div className="flex flex-wrap justify-center gap-1.5">
+                      {['招商银行', '中国工商银行', '中国建设银行', '中国银行', '交通银行', '中信银行', '浦发银行', '平安银行', '广发银行', '民生银行', 'Apple', '运通', 'Suica', '八达通'].map((bank) => (
+                        <button
+                          key={bank}
+                          type="button"
+                          onClick={() => {
+                            setSearchTerm(bank);
+                            setSelectedBankFilter('ALL');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 text-xs font-medium transition-colors"
+                        >
+                          {bank}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setActiveSource('ALL');
+                      setSelectedStyle('ALL');
+                      setSelectedCountry('ALL');
+                      setSelectedBrand('ALL');
+                      setSelectedType('ALL');
+                      setSelectedBankFilter('ALL');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors mt-3"
+                  >
+                    查看全部 {allUnifiedCards.length.toLocaleString()} 款双库卡面
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
@@ -1047,8 +1112,16 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                   <div
                     key={card.id}
                     onClick={() => {
-                      onSelectCard(card);
-                      onClose();
+                      if (typeof onSelectCard === 'function') {
+                        onSelectCard(card);
+                        onClose();
+                      } else {
+                        navigator.clipboard.writeText(card.imageUrl);
+                        setCopiedUrl(card.imageUrl);
+                        setTimeout(() => setCopiedUrl(null), 2500);
+                        setSyncToast(`✨ 已复制「${card.name}」卡面链接，可在编辑账户时直接选用`);
+                        setTimeout(() => setSyncToast(null), 3000);
+                      }
                     }}
                     className={`group relative bg-white dark:bg-slate-900 border rounded-2xl p-3 sm:p-3.5 transition-all duration-200 cursor-pointer flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 ${
                       isCurrent
@@ -1193,12 +1266,20 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectCard(card);
-                            onClose();
+                            if (typeof onSelectCard === 'function') {
+                              onSelectCard(card);
+                              onClose();
+                            } else {
+                              navigator.clipboard.writeText(card.imageUrl);
+                              setCopiedUrl(card.imageUrl);
+                              setTimeout(() => setCopiedUrl(null), 2500);
+                              setSyncToast(`✨ 已复制「${card.name}」卡面链接，可在编辑账户时直接选用`);
+                              setTimeout(() => setSyncToast(null), 3000);
+                            }
                           }}
                           className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1"
                         >
-                          <span>套用</span>
+                          <span>{typeof onSelectCard === 'function' ? '套用' : '选用链接'}</span>
                         </button>
                       </div>
                     </div>
@@ -1215,8 +1296,9 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
             <span className="font-semibold text-slate-700 dark:text-slate-300">💡 提示:</span>
             <span>点击任意卡片即可直接套用其原版 Apple Pay 卡面、银行名称与卡组织徽标</span>
             <span className="text-slate-300 dark:text-slate-700">|</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-              🟢 已与 cardart.cc & cards.no2.ac 实时同步 (CardArt: {galleryStats.cardartCount.toLocaleString()} 款 · Cardentify: {galleryStats.cardentifyCount.toLocaleString()} 款 · 双库共计 {galleryStats.totalCount.toLocaleString()} 款就绪)
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              10秒与 cardart.cc & cards.no2.ac 保持双向实时互通 (CardArt: {galleryStats.cardartCount.toLocaleString()} 款 · Cardentify: {galleryStats.cardentifyCount.toLocaleString()} 款 · 双库共计 {galleryStats.totalCount.toLocaleString()} 款就绪)
             </span>
           </div>
 
@@ -1231,12 +1313,21 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
               <ExternalLink className="w-3 h-3" />
             </a>
             <a
+              href="https://cards.no2.ac/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+            >
+              <span>cards.no2.ac 官方库</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <a
               href="https://github.com/no2ac/Cardentify"
               target="_blank"
               rel="noreferrer"
               className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
             >
-              <span>GitHub Cardentify</span>
+              <span>GitHub</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>

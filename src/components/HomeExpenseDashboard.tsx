@@ -15,6 +15,7 @@ import {
   Clock,
   ArrowRight,
   Sliders,
+  CalendarClock,
 } from 'lucide-react';
 import { Transaction, FinancialAccount, FinancialSummary, UserProfile } from '../types';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
@@ -34,6 +35,7 @@ interface HomeExpenseDashboardProps {
   onUpdateBudget: (newBudget: number) => void;
   onOpenFullTxModal: () => void;
   onNavigateToTransactions: () => void;
+  onOpenRecurringTasks?: () => void;
 }
 
 export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
@@ -48,6 +50,7 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   onUpdateBudget,
   onOpenFullTxModal,
   onNavigateToTransactions,
+  onOpenRecurringTasks,
 }) => {
   // Inline Quick Add State
   const [quickAmount, setQuickAmount] = useState('');
@@ -58,6 +61,7 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
 
   // Budget Edit State
   const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const currentBudget = currentUser?.monthlyBudget || 8000;
   const [budgetValue, setBudgetValue] = useState(currentBudget.toString());
 
@@ -170,6 +174,17 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
               <Plus className="w-4 h-4" />
               <span>记一笔支出</span>
             </button>
+            {onOpenRecurringTasks && (
+              <button
+                id="btn-home-recurring"
+                onClick={onOpenRecurringTasks}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-indigo-600 text-xs font-semibold border border-indigo-200 shadow-2xs transition-colors"
+                title="管理固定房租、订阅、会员等周期自动记账任务"
+              >
+                <CalendarClock className="w-3.5 h-3.5 text-indigo-500" />
+                <span>周期任务</span>
+              </button>
+            )}
             <button
               onClick={onNavigateToTransactions}
               className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 shadow-2xs transition-colors"
@@ -576,14 +591,27 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(`确认删除支出记录 “${tx.description || tx.category}” (¥${tx.amount}) 吗？`)) {
+                          if (confirmDeleteId === tx.id) {
                             onDeleteTransaction(tx.id);
+                            setConfirmDeleteId(null);
+                          } else {
+                            setConfirmDeleteId(tx.id);
+                            setTimeout(() => {
+                              setConfirmDeleteId((cur) => (cur === tx.id ? null : cur));
+                            }, 3500);
                           }
                         }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="删除这笔支出"
+                        className={`p-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                          confirmDeleteId === tx.id
+                            ? 'bg-rose-600 text-white hover:bg-rose-700 px-2'
+                            : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                        }`}
+                        title={confirmDeleteId === tx.id ? '点击确认删除' : '删除这笔支出'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
+                        {confirmDeleteId === tx.id && (
+                          <span className="text-[10px] font-bold">确认删除</span>
+                        )}
                       </button>
                     </div>
                   </div>

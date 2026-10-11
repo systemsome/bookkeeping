@@ -196,7 +196,38 @@ export interface BackupPackage {
   accounts: FinancialAccount[];
   transactions: Transaction[];
   projects?: LedgerProject[];
+  recurringTasks?: RecurringTask[];
   webDavConfig?: Partial<WebDavConfig>;
+}
+
+// ==========================================
+// 周期性任务记账 (Recurring Automatic Tasks)
+// ==========================================
+export type RecurringFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+
+export interface RecurringTask {
+  id: string;
+  userId?: string;
+  name: string; // 任务名称，如 "每月固定房租", "iCloud 2TB 订阅", "公司发放月薪"
+  type: TransactionType; // 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'REPAYMENT'
+  amount: number; // 记账基准金额
+  frequency: RecurringFrequency; // 周期频率：每月 / 每周 / 每年 / 每天
+  dayOfMonth?: number; // 每月执行日 (1-31)，针对 MONTHLY
+  dayOfWeek?: number; // 每周执行日 (0-6，0为周日，1为周一)，针对 WEEKLY
+  monthOfYear?: number; // 每年执行月份 (1-12)，针对 YEARLY
+  accountId: string; // 扣款/入账/支出账户
+  targetAccountId?: string; // 转账/还款目标账户
+  category: string; // 分类，如 "住房物业", "网络通信", "工资薪酬"
+  tag?: string; // 标签，如 "固定支出", "生活必要"
+  description?: string; // 备注说明
+  merchant?: string; // 商家/收付款方，如 "房东", "Apple Inc"
+  projectId?: string; // 可选关联项目
+  enabled: boolean; // 是否启用自动记账 (true/false)
+  autoExecute: boolean; // 是否到期自动触发记账流水 (true: 自动记入流水, false: 仅提醒)
+  lastExecutedDate?: string; // 上次成功触发记账的日期 (YYYY-MM-DD)
+  nextDueDate: string; // 下次预计执行日期 (YYYY-MM-DD)
+  createdAt: string;
+  updatedAt?: string;
 }
 
 // ==========================================
@@ -215,6 +246,7 @@ export interface LedgerProject {
   color?: string; // 主题色 hex
   budget?: number; // 专项预算金额 (元)
   status: ProjectStatus; // 状态：进行中 / 已结项 / 归档
+  isArchived?: boolean; // 归档状态：为 true 时在主界面隐藏，但所有财务流水与历史数据完整保留
   startDate?: string; // 开始日期 YYYY-MM-DD
   endDate?: string; // 结束日期 YYYY-MM-DD
   createdAt: string;

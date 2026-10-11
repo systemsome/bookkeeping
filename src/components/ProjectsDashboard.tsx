@@ -22,6 +22,7 @@ import {
   Tag,
   ReceiptText,
   AlertCircle,
+  AlertTriangle,
   BarChart2,
   Layers,
   PieChart as PieChartIcon,
@@ -110,7 +111,18 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   // Navigation: null means all projects overview, string means viewing single project statistics
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  // Filters for all projects view
+  // In-app deletion confirmation states (avoids blocked window.confirm in iframe/sandboxes)
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<LedgerProject | null>(null);
+  const [deleteAckChecked, setDeleteAckChecked] = useState(false);
+  const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
+
+  const openDeleteProjectConfirm = (proj: LedgerProject) => {
+    setDeleteAckChecked(false);
+    setConfirmDeleteProject(proj);
+  };
+
+  // Filters for all projects view (归档项目默认在主界面隐藏)
+  const [showArchived, setShowArchived] = useState<boolean>(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | ProjectStatus>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -165,8 +177,10 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
       netBalance,
       totalBudget,
       totalTxCount,
-      activeProjectsCount: (projects || []).filter((p) => p.status === 'ACTIVE').length,
-      completedProjectsCount: (projects || []).filter((p) => p.status === 'COMPLETED').length,
+      activeProjectsCount: (projects || []).filter((p) => !p.isArchived && p.status === 'ACTIVE').length,
+      completedProjectsCount: (projects || []).filter((p) => !p.isArchived && p.status === 'COMPLETED').length,
+      archivedProjectsCount: (projects || []).filter((p) => Boolean(p.isArchived || p.status === 'ARCHIVED')).length,
+      unarchivedProjectsCount: (projects || []).filter((p) => !p.isArchived && p.status !== 'ARCHIVED').length,
     };
   }, [projects, projectStatsMap]);
 
@@ -179,10 +193,22 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     return Array.from(set);
   }, [projects]);
 
-  // Filtered projects list
+  // Filtered projects list (核心：归档后的项目在主界面默认隐藏，但数据与统计完全保留)
   const filteredProjects = useMemo(() => {
     return (projects || []).filter((p) => {
-      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+      const isArchived = Boolean(p.isArchived || p.status === 'ARCHIVED');
+
+      // 归档过滤：若处于查看归档模式 (showArchived 或 statusFilter === 'ARCHIVED')，展示归档项目
+      if (showArchived || statusFilter === 'ARCHIVED') {
+        if (!isArchived) return false;
+      } else {
+        // 主界面默认模式：归档后的项目在主界面中完全隐藏！
+        if (isArchived) return false;
+
+        // 对非归档项目的常规状态筛选
+        if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+      }
+
       if (categoryFilter !== 'ALL' && p.category !== categoryFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -193,7 +219,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
       }
       return true;
     });
-  }, [projects, statusFilter, categoryFilter, searchQuery]);
+  }, [projects, statusFilter, categoryFilter, searchQuery, showArchived]);
 
   // Selected project drilldown object & stats
   const activeProject = useMemo(() => {
@@ -303,12 +329,26 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     });
   };
 
-  // Toggle project status between ACTIVE and COMPLETED
-  const handleToggleProjectStatus = (proj: LedgerProject) => {
-    const nextStatus: ProjectStatus = proj.status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE';
+  // Archive or Unarchive project (safe, reversible, keeps all statistics and transactions intact)
+  const handleArchiveProject = (proj: LedgerProject, archive: boolean = true) => {
+    const nextStatus: ProjectStatus = archive ? 'ARCHIVED' : 'ACTIVE';
     if (onSaveProject) {
       onSaveProject({
         ...proj,
+        isArchived: archive,
+        status: nextStatus,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  // Toggle project status between ACTIVE and COMPLETED
+  const handleToggleProjectStatus = (proj: LedgerProject) => {
+    const nextStatus: ProjectStatus = proj.status === 'COMPLETED' ? 'ACTIVE' : 'COMPLETED';
+    if (onSaveProject) {
+      onSaveProject({
+        ...proj,
+        isArchived: false,
         status: nextStatus,
         updatedAt: new Date().toISOString(),
       });
@@ -348,18 +388,18 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                 </span>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                    activeProject.status === 'ACTIVE'
+                    Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED')
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                      : activeProject.status === 'ACTIVE'
                       ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                      : activeProject.status === 'COMPLETED'
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      : 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
                   }`}
                 >
-                  {activeProject.status === 'ACTIVE'
+                  {Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED')
+                    ? '📦 已归档 (主界面已隐藏)'
+                    : activeProject.status === 'ACTIVE'
                     ? '进行中'
-                    : activeProject.status === 'COMPLETED'
-                    ? '已结项'
-                    : '已归档'}
+                    : '已结项'}
                 </span>
               </div>
               {activeProject.description && (
@@ -407,14 +447,62 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               <Pencil className="w-4 h-4" />
             </button>
 
+            {/* 明确的【归档项目 / 取消归档】功能 */}
+            <button
+              onClick={() => handleArchiveProject(activeProject, !Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED'))}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED')
+                  ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 shadow-2xs'
+                  : 'bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+              }`}
+              title={Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? '取消归档，重新恢复显示在主界面' : '归档此项目 (主界面隐藏并安全保留数据)'}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span>{Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? '取消归档并恢复' : '归档此项目'}</span>
+            </button>
+
             <button
               onClick={() => handleToggleProjectStatus(activeProject)}
               className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
             >
-              {activeProject.status === 'ACTIVE' ? '结项归档' : '恢复进行中'}
+              {activeProject.status === 'COMPLETED' ? '设为进行中' : '标记已结项'}
+            </button>
+
+            <button
+              onClick={() => openDeleteProjectConfirm(activeProject)}
+              className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 transition-colors"
+              title="删除此项目 (不可逆高危操作)"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* 归档状态横幅提醒 */}
+        {Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/70 text-amber-900 dark:text-amber-200 text-xs shadow-2xs animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-200/80 dark:bg-amber-900 text-amber-800 dark:text-amber-200 shrink-0">
+                <Archive className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="font-bold text-xs sm:text-sm">
+                  📦 本项目当前处于「已归档」状态
+                </p>
+                <p className="text-[11px] sm:text-xs text-amber-800/80 dark:text-amber-300/80">
+                  项目已在主界面中自动隐藏，但<strong>所有历史收支统计与关联记账流水均已完整安全保留</strong>。您可以随时一键取消归档恢复到主界面。
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleArchiveProject(activeProject, false)}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs active:scale-95 transition-all self-start sm:self-auto shrink-0 flex items-center gap-1.5"
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span>取消归档并恢复到主界面</span>
+            </button>
+          </div>
+        )}
 
         {/* 6-Metric Financial Scoreboard for this Project */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
@@ -976,14 +1064,27 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`确定删除记录 “${tx.description || tx.category}” 吗？`)) {
-                              onDeleteTransaction(tx.id);
+                            if (confirmDeleteTxId === tx.id) {
+                              if (onDeleteTransaction) onDeleteTransaction(tx.id);
+                              setConfirmDeleteTxId(null);
+                            } else {
+                              setConfirmDeleteTxId(tx.id);
+                              setTimeout(() => {
+                                setConfirmDeleteTxId((cur) => (cur === tx.id ? null : cur));
+                              }, 3500);
                             }
                           }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                          title="删除流水"
+                          className={`p-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                            confirmDeleteTxId === tx.id
+                              ? 'bg-rose-600 text-white hover:bg-rose-700 px-2'
+                              : 'text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                          }`}
+                          title={confirmDeleteTxId === tx.id ? '点击确认删除此记录' : '删除流水'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
+                          {confirmDeleteTxId === tx.id && (
+                            <span className="text-[10px] font-bold">确认删除</span>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1102,58 +1203,124 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-        <div className="flex items-center gap-2 flex-wrap flex-1">
-          <div className="relative flex-1 sm:max-w-xs">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索项目名称、分类或说明..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
-            />
+      {/* Filter & Search Bar with dedicated Archived Switch */}
+      <div className="flex flex-col gap-3 bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap flex-1">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索项目名称、分类或说明..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
+              />
+            </div>
+
+            {/* 常规状态筛选 (未开启归档视图时) */}
+            {!showArchived && (
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:outline-none"
+              >
+                <option value="ALL">全部状态 (进行中 / 已结项)</option>
+                <option value="ACTIVE">🟢 仅看进行中</option>
+                <option value="COMPLETED">✅ 仅看已结项</option>
+              </select>
+            )}
+
+            {availableCategories.length > 0 && (
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:outline-none"
+              >
+                <option value="ALL">全部分类</option>
+                {availableCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {(searchQuery || statusFilter !== 'ALL' || categoryFilter !== 'ALL' || showArchived) && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setStatusFilter('ALL');
+                  setCategoryFilter('ALL');
+                  setShowArchived(false);
+                }}
+                className="text-xs text-rose-500 font-semibold hover:underline"
+              >
+                重置筛选
+              </button>
+            )}
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:outline-none"
-          >
-            <option value="ALL">全部状态 (进行中/已结项)</option>
-            <option value="ACTIVE">🟢 仅看进行中</option>
-            <option value="COMPLETED">✅ 仅看已结项</option>
-            <option value="ARCHIVED">📦 已归档</option>
-          </select>
-
-          {availableCategories.length > 0 && (
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:outline-none"
+          {/* 核心功能：查看已归档项目切换开关 (Toggle Switch) */}
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 w-full sm:w-auto justify-between sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showArchived;
+                setShowArchived(next);
+                if (next) {
+                  setStatusFilter('ALL');
+                }
+              }}
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                showArchived
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
+              }`}
+              title="切换是否查看已归档的账本项目（归档项目数据完整安全保留）"
             >
-              <option value="ALL">全部分类</option>
-              {availableCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          )}
+              <div className="flex items-center gap-1.5">
+                <Archive className={`w-3.5 h-3.5 ${showArchived ? 'text-white' : 'text-amber-500'}`} />
+                <span>查看已归档项目</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                    showArchived
+                      ? 'bg-amber-600/60 text-white'
+                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                  }`}
+                >
+                  {overallStats.archivedProjectsCount}
+                </span>
+              </div>
+
+              {/* 现代开关滑块 UI */}
+              <div
+                className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out flex items-center ${
+                  showArchived ? 'bg-amber-700 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start'
+                }`}
+              >
+                <div className="w-3.5 h-3.5 rounded-full bg-white shadow-xs" />
+              </div>
+            </button>
+          </div>
         </div>
 
-        {(searchQuery || statusFilter !== 'ALL' || categoryFilter !== 'ALL') && (
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setStatusFilter('ALL');
-              setCategoryFilter('ALL');
-            }}
-            className="text-xs text-rose-500 font-semibold hover:underline self-end sm:self-auto"
-          >
-            重置筛选
-          </button>
+        {/* 处于“已归档项目”浏览视图时的提示栏 */}
+        {showArchived && (
+          <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 text-amber-900 dark:text-amber-200 text-xs">
+            <div className="flex items-center gap-2">
+              <Archive className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                当前正在浏览 <strong>已归档项目区 (共 {overallStats.archivedProjectsCount} 个)</strong>。旧项目的财务数据、统计报表与关联账单均已完整保留，点击卡片上的 <strong>“恢复归档”</strong> 可随时取回主界面。
+              </span>
+            </div>
+            <button
+              onClick={() => setShowArchived(false)}
+              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shrink-0 shadow-2xs transition-colors"
+            >
+              返回主界面
+            </button>
+          </div>
         )}
       </div>
 
@@ -1221,10 +1388,16 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                             className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                               proj.status === 'ACTIVE'
                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                : proj.status === 'COMPLETED'
+                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'
+                                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200/80 dark:border-amber-900/60'
                             }`}
                           >
-                            {proj.status === 'ACTIVE' ? '进行中' : '已结项'}
+                            {proj.status === 'ACTIVE'
+                              ? '进行中'
+                              : proj.status === 'COMPLETED'
+                              ? '已结项'
+                              : '📦 已归档'}
                           </span>
                         </div>
                         <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1.5 truncate">
@@ -1237,13 +1410,40 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                         )}
                       </div>
 
-                      <button
-                        onClick={() => handleOpenEditor(proj)}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
-                        title="编辑项目"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleOpenEditor(proj)}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="编辑项目"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const isCurrentlyArchived = Boolean(proj.isArchived || proj.status === 'ARCHIVED');
+                            handleArchiveProject(proj, !isCurrentlyArchived);
+                          }}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            Boolean(proj.isArchived || proj.status === 'ARCHIVED')
+                              ? 'text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100'
+                              : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                          }`}
+                          title={Boolean(proj.isArchived || proj.status === 'ARCHIVED') ? '取消归档 / 恢复为进行中并在主界面展示' : '归档此项目 (主界面隐藏并安全保留数据)'}
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteProjectConfirm(proj);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          title="删除项目 (不可逆高危操作)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Financial Matrix (收入 / 支出 / 冲红 / 净支出 / 结余) */}
@@ -1364,6 +1564,125 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 确认删除账本项目专用弹窗 (强警示 + 优先引导归档 + 不可逆防误触) */}
+      {confirmDeleteProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 shadow-2xs">
+                  <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                    确认永久删除账本项目？
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    目标项目：「{confirmDeleteProject.name}」
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteProject(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 1. 明确的不可逆警告信息 */}
+            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/80 text-rose-800 dark:text-rose-200 space-y-1.5 shadow-2xs">
+              <div className="font-bold flex items-center gap-1.5 text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>严重警示：此删除操作为永久销毁，完全不可逆！</span>
+              </div>
+              <p className="text-xs text-rose-600/95 dark:text-rose-300 leading-relaxed">
+                一旦确认删除，该项目的预算计划、财务看板、项目标签与收支统计将被<strong>永久彻底销毁，无法撤销，数据不可找回</strong>。
+              </p>
+            </div>
+
+            {/* 2. 强烈推荐功能：优先选择「归档」而非直接删除 */}
+            <div className="p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/70 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-amber-800 dark:text-amber-300 text-xs sm:text-sm flex items-center gap-1.5">
+                  <Archive className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>更优解：强烈推荐选择【归档此项目】</span>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+                  安全推荐
+                </span>
+              </div>
+              <p className="text-amber-700/95 dark:text-amber-300/90 text-xs leading-relaxed">
+                若项目已完工或阶段性不再记账，建议进行<strong>安全归档</strong>。归档后项目移出日常活跃看板，但<strong>所有历史收支统计、明细流水完好留存</strong>，随时支持一键恢复为进行中。
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  handleArchiveProject(confirmDeleteProject, true);
+                  setConfirmDeleteProject(null);
+                  if (selectedProjectId === confirmDeleteProject.id) {
+                    setSelectedProjectId(null);
+                  }
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5"
+              >
+                <Archive className="w-4 h-4" />
+                <span>优先归档项目（安全留存，随时可恢复）</span>
+              </button>
+            </div>
+
+            {/* 3. 关联账单保留说明 */}
+            <div className="px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              ✅ <strong>账单安全保障</strong>：该项目下已发生的记账流水（明细、金额、凭证）将<strong>完整安全保留在总账本中</strong>，仅解除项目分类绑定。
+            </div>
+
+            {/* 4. 防误触强制确认勾选框 */}
+            <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={deleteAckChecked}
+                onChange={(e) => setDeleteAckChecked(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300 dark:border-slate-600 cursor-pointer"
+              />
+              <span className="text-xs text-slate-700 dark:text-slate-300 font-semibold leading-snug">
+                我已知晓此删除操作【完全不可逆且数据无法找回】，我确定仍要永久彻底删除该项目
+              </span>
+            </label>
+
+            {/* 5. 底部操作按钮 */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteProject(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={!deleteAckChecked}
+                onClick={() => {
+                  const targetId = confirmDeleteProject.id;
+                  setConfirmDeleteProject(null);
+                  if (selectedProjectId === targetId) {
+                    setSelectedProjectId(null);
+                  }
+                  if (onDeleteProject) {
+                    onDeleteProject(targetId);
+                  }
+                }}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-xs active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>确认彻底删除 (不可逆)</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
