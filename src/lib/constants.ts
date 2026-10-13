@@ -1,4 +1,4 @@
-import { AccountCategory, ExpenseCategory, IncomeCategory, FinancialAccount, Transaction, AssetGroup, LedgerProject, RecurringTask } from '../types';
+import { AccountCategory, ExpenseCategory, IncomeCategory, FinancialAccount, Transaction, AssetGroup, LedgerProject, RecurringTask, QuickTemplate } from '../types';
 
 export const ACCOUNT_CATEGORY_CONFIG: Record<
   AccountCategory,
@@ -787,4 +787,16 @@ export const INITIAL_DEMO_RECURRING_TASKS: RecurringTask[] = [
     createdAt: '2026-08-01T10:00:00Z',
   },
 ];
+
+export const DEFAULT_QUICK_TEMPLATES: QuickTemplate[] = [
+  { id: 'tpl-1', name: '工作日早餐', icon: '☕', type: 'EXPENSE', amount: 15, category: '餐饮美食', tag: '日常必要', description: '早餐豆浆包子/咖啡' },
+  { id: 'tpl-2', name: '工作午餐', icon: '🍱', type: 'EXPENSE', amount: 35, category: '餐饮美食', tag: '日常必要', description: '工作日午餐快餐/便当' },
+  { id: 'tpl-3', name: '地铁公交', icon: '🚇', type: 'EXPENSE', amount: 6, category: '交通出行', tag: '日常必要', description: '上下班通勤刷卡' },
+  { id: 'tpl-4', name: '现磨咖啡', icon: '☕', type: 'EXPENSE', amount: 25, category: '餐饮美食', tag: '改善娱乐', description: '提神现磨咖啡' },
+  { id: 'tpl-5', name: '生鲜买菜', icon: '🛒', type: 'EXPENSE', amount: 68, category: '日常购物', tag: '家庭公共', description: '生鲜超市日常买菜' },
+  { id: 'tpl-6', name: '打车出行', icon: '🚕', type: 'EXPENSE', amount: 30, category: '交通出行', tag: '交通出行', description: '打车通勤/周末出行' },
+  { id: 'tpl-7', name: '汽车加油', icon: '⛽', type: 'EXPENSE', amount: 350, category: '交通出行', tag: '固定支出', description: '中石化/中石油加满油箱' },
+  { id: 'tpl-8', name: '商务出差垫付', icon: '💼', type: 'EXPENSE', amount: 120, category: '交通出行', tag: '出差垫付', description: '商务出差交通垫付(待报销)' },
+];
+
 

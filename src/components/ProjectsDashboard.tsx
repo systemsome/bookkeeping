@@ -5,7 +5,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   RotateCcw,
-  Sparkles,
   Calendar,
   CheckCircle2,
   Clock,
@@ -30,7 +29,6 @@ import {
   Wallet,
   Cloud,
   RefreshCw,
-  ShieldCheck,
 } from 'lucide-react';
 import {
   LedgerProject,
@@ -40,7 +38,6 @@ import {
   ProjectStatus,
   TransactionType,
   UserProfile,
-  ProjectBadgePosition,
 } from '../types';
 import { calculateProjectStats } from '../lib/storage';
 import { formatCurrency } from '../lib/formatters';
@@ -317,18 +314,6 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     return (accounts || []).filter((acc) => involvedIds.has(acc.id));
   }, [activeProject, accounts, activeProjectTransactions]);
 
-  const handleBatchMoveBadge = (pos: ProjectBadgePosition) => {
-    if (!activeProject || !onUpdateAccount) return;
-    involvedAccounts.forEach((acc) => {
-      onUpdateAccount({
-        ...acc,
-        projectBadgePos: pos,
-        projectId: activeProject.id,
-        projectName: activeProject.name,
-      });
-    });
-  };
-
   // Archive or Unarchive project (safe, reversible, keeps all statistics and transactions intact)
   const handleArchiveProject = (proj: LedgerProject, archive: boolean = true) => {
     const nextStatus: ProjectStatus = archive ? 'ARCHIVED' : 'ACTIVE';
@@ -355,16 +340,20 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     }
   };
 
-  // =========================================================================
-  // VIEW 2: SINGLE PROJECT DRILLDOWN (单项目收支统计与流水)
-  // =========================================================================
-  if (activeProject && activeProjectStats) {
-    const isExceeded =
-      activeProject.budget && activeProjectStats.netExpense > activeProject.budget;
+  const isExceeded = Boolean(
+    activeProject?.budget &&
+      activeProjectStats &&
+      activeProjectStats.netExpense > activeProject.budget
+  );
 
-    return (
-      <div className="space-y-6 pb-20 animate-in fade-in duration-200">
-        {/* Back navigation & Action Bar */}
+  return (
+    <div className="space-y-6 pb-20">
+      {activeProject && activeProjectStats ? (
+        /* ========================================================================= */
+        /* VIEW 2: SINGLE PROJECT DRILLDOWN (单项目收支统计与流水) */
+        /* ========================================================================= */
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Back navigation & Action Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
           <div className="flex items-center gap-3">
             <button
@@ -626,28 +615,62 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
         {/* Budget Progress Bar if set */}
         {activeProject.budget && activeProject.budget > 0 && (
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-600 dark:text-slate-300 font-medium">
-                专项预算执行情况: 已支出 <strong>{formatCurrency(activeProjectStats.netExpense, privacyMode)}</strong> / 预算总额 <strong>¥{activeProject.budget.toFixed(2)}</strong>
-              </span>
+          <div
+            className={`p-4 rounded-2xl border shadow-2xs space-y-2 transition-all ${
+              isExceeded
+                ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/60'
+                : activeProjectStats.budgetUsagePercent >= 80
+                ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-200 dark:border-amber-900/60'
+                : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs font-mono">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-slate-700 dark:text-slate-300 font-bold">
+                  专项预算执行进度:
+                </span>
+                <span className="text-slate-600 dark:text-slate-400">
+                  已支出 <strong>{formatCurrency(activeProjectStats.netExpense, privacyMode)}</strong> / 预算总额 <strong>¥{activeProject.budget.toFixed(2)}</strong>
+                </span>
+                {activeProjectStats.budgetUsagePercent >= 80 && !isExceeded && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse">
+                    <AlertTriangle className="w-2.5 h-2.5" />
+                    <span>预警: 支出达{activeProjectStats.budgetUsagePercent.toFixed(1)}%</span>
+                  </span>
+                )}
+                {isExceeded && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-900/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700">
+                    <AlertCircle className="w-2.5 h-2.5" />
+                    <span>预算超支</span>
+                  </span>
+                )}
+              </div>
               <span
                 className={`font-bold ${
-                  isExceeded ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'
+                  isExceeded
+                    ? 'text-rose-600'
+                    : activeProjectStats.budgetUsagePercent >= 80
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-slate-700 dark:text-slate-300'
                 }`}
               >
                 {isExceeded
-                  ? `已超支 ¥${(activeProjectStats.netExpense - activeProject.budget).toFixed(2)}`
-                  : `剩余额度 ¥${(activeProject.budget - activeProjectStats.netExpense).toFixed(2)}`}
+                  ? `已超支 ¥${(activeProjectStats.netExpense - activeProject.budget).toFixed(2)} (${activeProjectStats.budgetUsagePercent.toFixed(1)}%)`
+                  : `剩余额度 ¥${(activeProject.budget - activeProjectStats.netExpense).toFixed(2)} (${activeProjectStats.budgetUsagePercent.toFixed(1)}%)`}
               </span>
             </div>
-            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+            <div className="relative h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+              <div
+                className="absolute top-0 bottom-0 w-[1.5px] bg-amber-400/90 z-10"
+                style={{ left: '80%' }}
+                title="80% 警戒线"
+              />
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   isExceeded
                     ? 'bg-rose-600'
-                    : activeProjectStats.budgetUsagePercent > 80
-                    ? 'bg-amber-500'
+                    : activeProjectStats.budgetUsagePercent >= 80
+                    ? 'bg-amber-500 shadow-xs shadow-amber-500/50'
                     : 'bg-teal-600'
                 }`}
                 style={{ width: `${Math.min(100, activeProjectStats.budgetUsagePercent)}%` }}
@@ -656,7 +679,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
           </div>
         )}
 
-        {/* ================= 4. PROJECT INVOLVED ACCOUNTS / CARDS WITH MOVABLE BADGES ================= */}
+        {/* ================= 4. PROJECT INVOLVED ACCOUNTS / CARDS ================= */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
@@ -673,53 +696,16 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  所有参与此项目收支核算的账本卡片均展示专属项目角标，点击或拖动角标可自由移动角标位置
+                  所有参与此项目收支核算的账本卡片
                 </p>
               </div>
-            </div>
-
-            {/* Quick Badge Position Controls for this whole project */}
-            <div className="flex items-center gap-1 self-start sm:self-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
-              <span className="text-[11px] text-slate-500 px-1.5">角标位置:</span>
-              <button
-                type="button"
-                onClick={() => handleBatchMoveBadge('top-left')}
-                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
-                title="统一移至左上角"
-              >
-                ↖ 左上
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchMoveBadge('top-right')}
-                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
-                title="统一移至右上角"
-              >
-                ↗ 右上
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchMoveBadge('bottom-left')}
-                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
-                title="统一移至左下角"
-              >
-                ↙ 左下
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchMoveBadge('bottom-right')}
-                className="px-2 py-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-all"
-                title="统一移至右下角"
-              >
-                ↘ 右下
-              </button>
             </div>
           </div>
 
           {/* Involved Accounts Grid */}
           {involvedAccounts.length === 0 ? (
             <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
-              暂无关联账本，在此项目下新增交易流水或在编辑账本时选择此项目，卡片将自动附带该项目角标！
+              暂无关联账本，在此项目下新增交易流水或在编辑账本时选择此项目
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -730,65 +716,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                     privacyMode={privacyMode}
                     compact={true}
                     hideActionRow={true}
-                    projectName={activeProject.name}
-                    projectColor={activeProject.color || '#0d9488'}
-                    onUpdateBadgePosition={(newPos) => {
-                      if (onUpdateAccount) {
-                        onUpdateAccount({
-                          ...acc,
-                          projectBadgePos: newPos,
-                          projectId: activeProject.id,
-                          projectName: activeProject.name,
-                        });
-                      }
-                    }}
                   />
-                  {/* Card footer corner position switcher bar */}
-                  <div className="mt-2 flex items-center justify-between px-2 text-[10px] text-slate-500 font-mono">
-                    <span className="flex items-center gap-1 font-sans">
-                      <span>角标位于:</span>
-                      <strong className="text-teal-600 dark:text-teal-400">
-                        {acc.projectBadgePos === 'top-right'
-                          ? '↗ 右上角'
-                          : acc.projectBadgePos === 'bottom-left'
-                          ? '↙ 左下角'
-                          : acc.projectBadgePos === 'bottom-right'
-                          ? '↘ 右下角'
-                          : '↖ 左上角'}
-                      </strong>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as ProjectBadgePosition[]).map(
-                        (p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => {
-                              if (onUpdateAccount) {
-                                onUpdateAccount({
-                                  ...acc,
-                                  projectBadgePos: p,
-                                  projectId: activeProject.id,
-                                  projectName: activeProject.name,
-                                });
-                              }
-                            }}
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
-                              (acc.projectBadgePos || 'top-left') === p
-                                ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
-                            }`}
-                            title={`移动角标到 ${p}`}
-                          >
-                            {p === 'top-left' && '↖'}
-                            {p === 'top-right' && '↗'}
-                            {p === 'bottom-left' && '↙'}
-                            {p === 'bottom-right' && '↘'}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -1095,113 +1023,120 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
           )}
         </div>
       </div>
-    );
-  }
-
-  // =========================================================================
-  // VIEW 1: ALL PROJECTS OVERVIEW & MANAGEMENT (全部账本项目看板)
-  // =========================================================================
-  return (
-    <div className="space-y-6 pb-20">
-      {/* Top Banner & Summary */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm">
-              <FolderKanban className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                  账本项目管理
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
-                  共 {projects.length} 个专项项目
-                </span>
-                {currentUser && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>已与账号「{currentUser.displayName || currentUser.username}」实时同步</span>
+      ) : (
+        /* ========================================================================= */
+        /* VIEW 1: ALL PROJECTS OVERVIEW & MANAGEMENT (全部账本项目看板) */
+        /* ========================================================================= */
+        <>
+          {/* Top Banner & Metric Summary (参考 CreditCardsSummary 布局模式重构) */}
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 text-xs font-semibold mb-3">
+                  <FolderKanban className="w-3.5 h-3.5" />
+                  <span>账本项目专区</span>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                    账本项目
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
+                    共 {projects.length} 个项目
                   </span>
-                )}
+                  {currentUser && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>云端已同步</span>
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                用于装修、旅行、副业、婚礼等特定事项的独立核算，方便统计单项目支出、收入、冲红与净结余
-              </p>
+
+              {/* Quick Actions / CTA */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {onTriggerSync && (
+                  <button
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                    title="立即同步最新项目与流水到云端服务器"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
+                    <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+                  </button>
+                )}
+
+                <button
+                  id="btn-add-project-main"
+                  onClick={() => handleOpenEditor(null)}
+                  className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow-xs active:scale-95 transition-all text-sm"
+                >
+                  <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                  <span>新增账本</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 5 Metric Pillars (Matching CreditCardsSummary layout pattern) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">项目总数</span>
+                <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+                  {projects.length}
+                </div>
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                  共创建 {projects.length} 个 · 进行中 {overallStats.activeProjectsCount} 个
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
+                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">项目总收入</span>
+                <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+                  +{formatCurrency(overallStats.totalIncome, privacyMode)}
+                </div>
+                <div className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1">
+                  累计收款与进账款项
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-100/80 dark:border-rose-900/40">
+                <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">退款冲红</span>
+                <div className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+                  +{formatCurrency(overallStats.refundAmount, privacyMode)}
+                </div>
+                <div className="text-xs text-rose-500/80 dark:text-rose-400/80 mt-1">
+                  退费抵消冲减支出
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50">
+                <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">实际支出</span>
+                <div className="text-2xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
+                  -{formatCurrency(overallStats.netExpense, privacyMode)}
+                </div>
+                <div className="text-xs text-rose-600/80 dark:text-rose-500/80 mt-1">
+                  剔除退款后的净支出
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 sm:col-span-2 lg:col-span-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">净结余</span>
+                <div
+                  className={`text-2xl font-bold font-mono mt-1 ${
+                    overallStats.netBalance >= 0
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-rose-600 dark:text-rose-400'
+                  }`}
+                >
+                  {overallStats.netBalance >= 0 ? '+' : ''}
+                  {formatCurrency(overallStats.netBalance, privacyMode)}
+                </div>
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                  {overallStats.netBalance >= 0 ? '收支盈余充裕' : '当前收支出现赤字'}
+                </div>
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {onTriggerSync && (
-              <button
-                onClick={handleManualSync}
-                disabled={isSyncing}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
-                title="立即同步最新项目与流水到云端服务器"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
-                <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => handleOpenEditor(null)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
-            >
-              <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
-              <span>新增账本项目</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Aggregate Stats Across All Projects */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 pt-5">
-          <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
-            <div className="text-xs text-slate-400 font-medium mb-1">专项项目总数</div>
-            <div className="text-lg font-black text-slate-900 dark:text-white font-mono">
-              {projects.length}{' '}
-              <span className="text-xs font-normal text-slate-400">
-                (进行中 {overallStats.activeProjectsCount})
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
-            <div className="text-xs text-slate-400 font-medium mb-1">专项总收入</div>
-            <div className="text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono">
-              +{formatCurrency(overallStats.totalIncome, privacyMode)}
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
-            <div className="text-xs text-slate-400 font-medium mb-1">平账冲红退款</div>
-            <div className="text-lg font-black text-rose-600 dark:text-rose-400 font-mono">
-              +{formatCurrency(overallStats.refundAmount, privacyMode)}
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
-            <div className="text-xs text-slate-400 font-medium mb-1">项目实际净支出</div>
-            <div className="text-lg font-black text-rose-700 dark:text-rose-400 font-mono">
-              -{formatCurrency(overallStats.netExpense, privacyMode)}
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 col-span-2 lg:col-span-1">
-            <div className="text-xs text-slate-400 font-medium mb-1">项目综合净结余</div>
-            <div
-              className={`text-lg font-black font-mono ${
-                overallStats.netBalance >= 0
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : 'text-rose-600 dark:text-rose-400'
-              }`}
-            >
-              {overallStats.netBalance >= 0 ? '+' : ''}
-              {formatCurrency(overallStats.netBalance, privacyMode)}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Filter & Search Bar with dedicated Archived Switch */}
       <div className="flex flex-col gap-3 bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
@@ -1311,7 +1246,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             <div className="flex items-center gap-2">
               <Archive className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
-                当前正在浏览 <strong>已归档项目区 (共 {overallStats.archivedProjectsCount} 个)</strong>。旧项目的财务数据、统计报表与关联账单均已完整保留，点击卡片上的 <strong>“恢复归档”</strong> 可随时取回主界面。
+                正在浏览已归档项目 (共 {overallStats.archivedProjectsCount} 个)，点击卡片可随时恢复归档。
               </span>
             </div>
             <button
@@ -1331,11 +1266,11 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
               {searchQuery || statusFilter !== 'ALL' || categoryFilter !== 'ALL'
-                ? '暂无符合筛选条件的账本项目'
-                : '暂无账本项目'}
+                ? '暂无符合筛选条件的账本'
+                : '暂无账本'}
             </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-              创建您的第一个账本项目（如“新房装修”、“日本旅行”、“独立副业”），即可将相关的支出、收入与冲红集中统一独立核算！
+              创建账本即可将相关的支出、收入与冲红集中独立核算
             </p>
           </div>
           <button
@@ -1343,7 +1278,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold shadow-sm inline-flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4 text-emerald-400" />
-            <span>创建第一个账本项目</span>
+            <span>新增账本</span>
           </button>
         </div>
       ) : (
@@ -1362,7 +1297,11 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               budgetUsagePercent: 0,
             };
 
-            const isExceeded = proj.budget && stats.netExpense > proj.budget;
+            const hasBudget = Boolean(proj.budget && proj.budget > 0);
+            const budgetAmount = proj.budget || 0;
+            const usagePercent = hasBudget ? (stats.netExpense / budgetAmount) * 100 : 0;
+            const isWarning = hasBudget && usagePercent >= 80 && usagePercent <= 100;
+            const isExceeded = hasBudget && stats.netExpense > budgetAmount;
 
             return (
               <div
@@ -1407,6 +1346,14 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                           <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">
                             {proj.description}
                           </p>
+                        )}
+                        {(proj.startDate || proj.endDate) && (
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-1 font-mono">
+                            <Clock className="w-3 h-3 shrink-0" />
+                            <span className="truncate">
+                              {proj.startDate || '未设开始'} {proj.endDate ? `~ ${proj.endDate}` : ''}
+                            </span>
+                          </div>
                         )}
                       </div>
 
@@ -1495,42 +1442,112 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Budget Progress Bar */}
-                    {proj.budget && proj.budget > 0 ? (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px] font-mono">
-                          <span className="text-slate-500 dark:text-slate-400">
-                            预算: ¥{proj.budget.toFixed(0)}
-                          </span>
+                    {/* 收支总预算进度条 (当支出达到80%预算时自动切换为预警色) */}
+                    {hasBudget ? (
+                      <div
+                        className={`p-3 rounded-2xl border transition-all ${
+                          isExceeded
+                            ? 'bg-rose-50/60 dark:bg-rose-950/25 border-rose-200 dark:border-rose-900/60'
+                            : isWarning
+                            ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-200 dark:border-amber-900/60'
+                            : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate">
+                              收支预算进度
+                            </span>
+                            {isWarning && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse shrink-0">
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                <span>预警 ≥80%</span>
+                              </span>
+                            )}
+                            {isExceeded && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 shrink-0">
+                                <AlertCircle className="w-2.5 h-2.5" />
+                                <span>超支 {(usagePercent - 100).toFixed(0)}%</span>
+                              </span>
+                            )}
+                          </div>
                           <span
-                            className={`font-bold ${
-                              isExceeded ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'
+                            className={`font-mono text-xs font-bold shrink-0 ${
+                              isExceeded
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : isWarning
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-slate-700 dark:text-slate-300'
                             }`}
                           >
-                            已用 {stats.budgetUsagePercent.toFixed(1)}%
+                            已用 {usagePercent.toFixed(1)}%
                           </span>
                         </div>
-                        <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+
+                        {/* Progress Bar Track with 80% warning marker */}
+                        <div className="relative h-2.5 w-full bg-slate-200/80 dark:bg-slate-700/80 rounded-full overflow-hidden">
+                          {/* 80% 警戒参考线 */}
                           <div
-                            className={`h-full rounded-full transition-all ${
+                            className="absolute top-0 bottom-0 w-[1.5px] bg-amber-400/90 z-10"
+                            style={{ left: '80%' }}
+                            title="80% 预算预警警戒线"
+                          />
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
                               isExceeded
-                                ? 'bg-rose-600'
-                                : stats.budgetUsagePercent > 80
-                                ? 'bg-amber-500'
+                                ? 'bg-rose-600 shadow-xs'
+                                : isWarning
+                                ? 'bg-amber-500 shadow-xs shadow-amber-500/50'
                                 : 'bg-teal-600'
                             }`}
                             style={{
-                              width: `${Math.min(100, stats.budgetUsagePercent)}%`,
+                              width: `${Math.min(100, Math.max(0, usagePercent))}%`,
                             }}
                           />
                         </div>
+
+                        {/* Sub-metrics */}
+                        <div className="flex items-center justify-between text-[11px] font-mono mt-1.5 text-slate-500 dark:text-slate-400">
+                          <span className="truncate">
+                            支出: <strong className="text-slate-700 dark:text-slate-300">¥{formatCurrency(stats.netExpense, privacyMode)}</strong> / 预算: <strong>¥{budgetAmount.toFixed(0)}</strong>
+                          </span>
+                          <span
+                            className={`shrink-0 font-medium ${
+                              isExceeded
+                                ? 'text-rose-600 dark:text-rose-400 font-bold'
+                                : isWarning
+                                ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {isExceeded
+                              ? `超 ¥${(stats.netExpense - budgetAmount).toFixed(0)}`
+                              : `剩 ¥${(budgetAmount - stats.netExpense).toFixed(0)}`}
+                          </span>
+                        </div>
                       </div>
                     ) : (
-                      <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        <span>
-                          {proj.startDate || '未设日期'} {proj.endDate ? `~ ${proj.endDate}` : ''}
-                        </span>
+                      <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700/80 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            收支总预算进度
+                          </span>
+                          <button
+                            onClick={() => handleOpenEditor(proj)}
+                            className="text-[11px] text-teal-600 dark:text-teal-400 font-semibold hover:underline flex items-center gap-0.5"
+                            title="为此项目设置总预算以启用进度条与80%预警"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>设定预算</span>
+                          </button>
+                        </div>
+                        <div className="h-2 w-full bg-slate-200/50 dark:bg-slate-700/50 rounded-full overflow-hidden">
+                          <div className="h-full bg-slate-300 dark:bg-slate-600 w-0" />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                          <span>未设总预算上限</span>
+                          <span>净支出: ¥{formatCurrency(stats.netExpense, privacyMode)}</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1566,6 +1583,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
           })}
         </div>
       )}
+        </>
+      )}
 
       {/* 确认删除账本项目专用弹窗 (强警示 + 优先引导归档 + 不可逆防误触) */}
       {confirmDeleteProject && (
@@ -1579,10 +1598,10 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
-                    确认永久删除账本项目？
+                    确认永久删除账本？
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    目标项目：「{confirmDeleteProject.name}」
+                    目标账本：「{confirmDeleteProject.name}」
                   </p>
                 </div>
               </div>

@@ -33,8 +33,9 @@ import {
   FolderOpen,
   ChevronsUpDown,
   MoreHorizontal,
+  RefreshCw,
 } from 'lucide-react';
-import { FinancialAccount, AccountCategory, AssetGroup, LedgerProject } from '../types';
+import { FinancialAccount, AccountCategory, AssetGroup, LedgerProject, UserProfile } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
 import { AccountCardFace } from './AccountCardFace';
 import { formatCurrency } from '../lib/formatters';
@@ -47,6 +48,8 @@ import { fetchLiveGoldRate, getCachedGoldRate, GoldMarketRate } from '../lib/gol
 interface AccountsListProps {
   accounts: FinancialAccount[];
   privacyMode: boolean;
+  currentUser?: UserProfile | null;
+  onTriggerSync?: () => Promise<void> | void;
   onAddAccount: (category?: AccountCategory, prefillAccount?: Partial<FinancialAccount>) => void;
   onEditAccount: (account: FinancialAccount) => void;
   onDeleteAccount: (accountId: string) => void;
@@ -62,6 +65,8 @@ interface AccountsListProps {
 export const AccountsList: React.FC<AccountsListProps> = ({
   accounts,
   privacyMode,
+  currentUser,
+  onTriggerSync,
   projects = [],
   onAddAccount,
   onEditAccount,
@@ -75,6 +80,17 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 }) => {
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'GROUPED' | 'CARD' | 'TABLE'>('GROUPED');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    if (!onTriggerSync || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await onTriggerSync();
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
 
   const projectMap = useMemo(() => {
     const map = new Map<string, LedgerProject>();
@@ -580,6 +596,61 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     return nonAllGroups.filter((g) => g.id === filterGroup);
   }, [groupDefinitions, filterGroup]);
 
+  // Overall statistics for top summary card (matching 账本项目 style)
+  const overallAccountStats = useMemo(() => {
+    const debitCards = accounts.filter((a) => a.category === 'DEBIT_CARD');
+    const debitTotal = debitCards.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    const creditCards = accounts.filter((a) =>
+      ['CREDIT_CARD', 'JD_BAITIAO', 'HUABEI'].includes(a.category)
+    );
+    const creditUsedTotal = creditCards.reduce(
+      (sum, a) => sum + (a.usedCredit !== undefined ? a.usedCredit : a.balance || 0),
+      0
+    );
+
+    const walletAccounts = accounts.filter((a) =>
+      ['ALIPAY', 'WECHAT'].includes(a.category)
+    );
+    const walletTotal = walletAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    const fundAccounts = accounts.filter((a) =>
+      ['YUEBAO', 'FUND', 'GOLD', 'JD_FINANCE'].includes(a.category)
+    );
+    const fundTotal = fundAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    const cashAccounts = accounts.filter((a) => a.category === 'CASH');
+    const cashTotal = cashAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    const receivableTotal = accounts
+      .filter((a) => a.category === 'RECEIVABLE' && !a.isSettled)
+      .reduce((sum, a) => sum + (a.balance || 0), 0);
+    const payableTotal = accounts
+      .filter((a) => a.category === 'PAYABLE' && !a.isSettled)
+      .reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    const liquidTotal = debitTotal + walletTotal + cashTotal;
+    const totalAssets = liquidTotal + fundTotal + receivableTotal;
+    const totalDebts = creditUsedTotal + payableTotal;
+    const netAssets = totalAssets - totalDebts;
+
+    return {
+      debitCount: debitCards.length,
+      creditCount: creditCards.length,
+      walletCount: walletAccounts.length,
+      cashCount: cashAccounts.length,
+      fundCount: fundAccounts.length,
+      liquidTotal,
+      fundTotal,
+      creditUsedTotal,
+      payableTotal,
+      receivableTotal,
+      totalAssets,
+      totalDebts,
+      netAssets,
+    };
+  }, [accounts]);
+
   return (
     <div className="space-y-6">
       {/* Toast notification banner */}
@@ -592,233 +663,327 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       )}
 
-      {/* Top Header & Clean Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              资产账户
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-              共 {accounts.length} 张卡片/账户
-            </span>
-          </div>
-        </div>
-
-        {/* Action Button Group */}
-        <div className="flex items-center gap-2 self-start lg:self-auto">
-          {/* Active Reorder Mode Indicator */}
-          {isReorderMode && (
-            <button
-              onClick={() => setIsReorderMode(false)}
-              className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-xs transition-all active:scale-95 animate-pulse"
-              title="点击退出拖动排序并保存排版"
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>完成排版</span>
-            </button>
-          )}
-
-          {/* View Mode Switcher: Grouped, Card, Table */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
-            <button
-              onClick={() => setViewMode('GROUPED')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'GROUPED'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-              title="大类分组排版 (按6大资产大类分区排列)"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>大类排版</span>
-            </button>
-            <button
-              onClick={() => setViewMode('CARD')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'CARD'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-              title="平铺卡面 (真实银行卡质感卡面)"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>平铺卡面</span>
-            </button>
-            <button
-              onClick={() => setViewMode('TABLE')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'TABLE'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-              title="数据明细表格"
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>表格明细</span>
-            </button>
+      {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-800 text-purple-700 dark:text-purple-400 text-xs font-semibold mb-3">
+              <Wallet className="w-3.5 h-3.5" />
+              <span>资产账户专区</span>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                资产账户
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60">
+                共 {accounts.length} 张卡片/账户
+              </span>
+              {currentUser && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>云端已同步</span>
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* 更多管理工具收折菜单（隐藏按键，按需唤出：添加新账户、卡面艺廊、智能规整、隐藏唤醒、批量校对、拖动排序） */}
-          <div className="relative" ref={moreMenuRef}>
-            <button
-              id="btn-more-account-actions"
-              type="button"
-              onClick={() => setIsMoreMenuOpen((prev) => !prev)}
-              className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium px-2.5 py-1.5 rounded-xl border shadow-2xs transition-all active:scale-95 ${
-                isMoreMenuOpen
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-              }`}
-              title="管理工具（添加账户、卡面艺廊、智能规整、批量校对等）"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-              <span>更多管理</span>
-            </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {/* Active Reorder Mode Indicator */}
+            {isReorderMode && (
+              <button
+                onClick={() => setIsReorderMode(false)}
+                className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-xl shadow-xs transition-all active:scale-95 animate-pulse"
+                title="点击退出拖动排序并保存排版"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>完成排版</span>
+              </button>
+            )}
 
-            {isMoreMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-slate-100">
-                {/* 1. 添加新账户 */}
-                <div className="p-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMoreMenuOpen(false);
-                      onAddAccount('DEBIT_CARD');
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 text-slate-800 text-xs sm:text-sm font-medium transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                      <Plus className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-slate-900">添加新账户</div>
-                      <div className="text-[11px] text-slate-500 truncate">录入借记卡、信用卡或资产账户</div>
-                    </div>
-                  </button>
-                </div>
+            {/* View Mode Switcher: Grouped, Card, Table */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setViewMode('GROUPED')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'GROUPED'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="大类分组排版 (按6大资产大类分区排列)"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>大类排版</span>
+              </button>
+              <button
+                onClick={() => setViewMode('CARD')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'CARD'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="平铺卡面 (真实银行卡质感卡面)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>平铺卡面</span>
+              </button>
+              <button
+                onClick={() => setViewMode('TABLE')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'TABLE'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="数据明细表格"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>表格明细</span>
+              </button>
+            </div>
 
-                {/* 2. 卡面相关工具（CardArt卡面艺廊、全网卡面智能规整、隐藏式唤醒） */}
-                <div className="p-1 space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMoreMenuOpen(false);
-                      setIsGalleryOpenGeneral(true);
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 text-slate-800 text-xs sm:text-sm font-medium transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-amber-500 to-rose-600 text-white flex items-center justify-center shrink-0 text-sm shadow-2xs">
-                      🎨
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                        <span>CardArt卡面艺廊</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                          {totalGalleryCards.toLocaleString()} 款
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate">浏览 Apple Pay 高清卡面艺廊</div>
-                    </div>
-                  </button>
+            {/* Cloud Sync Button */}
+            {onTriggerSync && (
+              <button
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                title="立即同步最新资产账户到云端服务器"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-purple-600' : 'text-slate-500'}`} />
+                <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+              </button>
+            )}
 
-                  {accounts.length > 0 && (
+            {/* 更多管理工具收折菜单 */}
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                id="btn-more-account-actions"
+                type="button"
+                onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+                className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-xl border shadow-2xs transition-all active:scale-95 ${
+                  isMoreMenuOpen
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                }`}
+                title="管理工具（卡面艺廊、智能规整、批量校对等）"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+                <span>更多管理</span>
+              </button>
+
+              {isMoreMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 sm:w-72 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200/90 dark:border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-slate-100 dark:divide-slate-800">
+                  {/* 1. 添加新账户 */}
+                  <div className="p-1">
                     <button
                       type="button"
                       onClick={() => {
                         setIsMoreMenuOpen(false);
-                        handleNormalizeAllCardFaces();
+                        onAddAccount('DEBIT_CARD');
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-indigo-50 text-indigo-950 text-xs sm:text-sm font-medium transition-colors"
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                        <Sparkles className="w-4 h-4" />
+                      <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <Plus className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-indigo-900">全网卡面智能规整</div>
-                        <div className="text-[11px] text-indigo-600/80 truncate">智能匹配并规整高清无损卡面</div>
+                        <div className="font-bold text-slate-900 dark:text-white">添加新账户</div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">录入借记卡、信用卡或资产账户</div>
                       </div>
                     </button>
-                  )}
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMoreMenuOpen(false);
-                      const nextMode = globalWakeMode === 'hidden' ? 'pinned' : 'hidden';
-                      setGlobalWakeMode(nextMode);
-                      showToast(
-                        nextMode === 'hidden'
-                          ? '🍃 已开启隐藏式唤醒：卡面默认保持纯净艺术原貌，悬浮或轻触卡面即可唤醒卡号与可用余额'
-                          : '📌 已切换为卡面始终常显：所有卡片常显卡号与额度明细'
-                      );
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 text-slate-800 text-xs sm:text-sm font-medium transition-colors"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm ${
-                        globalWakeMode === 'hidden'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {globalWakeMode === 'hidden' ? '🍃' : '📌'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-slate-900">
-                        {globalWakeMode === 'hidden' ? '隐藏式唤醒: 开启' : '卡面明细: 始终常显'}
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate">
-                        {globalWakeMode === 'hidden' ? '卡面纯净艺术，触碰唤醒信息' : '所有卡面始终常显信息'}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-
-                {/* 3. 账户维护工具（批量校对、拖动排序） */}
-                {accounts.length > 0 && (
+                  {/* 2. 卡面相关工具（CardArt卡面艺廊、全网卡面智能规整、隐藏式唤醒） */}
                   <div className="p-1 space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
                         setIsMoreMenuOpen(false);
-                        onOpenBatchReconcile();
+                        setIsGalleryOpenGeneral(true);
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 text-slate-800 text-xs sm:text-sm font-medium transition-colors"
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                        <Sliders className="w-4 h-4" />
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-amber-500 to-rose-600 text-white flex items-center justify-center shrink-0 text-sm shadow-2xs">
+                        🎨
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-slate-900">批量校对</div>
-                        <div className="text-[11px] text-slate-500 truncate">快速校准所有账户余额与额度</div>
+                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <span>CardArt卡面艺廊</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 font-bold border border-rose-200 dark:border-rose-800/60">
+                            {totalGalleryCards.toLocaleString()} 款
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">浏览 Apple Pay 高清卡面艺廊</div>
                       </div>
                     </button>
 
-                    {accounts.length > 1 && (
+                    {accounts.length > 0 && (
                       <button
                         type="button"
                         onClick={() => {
                           setIsMoreMenuOpen(false);
-                          setIsReorderMode(!isReorderMode);
+                          handleNormalizeAllCardFaces();
                         }}
-                        className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-purple-50 text-purple-950 text-xs sm:text-sm font-medium transition-colors"
+                        className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-950 dark:text-indigo-200 text-xs sm:text-sm font-medium transition-colors"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                          <ArrowUpDown className="w-4 h-4" />
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                          <Sparkles className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-purple-900">
-                            {isReorderMode ? '完成拖动排版' : '拖动排序与排版'}
-                          </div>
-                          <div className="text-[11px] text-purple-600/80 truncate">开启拖拽调整卡面先后顺序</div>
+                          <div className="font-semibold text-indigo-900 dark:text-indigo-200">全网卡面智能规整</div>
+                          <div className="text-[11px] text-indigo-600/80 dark:text-indigo-400/80 truncate">智能匹配并规整高清无损卡面</div>
                         </div>
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMoreMenuOpen(false);
+                        const nextMode = globalWakeMode === 'hidden' ? 'pinned' : 'hidden';
+                        setGlobalWakeMode(nextMode);
+                        showToast(
+                          nextMode === 'hidden'
+                            ? '🍃 已开启隐藏式唤醒：卡面默认保持纯净艺术原貌，悬浮或轻触卡面即可唤醒卡号与可用余额'
+                            : '📌 已切换为卡面始终常显：所有卡片常显卡号与额度明细'
+                        );
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm ${
+                          globalWakeMode === 'hidden'
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                        }`}
+                      >
+                        {globalWakeMode === 'hidden' ? '🍃' : '📌'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-slate-900 dark:text-white">
+                          {globalWakeMode === 'hidden' ? '隐藏式唤醒: 开启' : '卡面明细: 始终常显'}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {globalWakeMode === 'hidden' ? '卡面纯净艺术，触碰唤醒信息' : '所有卡面始终常显信息'}
+                        </div>
+                      </div>
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {/* 3. 账户维护工具（批量校对、拖动排序） */}
+                  {accounts.length > 0 && (
+                    <div className="p-1 space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMoreMenuOpen(false);
+                          onOpenBatchReconcile();
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
+                          <Sliders className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 dark:text-white">批量校对</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">快速校准所有账户余额与额度</div>
+                        </div>
+                      </button>
+
+                      {accounts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            setIsReorderMode(!isReorderMode);
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-950 dark:text-purple-300 text-xs sm:text-sm font-medium transition-colors"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                            <ArrowUpDown className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-purple-900 dark:text-purple-200">
+                              {isReorderMode ? '完成拖动排版' : '拖动排序与排版'}
+                            </div>
+                            <div className="text-[11px] text-purple-600/80 dark:text-purple-400/80 truncate">开启拖拽调整卡面先后顺序</div>
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Primary Add Account Button */}
+            <button
+              id="btn-add-account-main"
+              onClick={() => onAddAccount('DEBIT_CARD')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
+              <span>添加资产</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Aggregate Stats Across All Accounts (与账本项目 / 信用卡专区统一的5列统计) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">账户总数</span>
+            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+              {accounts.length}
+            </div>
+            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              储蓄 {overallAccountStats.debitCount + overallAccountStats.walletCount + overallAccountStats.cashCount} · 信贷 {overallAccountStats.creditCount}
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
+            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">活期与储蓄</span>
+            <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+              +{formatCurrency(overallAccountStats.liquidTotal, privacyMode)}
+            </div>
+            <div className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1">
+              随时可支取流动资金
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50">
+            <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">投资与理财</span>
+            <div className="text-2xl font-bold font-mono text-blue-700 dark:text-blue-400 mt-1">
+              +{formatCurrency(overallAccountStats.fundTotal, privacyMode)}
+            </div>
+            <div className="text-xs text-blue-600/80 dark:text-blue-500/80 mt-1">
+              余额宝、黄金与基金定投
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50">
+            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">信贷欠款</span>
+            <div className="text-2xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
+              -{formatCurrency(overallAccountStats.creditUsedTotal, privacyMode)}
+            </div>
+            <div className="text-xs text-rose-600/80 dark:text-rose-500/80 mt-1">
+              当前各信用卡待还本金
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 sm:col-span-2 lg:col-span-1">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">净资产总额</span>
+            <div
+              className={`text-2xl font-bold font-mono mt-1 ${
+                overallAccountStats.netAssets >= 0
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {overallAccountStats.netAssets >= 0 ? '+' : ''}
+              {formatCurrency(overallAccountStats.netAssets, privacyMode)}
+            </div>
+            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              {overallAccountStats.netAssets >= 0 ? '资产负债结构良好' : '资产低于总负债'}
+            </div>
           </div>
         </div>
       </div>
@@ -1425,7 +1590,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 font-mono text-xs text-slate-600">
-                        <div>{acc.holderName || '持卡人'}</div>
+                        <div className={acc.holderName ? 'text-slate-800 font-medium' : 'text-slate-400'}>
+                          {acc.holderName || '-'}
+                        </div>
                         <div>{acc.cardNumberLast4 ? `尾号 ${acc.cardNumberLast4}` : '-'}</div>
                       </td>
                       <td

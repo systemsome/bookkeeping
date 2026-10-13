@@ -444,15 +444,17 @@ export const AppleWalletView: React.FC<AppleWalletViewProps> = ({
 
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="font-bold tracking-widest text-slate-900 dark:text-white text-sm sm:text-base">
-                  •••• &nbsp;•••• &nbsp;•••• &nbsp;{activeCard.cardNumberLast4 || '8888'}
+                  •••• &nbsp;•••• &nbsp;•••• &nbsp;{activeCard.cardNumberLast4 || '----'}
                 </span>
-                <span className="text-slate-400">
-                  EXP: {activeCard.cardExpiry || '08/29'}
-                </span>
+                {activeCard.cardExpiry && (
+                  <span className="text-slate-400">
+                    EXP: {activeCard.cardExpiry}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                <span>持卡人: {activeCard.holderName || 'ZHANG WEI'}</span>
+                <span>持卡人: {activeCard.holderName || '未设置'}</span>
                 <span>机构: {activeCard.bankName || '商业银行'}</span>
                 {activeCard.dueDay && (
                   <span className="text-amber-600 dark:text-amber-400 font-semibold">
@@ -748,16 +750,18 @@ const WalletCardFace: React.FC<WalletCardFaceProps> = ({
         <div>
           <div className="flex items-center gap-1.5">
             <span className="text-xs sm:text-sm font-bold tracking-widest drop-shadow-sm">
-              •••• &nbsp;•••• &nbsp;•••• &nbsp;{account.cardNumberLast4 || '8888'}
+              •••• &nbsp;•••• &nbsp;•••• &nbsp;{account.cardNumberLast4 || '----'}
             </span>
           </div>
-          <div className="text-[9px] uppercase tracking-wider font-sans mt-0.5 opacity-80">
-            {account.holderName || 'ZHANG WEI'}
-          </div>
+          {account.holderName && (
+            <div className="text-[9px] uppercase tracking-wider font-sans mt-0.5 opacity-80">
+              {account.holderName}
+            </div>
+          )}
         </div>
 
         <div className="text-right text-[10px] opacity-80">
-          <span>{account.cardExpiry || '08/29'}</span>
+          {account.cardExpiry && <span>{account.cardExpiry}</span>}
         </div>
       </div>
     </div>

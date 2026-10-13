@@ -23,10 +23,11 @@ import {
   Layers,
   CalendarDays,
   ArrowRight,
+  FolderKanban,
 } from 'lucide-react';
 import { toPng, toBlob } from 'html-to-image';
 import confetti from 'canvas-confetti';
-import { Transaction, FinancialAccount } from '../types';
+import { Transaction, FinancialAccount, LedgerProject } from '../types';
 import { playPOSSound } from '../lib/receiptSound';
 import { sortTransactions } from '../lib/formatters';
 
@@ -35,12 +36,14 @@ interface ReceiptModalProps {
   onClose: () => void;
   transactions: Transaction[];
   accounts: FinancialAccount[];
+  projects?: LedgerProject[];
   selectedDate?: string | null;
   initialSingleTxId?: string | null;
+  initialProjectId?: string | null;
 }
 
 type ReceiptTheme = 'classic' | 'cafe' | 'cyber' | 'muji';
-type ScopeType = 'TODAY' | 'MONTH' | 'DATE' | 'ALL' | 'SINGLE';
+type ScopeType = 'TODAY' | 'MONTH' | 'DATE' | 'ALL' | 'SINGLE' | 'PROJECT';
 type StampShape = 'circle' | 'rect' | 'badge';
 export type StampPosition =
   | 'bottom-right'
@@ -114,8 +117,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onClose,
   transactions = [],
   accounts = [],
+  projects = [],
   selectedDate,
   initialSingleTxId,
+  initialProjectId,
 }) => {
   // Today and current month dates
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -160,9 +165,43 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     return sortedAllTransactions[0]?.id || null;
   }, [sortedAllTransactions]);
 
+  // Fast projects lookup map
+  const projectMap = useMemo(() => {
+    const map = new Map<string, LedgerProject>();
+    (projects || []).forEach((p) => {
+      map.set(p.id, p);
+      if (p.name) map.set(p.name, p);
+    });
+    return map;
+  }, [projects]);
+
+  // Available projects with transactions count
+  const projectOptions = useMemo(() => {
+    return (projects || []).map((p) => {
+      const count = transactions.filter(
+        (t) => t.projectId === p.id || (t.projectName && t.projectName === p.name)
+      ).length;
+      return { project: p, count };
+    });
+  }, [projects, transactions]);
+
+  // Selected project ID for PROJECT scope
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    if (initialProjectId) return initialProjectId;
+    if (projects && projects.length > 0) return projects[0].id;
+    return null;
+  });
+
+  // Current active project object
+  const activeSelectedProject = useMemo(() => {
+    if (!selectedProjectId) return null;
+    return (projects || []).find((p) => p.id === selectedProjectId) || null;
+  }, [projects, selectedProjectId]);
+
   // Theme & Scope States
   const [theme, setTheme] = useState<ReceiptTheme>('classic');
   const [scope, setScope] = useState<ScopeType>(() => {
+    if (initialProjectId) return 'PROJECT';
     if (initialSingleTxId) return 'SINGLE';
     if (selectedDate) return 'DATE';
     return 'TODAY';
@@ -181,14 +220,38 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [singleTxId, setSingleTxId] = useState<string | null>(() => {
     return initialSingleTxId || (sortedAllTransactions[0]?.id ?? null);
   });
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME'>('EXPENSE');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME'>(() => {
+    if (initialProjectId) return 'ALL';
+    return 'EXPENSE';
+  });
 
-  // Custom Header & Custom Stamp States
-  const [storeName, setStoreName] = useState<string>('我的生活记账本');
-  const [storeSubtitle, setStoreSubtitle] = useState<string>('消费结算凭证');
-  const [stampMainText, setStampMainText] = useState<string>('已结算');
+  // Custom Header & Custom Stamp States (根据是否为账本项目智能设定默认店名与副标题)
+  const [storeName, setStoreName] = useState<string>(() => {
+    if (initialProjectId) {
+      const p = (projects || []).find((proj) => proj.id === initialProjectId);
+      if (p) return `项目「${p.name}」`;
+    }
+    return '我的生活记账本';
+  });
+  const [storeSubtitle, setStoreSubtitle] = useState<string>(() => {
+    if (initialProjectId) {
+      const p = (projects || []).find((proj) => proj.id === initialProjectId);
+      if (p) return `${p.category} · 专项财务结算`;
+    }
+    return '消费结算凭证';
+  });
+  const [stampMainText, setStampMainText] = useState<string>(() => {
+    if (initialProjectId) return '项目结清';
+    return '已结算';
+  });
   const [stampTopText, setStampTopText] = useState<string>('★ 官方认证 ★');
-  const [stampBottomText, setStampBottomText] = useState<string>('消费入账');
+  const [stampBottomText, setStampBottomText] = useState<string>(() => {
+    if (initialProjectId) {
+      const p = (projects || []).find((proj) => proj.id === initialProjectId);
+      if (p) return p.name.substring(0, 6);
+    }
+    return '消费入账';
+  });
   const [stampColorId, setStampColorId] = useState<string>('crimson');
   const [stampShape, setStampShape] = useState<StampShape>('circle');
   const [stampPosition, setStampPosition] = useState<StampPosition>('bottom-right');
@@ -215,7 +278,22 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     return map;
   }, [accounts]);
 
-  // Sync initial single tx or selected date
+  // Sync initial single tx, project or selected date
+  useEffect(() => {
+    if (initialProjectId) {
+      setSelectedProjectId(initialProjectId);
+      setScope('PROJECT');
+      setTypeFilter('ALL');
+      const targetProj = (projects || []).find((p) => p.id === initialProjectId);
+      if (targetProj) {
+        setStoreName(`项目「${targetProj.name}」`);
+        setStoreSubtitle(`${targetProj.category} · 专项财务结算`);
+        setStampMainText('项目结清');
+        setStampBottomText(targetProj.name.substring(0, 6));
+      }
+    }
+  }, [initialProjectId, projects]);
+
   useEffect(() => {
     if (initialSingleTxId) {
       setSingleTxId(initialSingleTxId);
@@ -370,6 +448,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const targetTransactions = useMemo(() => {
     return transactions.filter((tx) => {
       if (!tx) return false;
+
+      // 专属账本项目打单范围
+      if (scope === 'PROJECT') {
+        if (!selectedProjectId) return false;
+        const matchesProj =
+          tx.projectId === selectedProjectId ||
+          (tx.projectName && activeSelectedProject && tx.projectName === activeSelectedProject.name);
+        if (!matchesProj) return false;
+      }
       
       if (scope === 'SINGLE') {
         const effectiveId = singleTxId || latestTxId;
@@ -388,9 +475,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       if (scope === 'MONTH') {
         return tx.date && tx.date.startsWith(selectedMonth);
       }
-      return true; // ALL
+      return true; // ALL or PROJECT (already checked above)
     });
-  }, [transactions, typeFilter, scope, singleTxId, latestTxId, minDate, maxDate, todayStr, selectedMonth]);
+  }, [transactions, typeFilter, scope, singleTxId, latestTxId, minDate, maxDate, todayStr, selectedMonth, selectedProjectId, activeSelectedProject]);
 
   // Calculate totals
   const totalExpense = useMemo(() => {
@@ -415,16 +502,20 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   // Descriptive period label
   const periodLabel = useMemo(() => {
+    if (scope === 'PROJECT') {
+      const projName = activeSelectedProject ? `「${activeSelectedProject.name}」` : '专项账本项目';
+      return `${projName} 独立结算小票 (${itemCount} 笔)`;
+    }
     if (scope === 'TODAY') return `今日小票 (${todayStr})`;
     if (scope === 'MONTH') return `月度汇总 (${selectedMonth} 月)`;
     if (scope === 'SINGLE') return `单笔流水专属小票`;
     if (scope === 'ALL') return `全量账单汇总 (${transactions.length} 笔)`;
     if (isSingleDay) return `指定日期 (${minDate})`;
     return `指定区间 (${minDate} 至 ${maxDate})`;
-  }, [scope, todayStr, selectedMonth, transactions.length, isSingleDay, minDate, maxDate]);
+  }, [scope, activeSelectedProject, itemCount, todayStr, selectedMonth, transactions.length, isSingleDay, minDate, maxDate]);
 
   // Receipt ID & Timestamp based on selected date
-  const receiptDateRef = scope === 'DATE' ? `${minDate.replace(/-/g, '')}${isSingleDay ? '' : `_${maxDate.replace(/-/g, '')}`}` : scope === 'MONTH' ? selectedMonth.replace(/-/g, '') : todayStr.replace(/-/g, '');
+  const receiptDateRef = scope === 'PROJECT' ? `PRJ_${(selectedProjectId || 'ALL').substring(0, 8)}` : scope === 'DATE' ? `${minDate.replace(/-/g, '')}${isSingleDay ? '' : `_${maxDate.replace(/-/g, '')}`}` : scope === 'MONTH' ? selectedMonth.replace(/-/g, '') : todayStr.replace(/-/g, '');
   const receiptNo = `POS-${receiptDateRef}-${String(itemCount).padStart(3, '0')}`;
   const printTimeStr = new Date().toLocaleTimeString('zh-CN', {
     hour: '2-digit',
@@ -740,13 +831,19 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         {/* Top Prominent Scope & Date Selection Bar (清晰的一级筛选器) */}
         <div className="bg-slate-950 px-4 py-3 border-b border-slate-800/80 space-y-2.5 shrink-0">
           {/* Main Scope Tabs */}
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
             {[
               {
                 id: 'TODAY',
                 label: '今日小票',
                 icon: Calendar,
                 badge: `${transactions.filter((t) => t.date === todayStr).length} 笔`,
+              },
+              {
+                id: 'PROJECT',
+                label: '账本项目',
+                icon: FolderKanban,
+                badge: activeSelectedProject ? activeSelectedProject.name.substring(0, 5) : `${projects.length}个`,
               },
               {
                 id: 'MONTH',
@@ -756,7 +853,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               },
               {
                 id: 'DATE',
-                label: '指定日期/区间',
+                label: '指定区间',
                 icon: Filter,
                 badge: `${targetTransactions.length} 笔`,
               },
@@ -784,6 +881,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     if (tab.id === 'SINGLE' && !singleTxId && latestTxId) {
                       setSingleTxId(latestTxId);
                     }
+                    if (tab.id === 'PROJECT' && !selectedProjectId && projects.length > 0) {
+                      setSelectedProjectId(projects[0].id);
+                    }
                     triggerPrintEffect();
                   }}
                   className={`p-2 rounded-xl text-center border transition-all flex flex-col items-center justify-center gap-0.5 ${
@@ -797,7 +897,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     <span className="text-xs">{tab.label}</span>
                   </div>
                   <span
-                    className={`text-[10px] font-mono ${
+                    className={`text-[10px] font-mono truncate max-w-full px-0.5 ${
                       isActive ? 'text-emerald-100' : 'text-slate-400'
                     }`}
                   >
@@ -809,6 +909,107 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </div>
 
           {/* Sub-Controllers based on selected Scope */}
+          {/* 0. Project Switcher (When scope is PROJECT) */}
+          {scope === 'PROJECT' && (
+            <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-2 animate-in fade-in duration-150">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: activeSelectedProject?.color || '#0d9488' }}
+                  />
+                  <span className="text-xs text-slate-300 font-semibold whitespace-nowrap">
+                    选择账本:
+                  </span>
+                  <select
+                    value={selectedProjectId || ''}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setSelectedProjectId(newId);
+                      const proj = projects.find((p) => p.id === newId);
+                      if (proj) {
+                        setStoreName(`项目「${proj.name}」`);
+                        setStoreSubtitle(`${proj.category} · 专项财务结算`);
+                        setStampMainText('项目结清');
+                        setStampBottomText(proj.name.substring(0, 6));
+                      }
+                      triggerPrintEffect();
+                    }}
+                    className="flex-1 sm:max-w-xs bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 font-bold focus:outline-none focus:border-emerald-500"
+                  >
+                    {projectOptions.length === 0 ? (
+                      <option value="">暂无账本项目</option>
+                    ) : (
+                      projectOptions.map(({ project: p, count }) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.category}) · {count} 笔
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {activeSelectedProject && (
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    {activeSelectedProject.budget && activeSelectedProject.budget > 0 && (
+                      <span className="font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                        预算 ¥{activeSelectedProject.budget.toFixed(0)}
+                      </span>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        activeSelectedProject.status === 'ACTIVE'
+                          ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
+                          : activeSelectedProject.status === 'COMPLETED'
+                          ? 'bg-blue-950/60 text-blue-400 border border-blue-800/60'
+                          : 'bg-amber-950/60 text-amber-400 border border-amber-800/60'
+                      }`}
+                    >
+                      {activeSelectedProject.status === 'ACTIVE'
+                        ? '进行中'
+                        : activeSelectedProject.status === 'COMPLETED'
+                        ? '已结项'
+                        : '已归档'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Project Pills if multiple projects */}
+              {projectOptions.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 max-w-full scrollbar-thin pt-1 border-t border-slate-800/60">
+                  <span className="text-[10px] text-slate-400 shrink-0">快捷切换:</span>
+                  {projectOptions.map(({ project: p, count }) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProjectId(p.id);
+                        setStoreName(`项目「${p.name}」`);
+                        setStoreSubtitle(`${p.category} · 专项财务结算`);
+                        setStampMainText('项目结清');
+                        setStampBottomText(p.name.substring(0, 6));
+                        triggerPrintEffect();
+                      }}
+                      className={`px-2 py-0.5 rounded-lg text-[11px] whitespace-nowrap transition-all flex items-center gap-1 border shrink-0 ${
+                        selectedProjectId === p.id
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-bold'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ backgroundColor: p.color || '#0d9488' }}
+                      />
+                      <span>{p.name}</span>
+                      <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 1. Month Switcher (When scope is MONTH) */}
           {scope === 'MONTH' && (
             <div className="flex items-center justify-between gap-2 p-2 bg-slate-900 rounded-xl border border-slate-800 animate-in fade-in duration-150">
@@ -1480,6 +1681,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                               </span>
                               <span className="truncate">{tx.category}</span>
                             </div>
+                            {tx.projectName && (
+                              <div className="text-[9px] font-medium text-indigo-600 dark:text-indigo-400 truncate flex items-center gap-0.5">
+                                <span>📁</span>
+                                <span className="truncate">{tx.projectName}</span>
+                              </div>
+                            )}
                             {tx.description && (
                               <div className="text-[10px] opacity-70 truncate font-sans">
                                 {tx.description}

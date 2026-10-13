@@ -15,6 +15,8 @@ import {
   addTransaction,
   updateTransaction,
   deleteTransaction,
+  deleteTransactionsBatch,
+  batchUpdateTransactions,
   updateAccountBalanceDirectly,
   clearAllUserData,
   isAppLocked,
@@ -26,6 +28,12 @@ import {
   triggerAutoServerSync,
   executeFullCloudSync,
   initRealtimeSyncStream,
+  getRecurringTasks,
+  saveRecurringTasks,
+  executeRecurringTask,
+  getTrashTransactions,
+  emptyTrash,
+  restoreFromTrash,
 } from './lib/storage';
 import {
   UserProfile,
@@ -36,6 +44,8 @@ import {
   TransactionType,
   LedgerProject,
   CloudSyncStatus,
+  RecurringTask,
+  DeletedTransaction,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
@@ -55,6 +65,8 @@ import { BatchReconcileModal } from './components/BatchReconcileModal';
 import { SecuritySettingsModal } from './components/SecuritySettingsModal';
 import { SyncBackupModal } from './components/SyncBackupModal';
 import { CardentifyGalleryModal } from './components/CardentifyGalleryModal';
+import { RecurringTasksModal } from './components/RecurringTasksModal';
+import { TrashBinModal } from './components/TrashBinModal';
 import { mergeAccounts, mergeTransactions, mergeProjects } from './lib/backup';
 import { updateAccountsWithGoldPrice } from './lib/goldRates';
 import { syncDualLibrariesOnline, fetchDualGalleryStats } from './lib/gallerySync';
@@ -173,6 +185,14 @@ export default function App() {
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
+
+  // 🔄 Recurring Tasks & 🗑️ Trash Bin States
+  const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
+  const [trashTransactions, setTrashTransactions] = useState<DeletedTransaction[]>([]);
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [undoTxId, setUndoTxId] = useState<string | null>(null);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Real-time Cloud Sync Status (连接中、已同步、同步失败、离线模式)
@@ -192,9 +212,39 @@ export default function App() {
     const accs = getAccounts(uid);
     const txs = getTransactions(uid);
     const projs = getProjects(uid);
+    const recs = getRecurringTasks(uid);
+    const trash = getTrashTransactions(uid);
     setAccounts(accs);
     setTransactions(txs);
     setProjects(projs);
+    setRecurringTasks(recs);
+    setTrashTransactions(trash);
+
+    // 自动扫描到期周期账单并自动入账 (针对开启 autoExecute 的规则)
+    const todayStr = new Date().toISOString().split('T')[0];
+    let executedCount = 0;
+    let currAccs = accs;
+    let currTxs = txs;
+    let currTasks = recs;
+
+    recs.forEach((task) => {
+      if (task.enabled && task.autoExecute && task.nextDueDate <= todayStr) {
+        const res = executeRecurringTask(uid, task.id);
+        if (res.success && res.transaction && res.accounts && res.updatedTasks) {
+          executedCount++;
+          currAccs = res.accounts;
+          currTxs = [res.transaction, ...currTxs];
+          currTasks = res.updatedTasks;
+        }
+      }
+    });
+
+    if (executedCount > 0) {
+      setAccounts(currAccs);
+      setTransactions(sortTransactions(currTxs));
+      setRecurringTasks(currTasks);
+      showToast(`🔄 已自动执行入账 ${executedCount} 笔到期周期固定账单`);
+    }
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setSyncStatus('offline');
@@ -203,14 +253,14 @@ export default function App() {
 
     setSyncStatus('syncing');
 
-    // 2. 查询本地持久化服务端（不管是在 localhost:3000 还是通过域名访问，访问的都是同一套后端文件）
-    // 核心机制：时间戳对比！若在另一个端口/域名录入了更新的数据，fetchLatestDataFromServer 会平滑更新当前源
+    // 2. 查询本地持久化服务端
     fetchLatestDataFromServer(uid)
       .then((res) => {
         if (res.success && res.accounts && res.transactions) {
           setAccounts(res.accounts);
           setTransactions(res.transactions);
           setProjects(res.projects || []);
+          if (res.recurringTasks) setRecurringTasks(res.recurringTasks);
         }
         setSyncStatus('synced');
         setLastSyncTime(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
@@ -218,7 +268,7 @@ export default function App() {
       .catch(() => {
         setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'synced');
       });
-  }, []);
+  }, [showToast]);
 
   // 手动触发全量双向同步
   const handleTriggerFullSync = useCallback(async () => {
@@ -503,7 +553,7 @@ export default function App() {
         updatedAt: now,
       };
       updatedProjects = [newProj, ...projects];
-      showToast(`账本项目「${projectData.name}」已创建并同步至云端账号`);
+      showToast(`账本「${projectData.name}」已创建`);
     }
     setProjects(updatedProjects);
     saveProjects(currentUser.id, updatedProjects);
@@ -534,7 +584,7 @@ export default function App() {
       setTransactions(updatedTxs);
       saveTransactions(currentUser.id, updatedTxs);
     }
-    showToast(`账本项目「${target?.name || '未命名'}」已成功删除，关联记账流水已妥善保留`);
+    showToast(`账本「${target?.name || '未命名'}」已删除`);
   };
 
   const handleDirectSaveProject = (project: LedgerProject) => {
@@ -624,11 +674,169 @@ export default function App() {
     setTransactions((prev) => sortTransactions([transaction, ...prev]));
   };
 
-  // Delete transaction
+  // Delete transaction with Trash Bin and Undo tracking
   const handleDeleteTx = (txId: string) => {
     if (!currentUser) return;
-    const { transactions: updated } = deleteTransaction(currentUser.id, txId);
+    const { transactions: updated, accounts: updatedAccs } = deleteTransaction(currentUser.id, txId);
+    setAccounts(updatedAccs);
     setTransactions(sortTransactions(updated));
+    setTrashTransactions(getTrashTransactions(currentUser.id));
+    setUndoTxId(txId);
+    showToast('🗑️ 账单已移至回收站，可随时在回收站还原');
+  };
+
+  // Batch delete transactions
+  const handleBatchDeleteTx = (txIds: string[]) => {
+    if (!currentUser || txIds.length === 0) return;
+    const { transactions: updated, accounts: updatedAccs } = deleteTransactionsBatch(currentUser.id, txIds);
+    setAccounts(updatedAccs);
+    setTransactions(sortTransactions(updated));
+    setTrashTransactions(getTrashTransactions(currentUser.id));
+    showToast(`🗑️ 已批量删除 ${txIds.length} 笔账单流水（已暂存回收站防误删）`);
+  };
+
+  // 🔄 Recurring Tasks Handlers
+  const handleSaveRecurringTask = (task: RecurringTask) => {
+    if (!currentUser) return;
+    const existing = recurringTasks.find((t) => t.id === task.id);
+    let updated: RecurringTask[];
+    if (existing) {
+      updated = recurringTasks.map((t) => (t.id === task.id ? task : t));
+      showToast(`✨ 周期规则「${task.name}」已更新`);
+    } else {
+      updated = [task, ...recurringTasks];
+      showToast(`✨ 周期规则「${task.name}」已创建`);
+    }
+    setRecurringTasks(updated);
+    saveRecurringTasks(currentUser.id, updated);
+  };
+
+  const handleDeleteRecurringTask = (taskId: string) => {
+    if (!currentUser) return;
+    const target = recurringTasks.find((t) => t.id === taskId);
+    const updated = recurringTasks.filter((t) => t.id !== taskId);
+    setRecurringTasks(updated);
+    saveRecurringTasks(currentUser.id, updated);
+    showToast(`🗑️ 周期规则「${target?.name || ''}」已删除`);
+  };
+
+  const handleExecuteRecurringTask = (taskId: string) => {
+    if (!currentUser) return;
+    const res = executeRecurringTask(currentUser.id, taskId);
+    if (res.success && res.transaction && res.accounts && res.updatedTasks) {
+      setAccounts(res.accounts);
+      setTransactions((prev) => sortTransactions([res.transaction!, ...prev]));
+      setRecurringTasks(res.updatedTasks);
+      showToast(`⚡ 已成功入账「${res.transaction.description}」¥${res.transaction.amount}`);
+    }
+  };
+
+  const handleExecuteAllDueRecurring = () => {
+    if (!currentUser) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    let executedCount = 0;
+    let currAccs = accounts;
+    let currTxs = transactions;
+    let currTasks = recurringTasks;
+
+    recurringTasks.forEach((task) => {
+      if (task.enabled && task.nextDueDate <= todayStr) {
+        const res = executeRecurringTask(currentUser.id, task.id);
+        if (res.success && res.transaction && res.accounts && res.updatedTasks) {
+          executedCount++;
+          currAccs = res.accounts;
+          currTxs = [res.transaction, ...currTxs];
+          currTasks = res.updatedTasks;
+        }
+      }
+    });
+
+    if (executedCount > 0) {
+      setAccounts(currAccs);
+      setTransactions(sortTransactions(currTxs));
+      setRecurringTasks(currTasks);
+      showToast(`⚡ 已成功批量执行入账 ${executedCount} 笔到期账单`);
+    } else {
+      showToast('当前没有待入账的到期周期账单');
+    }
+  };
+
+  // 🗑️ Trash Bin Handlers
+  const handleRestoreFromTrash = (txId: string) => {
+    if (!currentUser) return;
+    const res = restoreFromTrash(currentUser.id, txId);
+    if (res.success) {
+      setAccounts(res.accounts);
+      setTransactions(res.transactions);
+      setTrashTransactions(getTrashTransactions(currentUser.id));
+      setUndoTxId(null);
+      showToast('✨ 账单流水已还原并重新计入资产');
+    }
+  };
+
+  const handleEmptyTrash = () => {
+    if (!currentUser) return;
+    emptyTrash(currentUser.id);
+    setTrashTransactions([]);
+    setUndoTxId(null);
+    showToast('🗑️ 回收站已彻底清空');
+  };
+
+  // Batch update transactions project or category
+  const handleBatchUpdateTx = (txIds: string[], updates: Partial<Transaction>) => {
+    if (!currentUser || txIds.length === 0) return;
+    const updated = batchUpdateTransactions(currentUser.id, txIds, updates);
+    setTransactions(sortTransactions(updated));
+    showToast(`✨ 已成功批量更新 ${txIds.length} 笔账单`);
+  };
+
+  // Duplicate / Clone transaction
+  const handleDuplicateTransaction = (tx: Transaction, cloneImmediately: boolean = false) => {
+    if (!currentUser) return;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(
+      2,
+      '0'
+    )}`;
+
+    if (cloneImmediately) {
+      const clonedTxData: Omit<Transaction, 'id' | 'createdAt'> = {
+        type: tx.type,
+        amount: tx.amount,
+        date: todayStr,
+        time: timeStr,
+        accountId: tx.accountId,
+        targetAccountId: tx.targetAccountId,
+        category: tx.category,
+        description: tx.description,
+        merchant: tx.merchant,
+        tag: tx.tag,
+        projectId: tx.projectId,
+        projectName: tx.projectName,
+        currency: tx.currency,
+        originalAmount: tx.originalAmount,
+      };
+      const { accounts: updatedAccounts, transaction } = addTransaction(currentUser.id, clonedTxData);
+      setAccounts(updatedAccounts);
+      setTransactions((prev) => sortTransactions([transaction, ...prev]));
+      showToast(`✨ 已一键再记一笔: ${tx.description || tx.category} (¥${tx.amount})`);
+    } else {
+      setEditingTransaction({
+        ...tx,
+        id: '',
+        date: todayStr,
+        time: timeStr,
+      });
+      setTxModalDefaultType(tx.type);
+      setTxModalAccountId(tx.accountId);
+      setTxModalDefaultDate(todayStr);
+      setTxModalProjectId(tx.projectId);
+      setTxModalRefundedTxId(undefined);
+      setIsTxModalOpen(true);
+    }
   };
 
   // Batch Import Transactions from Upload (CSV / Excel / Alipay / WeChat / JSON)
@@ -850,6 +1058,7 @@ export default function App() {
               onUpdateBudget={handleUpdateBudget}
               onOpenFullTxModal={() => handleOpenNewTx('EXPENSE')}
               onNavigateToTransactions={() => setActiveTab('transactions')}
+              onOpenRecurringTasks={() => setIsRecurringModalOpen(true)}
             />
 
             {/* 3. 🌟 信用卡与信贷借贷资金独立专区 (Dedicated Credit Card & Borrowed Funds Center) */}
@@ -967,6 +1176,12 @@ export default function App() {
             <AccountsList
               accounts={accounts || []}
               privacyMode={privacyMode}
+              currentUser={currentUser}
+              onTriggerSync={async () => {
+                if (!currentUser) return;
+                triggerAutoServerSync(currentUser.id, true);
+                showToast('已同步最新资产账户到云端账号');
+              }}
               onAddAccount={handleOpenAddAccount}
               onEditAccount={handleOpenEditAccount}
               onDeleteAccount={handleDeleteAccount}
@@ -987,8 +1202,17 @@ export default function App() {
               transactions={transactions || []}
               accounts={accounts || []}
               projects={projects || []}
-              privacyMode={false}
+              privacyMode={privacyMode}
+              currentUser={currentUser}
+              onTriggerSync={async () => {
+                if (!currentUser) return;
+                triggerAutoServerSync(currentUser.id, true);
+                showToast('已同步最新账本明细到云端账号');
+              }}
               onDeleteTransaction={handleDeleteTx}
+              onBatchDeleteTransactions={handleBatchDeleteTx}
+              onBatchUpdateTransactions={handleBatchUpdateTx}
+              onDuplicateTransaction={handleDuplicateTransaction}
               onEditTransaction={handleEditTransaction}
               onOpenNewTx={(type, accId, date, projId) =>
                 handleOpenNewTx(type || 'EXPENSE', accId, date, projId)
@@ -996,6 +1220,10 @@ export default function App() {
               onRefundTransaction={handleRefundExpense}
               onImportTransactions={handleImportTransactions}
               onShowToast={showToast}
+              onOpenRecurringTasks={() => setIsRecurringModalOpen(true)}
+              recurringTasksCount={recurringTasks.filter((t) => t.enabled).length}
+              onOpenTrashBin={() => setIsTrashModalOpen(true)}
+              trashCount={trashTransactions.length}
             />
           </div>
         )}
@@ -1091,12 +1319,12 @@ export default function App() {
             setIsProjectEditorOpen(true);
           }}
           className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-35 flex items-center gap-1.5 sm:gap-2 bg-indigo-600/95 hover:bg-indigo-700 text-white font-medium text-xs sm:text-sm px-4 py-2 sm:px-4.5 sm:py-2.5 rounded-full shadow-lg shadow-indigo-950/20 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 border border-indigo-500/50 backdrop-blur-md whitespace-nowrap"
-          title="新建专项账本项目"
+          title="新增账本"
         >
           <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-white/20 flex items-center justify-center text-white">
             <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
           </div>
-          <span className="tracking-wide">新建项目</span>
+          <span className="tracking-wide">新增账本</span>
         </button>
       )}
 
@@ -1204,11 +1432,53 @@ export default function App() {
         }}
       />
 
-      {/* Floating Toast Notification */}
+      {/* 🔄 Recurring Tasks & Fixed Bills Modal */}
+      {isRecurringModalOpen && currentUser && (
+        <RecurringTasksModal
+          isOpen={isRecurringModalOpen}
+          onClose={() => setIsRecurringModalOpen(false)}
+          tasks={recurringTasks}
+          accounts={accounts || []}
+          projects={projects || []}
+          currentUser={currentUser}
+          privacyMode={privacyMode}
+          onSaveTask={handleSaveRecurringTask}
+          onDeleteTask={handleDeleteRecurringTask}
+          onExecuteTask={handleExecuteRecurringTask}
+          onExecuteAllDue={handleExecuteAllDueRecurring}
+        />
+      )}
+
+      {/* 🗑️ Trash Bin Modal */}
+      {isTrashModalOpen && (
+        <TrashBinModal
+          isOpen={isTrashModalOpen}
+          onClose={() => setIsTrashModalOpen(false)}
+          trashList={trashTransactions}
+          accounts={accounts || []}
+          privacyMode={privacyMode}
+          onRestore={handleRestoreFromTrash}
+          onEmptyTrash={handleEmptyTrash}
+        />
+      )}
+
+      {/* Floating Toast Notification with Quick Undo */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-slate-900/90 backdrop-blur-md text-white text-xs sm:text-sm font-medium shadow-2xl border border-slate-700/60 flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-slate-900/90 backdrop-blur-md text-white text-xs sm:text-sm font-medium shadow-2xl border border-slate-700/60 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          {undoTxId && (
+            <button
+              onClick={() => {
+                handleRestoreFromTrash(undoTxId);
+              }}
+              className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors shadow-2xs"
+            >
+              一键撤销
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -376,12 +376,12 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
   const utilization = creditLimit > 0 ? (usedCredit / creditLimit) * 100 : 0;
 
   // Masked 16-digit Card Number
-  const last4 = account.cardNumberLast4 || '8888';
-  const cardFormattedNumber = `••••  ••••  ••••  ${last4}`;
+  const last4 = account.cardNumberLast4?.trim() || '';
+  const cardFormattedNumber = last4 ? `••••  ••••  ••••  ${last4}` : '••••  ••••  ••••  ••••';
   const tierName = account.cardTier || preset?.cardTier || brand.defaultTier || (isCredit ? '普卡' : '标准卡');
   const cardNetwork = account.cardNetwork || preset?.cardNetwork || brand.cardNetwork || 'UNIONPAY';
-  const holder = account.holderName || 'ZHANG WEI';
-  const expiry = account.cardExpiry || '08/29';
+  const holder = account.holderName?.trim() || '';
+  const expiry = account.cardExpiry?.trim() || '';
 
   // Dynamic visual texture, art style, and top tier badge mapping based on tier & network
   const aesthetic = getCardTierAesthetic(tierName, cardNetwork, isCredit);
@@ -695,8 +695,8 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
                   {/* Bottom subline: holder & expiry */}
                   <div className="mt-1 pt-1 border-t border-white/15 flex items-center justify-between text-[7px] sm:text-[8px] font-mono text-white/80">
                     <div className="flex items-center gap-1.5 truncate">
-                      <span className="uppercase text-white/70 truncate">{holder}</span>
-                      <span className="text-white/50">{expiry}</span>
+                      {holder ? <span className="uppercase text-white/70 truncate">{holder}</span> : null}
+                      {expiry ? <span className="text-white/50">{expiry}</span> : null}
                     </div>
                     {(account.billDay || account.dueDay) && (
                       <span className="text-[7px] sm:text-[8px] text-amber-200/90 font-medium shrink-0">
@@ -732,8 +732,8 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
 
                   <div className="mt-1 pt-1 border-t border-white/15 flex items-center justify-between text-[7px] sm:text-[8px] font-mono text-white/75">
                     <div className="flex items-center gap-2 truncate">
-                      <span className="uppercase font-semibold text-white/90 truncate">{holder}</span>
-                      <span className="text-white/60">{expiry}</span>
+                      {holder ? <span className="uppercase font-semibold text-white/90 truncate">{holder}</span> : null}
+                      {expiry ? <span className="text-white/60">{expiry}</span> : null}
                     </div>
                     {account.notes && (
                       <span className="text-[7px] sm:text-[8px] text-white/60 truncate max-w-[120px]">

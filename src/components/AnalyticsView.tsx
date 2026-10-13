@@ -54,6 +54,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [liveGoldRate, setLiveGoldRate] = useState<GoldMarketRate>(() => getCachedGoldRate());
   const [isRefreshingGold, setIsRefreshingGold] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string>('');
+  // 消费支出分类排行榜显示条数状态 (默认显示前 15 条)
+  const [showAllCategories, setShowAllCategories] = useState<boolean>(false);
 
   // Fetch live market gold rates on mount
   useEffect(() => {
@@ -152,15 +154,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       }
     });
 
-    const list = Object.entries(map).map(([name, amount]) => ({
+    const sortedList = Object.entries(map).map(([name, amount]) => ({
       name,
       amount,
       percentage: total > 0 ? (amount / total) * 100 : 0,
-    }));
+    })).sort((a, b) => b.amount - a.amount);
 
     return {
-      list: list.sort((a, b) => b.amount - a.amount),
+      list: sortedList,
+      top15: sortedList.slice(0, 15),
       total,
+      totalCount: sortedList.length,
     };
   }, [transactions]);
 
@@ -346,48 +350,75 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* Second Row: Expense Category Ranking & Gold / Investment Calculator */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category Ranking */}
-        <div className="rounded-3xl bg-white border border-slate-200/80 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-rose-600" />
-              <span>消费支出分类排行榜</span>
-            </h3>
-            <span className="text-xs text-slate-500">
-              总支出: {formatCurrency(categoryStats.total, privacyMode)}
-            </span>
-          </div>
+        <div className="rounded-3xl bg-white border border-slate-200/80 p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <TrendingDown className="w-5 h-5 text-rose-600" />
+                  <span>消费支出分类排行榜</span>
+                </h3>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">
+                  {showAllCategories ? `全量 ${categoryStats.totalCount} 类` : `前 ${Math.min(15, categoryStats.totalCount)} 条`}
+                </span>
+              </div>
+              <span className="text-xs text-slate-500 font-mono">
+                总支出: <strong className="text-slate-800">{formatCurrency(categoryStats.total, privacyMode)}</strong>
+              </span>
+            </div>
 
-          <div className="space-y-3.5 max-h-80 overflow-y-auto pr-1">
-            {categoryStats.list.length > 0 ? (
-              categoryStats.list.map((cat, idx) => (
-                <div key={cat.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="font-medium text-slate-800 flex items-center gap-2">
-                      <span className="w-4 text-slate-400 font-mono">{idx + 1}.</span>
-                      <CategoryIcon nameOrIcon={cat.name} className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                      <span>{cat.name}</span>
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900">
-                        {formatCurrency(cat.amount, privacyMode)}
+            <div className="space-y-3.5 max-h-[480px] overflow-y-auto pr-1">
+              {categoryStats.list.length > 0 ? (
+                (showAllCategories ? categoryStats.list : categoryStats.top15).map((cat, idx) => (
+                  <div key={cat.name} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                      <span className="font-medium text-slate-800 flex items-center gap-2">
+                        <span className={`w-5 text-xs font-mono font-bold text-center ${
+                          idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-amber-700' : 'text-slate-400'
+                        }`}>
+                          {idx + 1}.
+                        </span>
+                        <CategoryIcon nameOrIcon={cat.name} className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                        <span>{cat.name}</span>
                       </span>
-                      <span className="text-slate-400 text-xs font-mono w-12 text-right">
-                        {cat.percentage.toFixed(1)}%
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 font-mono">
+                          {formatCurrency(cat.amount, privacyMode)}
+                        </span>
+                        <span className="text-slate-400 text-xs font-mono w-12 text-right">
+                          {cat.percentage.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/40">
+                      <div
+                        className="h-full bg-gradient-to-r from-rose-500 to-pink-500 rounded-full"
+                        style={{ width: `${Math.min(100, cat.percentage)}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/40">
-                    <div
-                      className="h-full bg-gradient-to-r from-rose-500 to-pink-500 rounded-full"
-                      style={{ width: `${Math.min(100, cat.percentage)}%` }}
-                    />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-400 py-6 text-center">暂无支出明细</p>
-            )}
+                ))
+              ) : (
+                <p className="text-sm text-slate-400 py-6 text-center">暂无支出明细</p>
+              )}
+            </div>
           </div>
+
+          {/* If there are more than 15 categories, provide a toggle to see all or collapse back to 15 */}
+          {categoryStats.totalCount > 15 && (
+            <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                当前显示前 {showAllCategories ? categoryStats.totalCount : 15} 条（共 {categoryStats.totalCount} 类）
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAllCategories(!showAllCategories)}
+                className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline transition-colors"
+              >
+                {showAllCategories ? '收起至前 15 条' : `展开查看全部 ${categoryStats.totalCount} 类`}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Gold & Wealth Calculator - Enhanced Real-time Market Center */}

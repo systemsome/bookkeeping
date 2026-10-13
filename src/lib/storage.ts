@@ -1,5 +1,5 @@
-import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats, RecurringTask } from '../types';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS } from './constants';
+import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats, RecurringTask, QuickTemplate, DeletedTransaction } from '../types';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS, DEFAULT_QUICK_TEMPLATES } from './constants';
 import { matchBestCardentifyPreset, matchBestCardentifyCard } from './cardentifyPresets';
 import { matchLogoHubBank } from './logohubData';
 import { sortTransactions } from './formatters';
@@ -14,6 +14,8 @@ const STORAGE_KEYS = {
   TRANSACTIONS_PREFIX: 'asset_manager_txs_',
   PROJECTS_PREFIX: 'asset_manager_projs_',
   RECURRING_TASKS_PREFIX: 'asset_manager_recurring_tasks_',
+  TRASH_PREFIX: 'asset_manager_trash_txs_',
+  TEMPLATES_PREFIX: 'asset_manager_quick_templates_',
   IS_LOCKED: 'asset_manager_is_locked_v1',
   LAST_ACTIVITY: 'asset_manager_last_act_v1',
   DEVICE_ID: 'asset_manager_device_id_v1',
@@ -1181,6 +1183,12 @@ export const deleteTransaction = (
     return { transactions, accounts };
   }
 
+  // Push to trash before removing
+  try {
+    const trash = getTrashTransactions(userId);
+    saveTrashTransactions(userId, [{ transaction: targetTx, deletedAt: new Date().toISOString() }, ...trash].slice(0, 60));
+  } catch {}
+
   // Revert account balances
   const updatedAccounts = applyTransactionToAccounts(accounts, targetTx, true);
 
@@ -1212,6 +1220,196 @@ export const deleteTransaction = (
   return { transactions: updatedTransactions, accounts: updatedAccounts };
 };
 
+export const deleteTransactionsBatch = (
+  userId: string,
+  txIds: string[]
+): { transactions: Transaction[]; accounts: FinancialAccount[] } => {
+  let accounts = getAccounts(userId);
+  let transactions = getTransactions(userId);
+  const idSet = new Set(txIds);
+  const deletedItems: DeletedTransaction[] = [];
+
+  // Roll back balances for all deleted transactions
+  txIds.forEach((txId) => {
+    const targetTx = transactions.find((t) => t.id === txId);
+    if (targetTx) {
+      accounts = applyTransactionToAccounts(accounts, targetTx, true);
+      deletedItems.push({ transaction: targetTx, deletedAt: new Date().toISOString() });
+    }
+  });
+
+  if (deletedItems.length > 0) {
+    try {
+      const trash = getTrashTransactions(userId);
+      saveTrashTransactions(userId, [...deletedItems, ...trash].slice(0, 100));
+    } catch {}
+  }
+
+  const updatedTransactions = transactions.filter((t) => !idSet.has(t.id));
+
+  saveAccounts(userId, accounts);
+  saveTransactions(userId, updatedTransactions);
+  return { transactions: updatedTransactions, accounts };
+};
+
+// ==========================================
+// 🗑️ 回收站与防误删回滚 (Trash & Undo)
+// ==========================================
+export const getTrashTransactions = (userId: string): DeletedTransaction[] => {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEYS.TRASH_PREFIX}${userId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveTrashTransactions = (userId: string, list: DeletedTransaction[]) => {
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.TRASH_PREFIX}${userId}`, JSON.stringify(list));
+  } catch {}
+};
+
+export const emptyTrash = (userId: string) => {
+  try {
+    localStorage.removeItem(`${STORAGE_KEYS.TRASH_PREFIX}${userId}`);
+  } catch {}
+};
+
+export const restoreFromTrash = (
+  userId: string,
+  txId: string
+): { success: boolean; transactions: Transaction[]; accounts: FinancialAccount[] } => {
+  const trash = getTrashTransactions(userId);
+  const targetIndex = trash.findIndex((t) => t.transaction.id === txId);
+  if (targetIndex < 0) {
+    return { success: false, transactions: getTransactions(userId), accounts: getAccounts(userId) };
+  }
+
+  const restoredTx = trash[targetIndex].transaction;
+  const updatedTrash = trash.filter((_, idx) => idx !== targetIndex);
+  saveTrashTransactions(userId, updatedTrash);
+
+  // 恢复账户余额
+  let accounts = getAccounts(userId);
+  let transactions = getTransactions(userId);
+  accounts = applyTransactionToAccounts(accounts, restoredTx, false);
+  transactions = sortTransactions([restoredTx, ...transactions]);
+
+  saveAccounts(userId, accounts);
+  saveTransactions(userId, transactions);
+  return { success: true, transactions, accounts };
+};
+
+// ==========================================
+// ⚡ 快捷记账模板 (Quick Transaction Templates)
+// ==========================================
+export const getQuickTemplates = (userId: string): QuickTemplate[] => {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEYS.TEMPLATES_PREFIX}${userId}`);
+    if (!raw) {
+      localStorage.setItem(`${STORAGE_KEYS.TEMPLATES_PREFIX}${userId}`, JSON.stringify(DEFAULT_QUICK_TEMPLATES));
+      return DEFAULT_QUICK_TEMPLATES;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_QUICK_TEMPLATES;
+  } catch {
+    return DEFAULT_QUICK_TEMPLATES;
+  }
+};
+
+export const saveQuickTemplates = (userId: string, templates: QuickTemplate[]) => {
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.TEMPLATES_PREFIX}${userId}`, JSON.stringify(templates));
+  } catch {}
+};
+
+// ==========================================
+// 🔄 周期性任务计算与一键/自动入账 (Recurring Execution)
+// ==========================================
+export const calculateNextDueDate = (task: RecurringTask, fromDateStr?: string): string => {
+  const base = fromDateStr ? new Date(fromDateStr) : new Date();
+  if (isNaN(base.getTime())) return new Date().toISOString().split('T')[0];
+
+  const next = new Date(base.getTime());
+  if (task.frequency === 'DAILY') {
+    next.setDate(next.getDate() + 1);
+  } else if (task.frequency === 'WEEKLY') {
+    next.setDate(next.getDate() + 7);
+  } else if (task.frequency === 'MONTHLY') {
+    const targetDay = task.dayOfMonth || base.getDate();
+    next.setMonth(next.getMonth() + 1);
+    const maxDays = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(targetDay, maxDays));
+  } else if (task.frequency === 'YEARLY') {
+    next.setFullYear(next.getFullYear() + 1);
+  }
+
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, '0');
+  const d = String(next.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+export const executeRecurringTask = (
+  userId: string,
+  taskId: string
+): { success: boolean; transaction?: Transaction; accounts?: FinancialAccount[]; updatedTasks?: RecurringTask[] } => {
+  const tasks = getRecurringTasks(userId);
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) return { success: false };
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  // 创建流水
+  const { accounts: updatedAccounts, transaction } = addTransaction(userId, {
+    type: task.type,
+    amount: task.amount,
+    date: todayStr,
+    time: timeStr,
+    accountId: task.accountId,
+    targetAccountId: task.targetAccountId,
+    category: task.category,
+    tag: task.tag || '周期固定',
+    description: task.description || task.name,
+    merchant: task.merchant,
+    projectId: task.projectId,
+  });
+
+  const nextDate = calculateNextDueDate(task, todayStr);
+  const updatedTasks = tasks.map((t) =>
+    t.id === taskId
+      ? { ...t, lastExecutedDate: todayStr, nextDueDate: nextDate, updatedAt: now.toISOString() }
+      : t
+  );
+
+  saveRecurringTasks(userId, updatedTasks);
+  return { success: true, transaction, accounts: updatedAccounts, updatedTasks };
+};
+
+export const batchUpdateTransactions = (
+  userId: string,
+  txIds: string[],
+  updates: Partial<Transaction>
+): Transaction[] => {
+  const transactions = getTransactions(userId);
+  const idSet = new Set(txIds);
+
+  const updatedTransactions = transactions.map((t) => {
+    if (idSet.has(t.id)) {
+      return { ...t, ...updates };
+    }
+    return t;
+  });
+
+  saveTransactions(userId, updatedTransactions);
+  return updatedTransactions;
+};
+
 export const isAppLocked = (): boolean => {
   return localStorage.getItem(STORAGE_KEYS.IS_LOCKED) === 'true';
 };
@@ -1224,3 +1422,4 @@ export const resetToDemoData = (userId: string) => {
   saveAccounts(userId, INITIAL_DEMO_ACCOUNTS);
   saveTransactions(userId, INITIAL_DEMO_TRANSACTIONS);
 };
+

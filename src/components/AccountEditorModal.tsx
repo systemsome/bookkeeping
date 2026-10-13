@@ -966,12 +966,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
             {/* Category Selector */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    资产大类
-                  </label>
-                  <span className="text-[10px] text-blue-600 font-medium">⚡ 切换自动联动官方属性</span>
-                </div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  资产大类
+                </label>
                 <select
                   id="acc-select-category"
                   value={category}
@@ -1041,13 +1038,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
                   <User className="w-3.5 h-3.5 text-slate-600" />
-                  <span>持卡人姓名 (显示在卡面)</span>
+                  <span>持卡人姓名</span>
                 </label>
                 <input
                   type="text"
                   value={holderName}
                   onChange={(e) => setHolderName(e.target.value)}
-                  placeholder="如 ZHANG WEI / 张伟"
+                  placeholder="如 张伟 / ZHANG WEI"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-slate-400 focus:bg-white font-mono uppercase"
                 />
               </div>
@@ -1318,9 +1315,8 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 <div className="flex items-center justify-between flex-wrap gap-1">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>卡片等级快捷切换</span>
+                    <span>卡片等级</span>
                   </span>
-                  <span className="text-[10px] text-slate-400">点击自动匹配质感卡面</span>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {COMMON_CARD_TIERS.map((tierItem) => {
@@ -1504,9 +1500,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                     <input
                       type="number"
                       step="0.01"
-                      required
                       value={balance}
                       onChange={(e) => setBalance(e.target.value)}
+                      placeholder="0.00"
                       className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none font-semibold"
                     />
                   </div>
@@ -1543,7 +1539,6 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                   id="acc-input-balance"
                   type="number"
                   step="0.01"
-                  required
                   value={balance}
                   onChange={(e) => setBalance(e.target.value)}
                   placeholder="0.00"

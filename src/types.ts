@@ -123,6 +123,15 @@ export interface Transaction {
   projectId?: string; // 所属账本项目 ID (如 "proj-renovation-2026")
   projectName?: string; // 所属账本项目名称 (如 "房屋精简装修")
 
+  // 拆分记账 (Split Transactions) 明细子项
+  splitItems?: SplitItem[];
+
+  // 垫付报销 (Reimbursement Tracking)
+  isReimbursable?: boolean; // 是否为垫付待报销
+  reimbursementStatus?: 'PENDING' | 'REIMBURSED'; // 报销状态：待报销 / 已报销
+  reimbursementTxId?: string; // 关联的报销款到账流水 ID
+  reimbursedDate?: string; // 报销到账日期
+
   // 平账冲红 (Red-ink Reversal & Refund Offset) 专用字段
   isRefund?: boolean; // 是否为冲红退款单 (红字冲销)
   refundedTxId?: string; // 冲红凭证关联的原支出账单 ID
@@ -132,6 +141,33 @@ export interface Transaction {
   refundedAmount?: number; // 原账单上已被冲红退款的累计金额 (例如原花费100，被退回90，则此值为90)
   refundStatus?: 'NONE' | 'PARTIAL' | 'FULL'; // 原支出账单的冲红状态：未退款 / 部分冲红 / 全额冲红
   refundIds?: string[]; // 原支出账单关联的所有冲红凭证 ID 列表
+}
+
+export interface SplitItem {
+  id: string;
+  category: string;
+  subCategory?: string;
+  amount: number;
+  description?: string;
+  projectId?: string;
+}
+
+export interface QuickTemplate {
+  id: string;
+  name: string;
+  icon?: string;
+  type: TransactionType;
+  amount: number;
+  category: string;
+  tag?: string;
+  description?: string;
+  accountId?: string;
+  projectId?: string;
+}
+
+export interface DeletedTransaction {
+  transaction: Transaction;
+  deletedAt: string;
 }
 
 export interface UserProfile {

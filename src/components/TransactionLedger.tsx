@@ -33,8 +33,25 @@ import {
   RotateCcw,
   FolderKanban,
   CalendarClock,
+  ListOrdered,
+  RefreshCw,
+  CheckSquare,
+  Square,
+  Copy,
+  CopyPlus,
+  SlidersHorizontal,
+  BarChart3,
+  PieChart,
+  Rows3,
+  AlignJustify,
+  Folder,
+  Check,
+  ArrowRight,
+  ArchiveRestore,
+  Briefcase,
+  Split,
 } from 'lucide-react';
-import { Transaction, FinancialAccount, TransactionType, LedgerProject } from '../types';
+import { Transaction, FinancialAccount, TransactionType, LedgerProject, UserProfile } from '../types';
 import {
   formatCurrency,
   formatDate,
@@ -46,7 +63,8 @@ import { getCurrencyInfo } from '../lib/forexRates';
 import { TransactionImportModal } from './TransactionImportModal';
 import { TransactionExportModal } from './TransactionExportModal';
 import { ReceiptModal } from './ReceiptModal';
-import { downloadTransactionTemplate } from '../lib/transactionImportExport';
+import { downloadTransactionTemplate, exportTransactions } from '../lib/transactionImportExport';
+import { getStoredExpenseCategories, getStoredIncomeCategories } from '../lib/constants';
 import { CategoryIcon } from './CategoryIcon';
 
 interface TransactionLedgerProps {
@@ -54,7 +72,12 @@ interface TransactionLedgerProps {
   accounts?: FinancialAccount[];
   projects?: LedgerProject[];
   privacyMode: boolean;
+  currentUser?: UserProfile | null;
+  onTriggerSync?: () => Promise<void> | void;
   onDeleteTransaction: (txId: string) => void;
+  onBatchDeleteTransactions?: (txIds: string[]) => void;
+  onBatchUpdateTransactions?: (txIds: string[], updates: Partial<Transaction>) => void;
+  onDuplicateTransaction?: (tx: Transaction, cloneImmediately?: boolean) => void;
   onEditTransaction: (tx: Transaction) => void;
   onOpenNewTx: (type?: string, accountId?: string, defaultDate?: string, projectId?: string) => void;
   onRefundTransaction?: (tx: Transaction) => void;
@@ -65,6 +88,9 @@ interface TransactionLedgerProps {
   onShowToast: (msg: string) => void;
   onOpenRecurringTasks?: () => void;
   recurringTasksCount?: number;
+  onOpenTrashBin?: () => void;
+  trashCount?: number;
+  onSettleReimbursement?: (tx: Transaction) => void;
 }
 
 export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
@@ -72,7 +98,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   accounts = [],
   projects = [],
   privacyMode,
+  currentUser,
+  onTriggerSync,
   onDeleteTransaction,
+  onBatchDeleteTransactions,
+  onBatchUpdateTransactions,
+  onDuplicateTransaction,
   onEditTransaction,
   onOpenNewTx,
   onRefundTransaction,
@@ -80,7 +111,21 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   onShowToast,
   onOpenRecurringTasks,
   recurringTasksCount,
+  onOpenTrashBin,
+  trashCount = 0,
+  onSettleReimbursement,
 }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    if (!onTriggerSync || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await onTriggerSync();
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
   // Today helpers
   const today = useMemo(() => {
     const d = new Date();
@@ -101,6 +146,87 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null);
   // Whether calendar is expanded or minimized (隐藏式，点击打开和关闭)
   const [isCalendarExpanded, setIsCalendarExpanded] = useState<boolean>(false);
+
+  // Date Helpers for presets (Today, Yesterday, This Week, Last 7 Days, This Month, Last Month, This Year)
+  const dateHelpers = useMemo(() => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const todayStr = toDateStr(now);
+
+    const yest = new Date(now);
+    yest.setDate(yest.getDate() - 1);
+    const yesterdayStr = toDateStr(yest);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const sevenDaysAgoStr = toDateStr(sevenDaysAgo);
+
+    const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1;
+    const monday = new Date(now);
+    monday.setDate(monday.getDate() - dayOfWeek);
+    const mondayStr = toDateStr(monday);
+
+    let lastMYear = now.getFullYear();
+    let lastM = now.getMonth();
+    if (lastM === 0) {
+      lastM = 12;
+      lastMYear -= 1;
+    }
+    const lastMonthStr = `${lastMYear}-${pad(lastM)}`;
+
+    return {
+      todayStr,
+      yesterdayStr,
+      sevenDaysAgoStr,
+      mondayStr,
+      thisMonthStr: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`,
+      lastMonthStr,
+      thisYearStr: `${now.getFullYear()}`,
+    };
+  }, []);
+
+  // 1. Feature: Batch Operations & Multi-Select
+  const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
+  const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(new Set());
+  const [batchModal, setBatchModal] = useState<'DELETE' | 'PROJECT' | 'CATEGORY' | null>(null);
+  const [batchSelectedProject, setBatchSelectedProject] = useState<string>('');
+  const [batchSelectedCategory, setBatchSelectedCategory] = useState<string>('');
+
+  // 2. Feature: Quick Duplicate / Clone Transaction
+  const [duplicateTargetTx, setDuplicateTargetTx] = useState<Transaction | null>(null);
+
+  // 3. Feature: Advanced Filters (Amount Range & Date Presets & Category)
+  const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState<boolean>(false);
+  const [amountMin, setAmountMin] = useState<string>('');
+  const [amountMax, setAmountMax] = useState<string>('');
+  const [selectedDatePreset, setSelectedDatePreset] = useState<
+    'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM'
+  >('ALL');
+  const [customDateStart, setCustomDateStart] = useState<string>('');
+  const [customDateEnd, setCustomDateEnd] = useState<string>('');
+
+  // 4. Feature: View Mode (Grouped Timeline by Date vs Continuous Flat List)
+  const [viewMode, setViewMode] = useState<'GROUPED' | 'FLAT'>(() => {
+    try {
+      return (localStorage.getItem('asset_vault_ledger_view_mode') as 'GROUPED' | 'FLAT') || 'GROUPED';
+    } catch {
+      return 'GROUPED';
+    }
+  });
+
+  const handleToggleViewMode = (mode: 'GROUPED' | 'FLAT') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('asset_vault_ledger_view_mode', mode);
+    } catch {}
+  };
+
+  // 5. Feature: Category Breakdown & Click-to-filter
+  const [isCategoryBreakdownExpanded, setIsCategoryBreakdownExpanded] = useState<boolean>(true);
+  const [breakdownType, setBreakdownType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
   // List View filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -325,17 +451,34 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   }, [currentYear, currentMonth, today.dateStr, selectedDateFilter, dailySummaryMap]);
 
   // -------------------------------------------------------------
-  // UNIFIED FILTERING & SEQUENTIAL DATE GROUPING
+  // UNIFIED FILTERING & ADVANCED MULTI-DIMENSIONAL CONDITIONS
   // -------------------------------------------------------------
   const filteredTransactions = useMemo(() => {
     return sortedTransactions.filter((tx) => {
-      // Date specific filter from calendar click
+      // 1. Date specific filter from calendar click
       if (selectedDateFilter && tx.date !== selectedDateFilter) {
         return false;
       }
-      if (selectedType !== 'ALL' && tx.type !== selectedType) {
+
+      // 2. Transaction Type Filter
+      if (selectedType === 'REIMBURSABLE') {
+        if (!tx.isReimbursable || tx.reimbursementStatus === 'REIMBURSED') {
+          return false;
+        }
+      } else if (selectedType === 'SPLIT') {
+        if (!tx.splitItems || tx.splitItems.length === 0) {
+          return false;
+        }
+      } else if (selectedType !== 'ALL' && tx.type !== selectedType) {
         return false;
       }
+
+      // 3. Category Filter (Interactive drill-down from Category Breakdown)
+      if (selectedCategory !== 'ALL' && tx.category !== selectedCategory) {
+        return false;
+      }
+
+      // 4. Project Filter
       if (selectedProjectId !== 'ALL') {
         if (selectedProjectId === 'NONE') {
           if (tx.projectId) return false;
@@ -345,6 +488,8 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           }
         }
       }
+
+      // 5. Account Filter
       if (
         selectedAccountId !== 'ALL' &&
         tx.accountId !== selectedAccountId &&
@@ -352,15 +497,56 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
       ) {
         return false;
       }
+
+      // 6. Month Filter
       if (selectedMonth !== 'ALL' && !tx.date.startsWith(selectedMonth)) {
         return false;
       }
+
+      // 7. Currency Filter
       if (selectedCurrency === 'FOREIGN_ONLY') {
         if (!tx.currency || tx.currency === 'CNY') return false;
       } else if (selectedCurrency !== 'ALL') {
         if ((tx.currency || 'CNY') !== selectedCurrency) return false;
       }
 
+      // 8. Amount Range Filter (Feature 3)
+      if (amountMin.trim() !== '') {
+        const minVal = parseFloat(amountMin);
+        if (!isNaN(minVal) && tx.amount < minVal) {
+          return false;
+        }
+      }
+      if (amountMax.trim() !== '') {
+        const maxVal = parseFloat(amountMax);
+        if (!isNaN(maxVal) && tx.amount > maxVal) {
+          return false;
+        }
+      }
+
+      // 9. Date Preset Filter (Feature 3)
+      if (selectedDatePreset !== 'ALL') {
+        if (selectedDatePreset === 'TODAY') {
+          if (tx.date !== dateHelpers.todayStr) return false;
+        } else if (selectedDatePreset === 'YESTERDAY') {
+          if (tx.date !== dateHelpers.yesterdayStr) return false;
+        } else if (selectedDatePreset === 'THIS_WEEK') {
+          if (tx.date < dateHelpers.mondayStr || tx.date > dateHelpers.todayStr) return false;
+        } else if (selectedDatePreset === 'LAST_7_DAYS') {
+          if (tx.date < dateHelpers.sevenDaysAgoStr || tx.date > dateHelpers.todayStr) return false;
+        } else if (selectedDatePreset === 'THIS_MONTH') {
+          if (!tx.date.startsWith(dateHelpers.thisMonthStr)) return false;
+        } else if (selectedDatePreset === 'LAST_MONTH') {
+          if (!tx.date.startsWith(dateHelpers.lastMonthStr)) return false;
+        } else if (selectedDatePreset === 'THIS_YEAR') {
+          if (!tx.date.startsWith(dateHelpers.thisYearStr)) return false;
+        } else if (selectedDatePreset === 'CUSTOM') {
+          if (customDateStart && tx.date < customDateStart) return false;
+          if (customDateEnd && tx.date > customDateEnd) return false;
+        }
+      }
+
+      // 10. Keyword Search
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         const matchDesc = tx.description?.toLowerCase().includes(term);
@@ -388,12 +574,210 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     sortedTransactions,
     selectedDateFilter,
     selectedType,
+    selectedCategory,
     selectedProjectId,
     selectedAccountId,
     selectedMonth,
     selectedCurrency,
+    amountMin,
+    amountMax,
+    selectedDatePreset,
+    customDateStart,
+    customDateEnd,
     searchTerm,
+    dateHelpers,
   ]);
+
+  // Feature 1: Multi-select helpers
+  const toggleTxSelection = (id: string) => {
+    setSelectedTxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    const ids = new Set<string>();
+    filteredTransactions.forEach((tx) => ids.add(tx.id));
+    setSelectedTxIds(ids);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedTxIds(new Set());
+  };
+
+  const handleInvertSelection = () => {
+    setSelectedTxIds((prev) => {
+      const next = new Set<string>();
+      filteredTransactions.forEach((tx) => {
+        if (!prev.has(tx.id)) next.add(tx.id);
+      });
+      return next;
+    });
+  };
+
+  const batchSelectedStats = useMemo(() => {
+    let expense = 0;
+    let income = 0;
+    selectedTxIds.forEach((id) => {
+      const tx = sortedTransactions.find((t) => t.id === id);
+      if (tx) {
+        if (tx.type === 'EXPENSE') expense += tx.amount;
+        else if (tx.type === 'INCOME') income += tx.amount;
+      }
+    });
+    return { expense, income };
+  }, [selectedTxIds, sortedTransactions]);
+
+  const handleExecuteBatchDelete = () => {
+    const ids = Array.from(selectedTxIds);
+    if (ids.length === 0) return;
+    if (onBatchDeleteTransactions) {
+      onBatchDeleteTransactions(ids);
+    } else {
+      ids.forEach((id) => onDeleteTransaction(id));
+      onShowToast(`🗑️ 已删除 ${ids.length} 笔账单`);
+    }
+    setSelectedTxIds(new Set());
+    setBatchModal(null);
+  };
+
+  const handleExecuteBatchProject = () => {
+    const ids = Array.from(selectedTxIds);
+    if (ids.length === 0) return;
+    const proj = projects.find((p) => p.id === batchSelectedProject);
+    const updates = batchSelectedProject === 'CLEAR'
+      ? { projectId: undefined, projectName: undefined }
+      : { projectId: proj?.id, projectName: proj?.name };
+    if (onBatchUpdateTransactions) {
+      onBatchUpdateTransactions(ids, updates);
+    } else {
+      onShowToast(`✨ 已为 ${ids.length} 笔账单批量指派项目`);
+    }
+    setSelectedTxIds(new Set());
+    setBatchModal(null);
+  };
+
+  const handleExecuteBatchCategory = () => {
+    const ids = Array.from(selectedTxIds);
+    if (ids.length === 0 || !batchSelectedCategory) return;
+    if (onBatchUpdateTransactions) {
+      onBatchUpdateTransactions(ids, { category: batchSelectedCategory });
+    } else {
+      onShowToast(`✨ 已为 ${ids.length} 笔账单批量修改分类为「${batchSelectedCategory}」`);
+    }
+    setSelectedTxIds(new Set());
+    setBatchModal(null);
+  };
+
+  const handleBatchExportSelected = () => {
+    const selectedTxs = sortedTransactions.filter((t) => selectedTxIds.has(t.id));
+    if (selectedTxs.length === 0) {
+      onShowToast('请先选择要导出的账单');
+      return;
+    }
+    exportTransactions(selectedTxs, accounts, {
+      format: 'csv',
+      scope: 'filtered',
+      filename: `已选账本流水_${selectedTxs.length}笔`,
+    });
+    onShowToast(`📥 已导出所选 ${selectedTxs.length} 笔流水为 CSV`);
+  };
+
+  // Feature 2: Quick Duplicate handler
+  const handleInstantCloneTx = (tx: Transaction) => {
+    if (onDuplicateTransaction) {
+      onDuplicateTransaction(tx, true);
+    } else {
+      onOpenNewTx(tx.type, tx.accountId, today.dateStr, tx.projectId);
+    }
+    setDuplicateTargetTx(null);
+  };
+
+  const handleEditCloneTx = (tx: Transaction) => {
+    if (onDuplicateTransaction) {
+      onDuplicateTransaction(tx, false);
+    } else {
+      onOpenNewTx(tx.type, tx.accountId, today.dateStr, tx.projectId);
+    }
+    setDuplicateTargetTx(null);
+  };
+
+  // Feature 4: Grouped Timeline
+  const groupedTransactions = useMemo(() => {
+    const groups: {
+      date: string;
+      weekday: string;
+      isToday: boolean;
+      isYesterday: boolean;
+      transactions: Transaction[];
+      totalExpense: number;
+      totalIncome: number;
+      net: number;
+    }[] = [];
+
+    const map = new Map<string, Transaction[]>();
+    filteredTransactions.forEach((tx) => {
+      const d = tx.date || '未知日期';
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(tx);
+    });
+
+    map.forEach((txs, d) => {
+      let dayExp = 0;
+      let dayInc = 0;
+      txs.forEach((t) => {
+        if (t.type === 'EXPENSE') dayExp += t.amount;
+        else if (t.type === 'INCOME') dayInc += t.amount;
+      });
+
+      groups.push({
+        date: d,
+        weekday: getWeekdayName(d),
+        isToday: d === dateHelpers.todayStr,
+        isYesterday: d === dateHelpers.yesterdayStr,
+        transactions: txs,
+        totalExpense: dayExp,
+        totalIncome: dayInc,
+        net: dayInc - dayExp,
+      });
+    });
+
+    return groups;
+  }, [filteredTransactions, dateHelpers]);
+
+  // Feature 5: Category stats breakdown
+  const categoryStats = useMemo(() => {
+    const baseTxs = filteredTransactions.filter((t) => t.type === breakdownType);
+    const catMap = new Map<string, { amount: number; count: number }>();
+    let totalAmount = 0;
+
+    baseTxs.forEach((tx) => {
+      const cat = tx.category || '其他';
+      const cur = catMap.get(cat) || { amount: 0, count: 0 };
+      cur.amount += tx.amount;
+      cur.count += 1;
+      catMap.set(cat, cur);
+      totalAmount += tx.amount;
+    });
+
+    const list = Array.from(catMap.entries()).map(([name, data]) => ({
+      name,
+      amount: data.amount,
+      count: data.count,
+      percent: totalAmount > 0 ? (data.amount / totalAmount) * 100 : 0,
+    }));
+
+    list.sort((a, b) => b.amount - a.amount);
+
+    return {
+      list,
+      totalAmount,
+      count: baseTxs.length,
+    };
+  }, [filteredTransactions, breakdownType]);
 
   // Summary statistics of filtered results
   let filteredExpense = 0;
@@ -405,99 +789,540 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     if (tx.currency && tx.currency !== 'CNY') foreignCount += 1;
   });
 
-  return (
-    <div className="space-y-6">
-      {/* 1. Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              记账本
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-              共 {(transactions || []).length} 笔明细
-            </span>
-            {selectedDateFilter && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60 flex items-center gap-1">
-                <span>已筛选指定日期: {selectedDateFilter}</span>
-                <button
-                  onClick={() => setSelectedDateFilter(null)}
-                  className="hover:text-amber-900 dark:hover:text-amber-200"
-                  title="清除日期筛选"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-          </div>
-        </div>
+  // Overall aggregate stats across all transactions (matching 账本项目 style)
+  const overallLedgerStats = useMemo(() => {
+    let totalExpense = 0;
+    let totalIncome = 0;
+    let totalRefund = 0;
+    let expenseCount = 0;
+    let incomeCount = 0;
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Generate Receipt Button */}
-          <button
-            id="btn-ledger-receipt"
-            onClick={() => {
-              setReceiptSingleTxId(null);
-              setIsReceiptModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
-            title="一键生成沉浸式消费账单小票，模拟出票音效与印章动画，支持高清长图保存与分享"
-          >
-            <Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span>账单小票</span>
-            <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-          </button>
+    (transactions || []).forEach((t) => {
+      if (t.type === 'EXPENSE') {
+        totalExpense += t.amount;
+        expenseCount += 1;
+      } else if (t.type === 'INCOME') {
+        totalIncome += t.amount;
+        incomeCount += 1;
+      } else if (t.type === 'REFUND') {
+        totalRefund += t.amount;
+      }
+    });
 
-          {/* Recurring Tasks Button */}
-          {onOpenRecurringTasks && (
+    const netExpense = Math.max(0, totalExpense - totalRefund);
+    const netBalance = totalIncome - netExpense;
+
+    return {
+      expenseCount,
+      incomeCount,
+      totalExpense,
+      totalIncome,
+      totalRefund,
+      netExpense,
+      netBalance,
+    };
+  }, [transactions]);
+
+  // Render Individual Transaction Row (Used by both Grouped Timeline and Flat View)
+  const renderTransactionRow = (tx: Transaction) => {
+    const acc = accountMap.get(tx.accountId);
+    const targetAcc = tx.targetAccountId ? accountMap.get(tx.targetAccountId) : null;
+    const isExpense = tx.type === 'EXPENSE';
+    const isIncome = tx.type === 'INCOME';
+    const isTransfer = tx.type === 'TRANSFER';
+    const isRepayment = tx.type === 'REPAYMENT';
+    const isForeign = tx.currency && tx.currency !== 'CNY';
+    const curInfo = isForeign ? getCurrencyInfo(tx.currency!) : null;
+    const isSelected = selectedTxIds.has(tx.id);
+
+    return (
+      <div
+        key={tx.id}
+        onClick={isBatchMode ? () => toggleTxSelection(tx.id) : undefined}
+        className={`px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-3 group ${
+          isBatchMode ? 'cursor-pointer select-none' : ''
+        } ${isSelected ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''}`}
+      >
+        {/* Left: Checkbox (Feature 1) & Icon & Description & Metadata */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          {/* Feature 1: Multi-select Checkbox */}
+          {isBatchMode && (
             <button
-              id="btn-ledger-recurring"
-              onClick={onOpenRecurringTasks}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
-              title="管理每月固定房租、订阅会员、薪资等周期自动记账任务"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTxSelection(tx.id);
+              }}
+              className="p-1 rounded text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shrink-0"
+              title={isSelected ? '取消勾选' : '勾选此账单'}
             >
-              <CalendarClock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>周期任务</span>
-              {typeof recurringTasksCount === 'number' && recurringTasksCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-600 text-white font-bold">
-                  {recurringTasksCount}
-                </span>
+              {isSelected ? (
+                <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Square className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               )}
             </button>
           )}
 
-          {/* Upload Button */}
-          <button
-            id="btn-ledger-upload"
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
-            title="上传导入微信/支付宝账单、银行流水或标准表格"
+          <div
+            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+              isExpense
+                ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400'
+                : isIncome
+                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400'
+                : isRepayment
+                ? 'bg-purple-100 dark:bg-purple-950/80 text-purple-600 dark:text-purple-400'
+                : 'bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400'
+            }`}
           >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>上传导入</span>
-          </button>
+            <CategoryIcon
+              nameOrIcon={tx.category}
+              className="w-4 h-4"
+              defaultIcon={
+                isExpense
+                  ? ArrowDownRight
+                  : isIncome
+                  ? ArrowUpRight
+                  : isRepayment
+                  ? ReceiptText
+                  : RotateCw
+              }
+            />
+          </div>
 
-          {/* Export Button */}
-          <button
-            id="btn-ledger-export"
-            onClick={() => setIsExportModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-medium text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
-            title="导出 Excel / CSV / JSON"
-          >
-            <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>导出</span>
-          </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                {tx.description || tx.category}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCategory(tx.category || 'ALL');
+                }}
+                className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                title={`点击筛选「${tx.category}」分类`}
+              >
+                {tx.category}
+              </button>
+              {tx.projectName && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedProjectId(tx.projectId || tx.projectName || 'ALL');
+                  }}
+                  className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 hover:bg-indigo-100 transition-colors flex items-center gap-0.5 cursor-pointer"
+                  title={`点击筛选「${tx.projectName}」项目明细`}
+                >
+                  📁 {tx.projectName}
+                </button>
+              )}
+              {tx.tag && (
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100/80 dark:bg-slate-800/80 text-slate-400">
+                  #{tx.tag}
+                </span>
+              )}
+              {tx.isReimbursable && (
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1 ${
+                    tx.reimbursementStatus === 'REIMBURSED'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800'
+                  }`}
+                >
+                  <Briefcase className="w-3 h-3" />
+                  <span>{tx.reimbursementStatus === 'REIMBURSED' ? '已报销到账' : '待报销垫付'}</span>
+                </span>
+              )}
+              {tx.splitItems && tx.splitItems.length > 0 && (
+                <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-1">
+                  <Split className="w-3 h-3" />
+                  <span>拆分 {tx.splitItems.length} 项</span>
+                </span>
+              )}
+              {tx.isRefund && (
+                <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800">
+                  平账冲红凭证
+                </span>
+              )}
+              {tx.refundedAmount && tx.refundedAmount > 0 ? (
+                <span className="px-2 py-0.5 rounded text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
+                  已冲红退款 ¥{tx.refundedAmount.toFixed(2)}
+                </span>
+              ) : null}
+              {tx.merchant && (
+                <span className="text-[10px] text-slate-400">
+                  商户: {tx.merchant}
+                </span>
+              )}
+            </div>
 
-          {/* Add Record Button */}
-          <button
-            id="btn-ledger-add"
-            onClick={() => onOpenNewTx('EXPENSE', undefined, selectedDateFilter || undefined)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-medium text-xs sm:text-sm shadow-xs active:scale-95 transition-all"
-          >
-            <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
-            <span>记一笔</span>
-          </button>
+            {/* Date, Time & Account Path */}
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1 flex-wrap font-mono">
+              <span className="font-medium text-slate-600 dark:text-slate-300">
+                {tx.date}
+              </span>
+              {tx.time && (
+                <span className="flex items-center gap-0.5 text-slate-500 dark:text-slate-400">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  {tx.time}
+                </span>
+              )}
+              <span>·</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+                <span>{acc?.name || '账户'}</span>
+                {acc?.cardNumberLast4 && (
+                  <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                    *{acc.cardNumberLast4}
+                  </span>
+                )}
+              </span>
+              {targetAcc && (
+                <>
+                  <span>➔</span>
+                  <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+                    <span>{targetAcc.name}</span>
+                    {targetAcc.cardNumberLast4 && (
+                      <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                        *{targetAcc.cardNumberLast4}
+                      </span>
+                    )}
+                  </span>
+                </>
+              )}
+              {tx.counterparty && (
+                <>
+                  <span>·</span>
+                  <span>对方: {tx.counterparty}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Amount, Foreign Currency & Actions */}
+        <div className="text-right flex items-center gap-3 sm:gap-5 flex-shrink-0">
+          <div>
+            <div
+              className={`text-sm sm:text-base font-bold font-mono ${
+                isExpense
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : isIncome
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : 'text-blue-600 dark:text-blue-400'
+              }`}
+            >
+              {isExpense
+                ? `-${formatCurrency(tx.amount, privacyMode)}`
+                : isIncome
+                ? `+${formatCurrency(tx.amount, privacyMode)}`
+                : formatCurrency(tx.amount, privacyMode)}
+            </div>
+
+            {/* Net expenditure after red-ink refund offset */}
+            {isExpense && tx.refundedAmount && tx.refundedAmount > 0 && (
+              <div className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                净支: {formatCurrency(Math.max(0, tx.amount - tx.refundedAmount), privacyMode)}
+              </div>
+            )}
+
+            {isForeign && curInfo && (
+              <div className="text-[10px] text-blue-700 dark:text-blue-300 font-mono">
+                原币: {curInfo.symbol}{tx.originalAmount || tx.amount}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Action buttons */}
+          <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+            {/* Direct Red-ink Reversal Action for Expense Bills */}
+            {isExpense && onRefundTransaction && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRefundTransaction(tx);
+                }}
+                className="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 transition-all flex items-center gap-1 shadow-2xs"
+                title="对该笔支出账单平账冲红 (退款入账并冲减净支出)"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>冲红</span>
+              </button>
+            )}
+
+            {/* Feature 2: Quick Duplicate / Clone Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDuplicateTargetTx(tx);
+              }}
+              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+              title="再记一笔 / 复制该账单"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setReceiptSingleTxId(tx.id);
+                setIsReceiptModalOpen(true);
+              }}
+              className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+              title="生成此笔消费小票"
+            >
+              <Receipt className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditTransaction(tx);
+              }}
+              className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="编辑此记录"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirmDeleteId === tx.id) {
+                  onDeleteTransaction(tx.id);
+                  setConfirmDeleteId(null);
+                } else {
+                  setConfirmDeleteId(tx.id);
+                  setTimeout(() => {
+                    setConfirmDeleteId((cur) => (cur === tx.id ? null : cur));
+                  }, 3500);
+                }
+              }}
+              className={`p-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                confirmDeleteId === tx.id
+                  ? 'bg-rose-600 text-white hover:bg-rose-700 px-2'
+                  : 'text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+              }`}
+              title={confirmDeleteId === tx.id ? '点击确认删除此记录' : '删除此记录'}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {confirmDeleteId === tx.id && (
+                <span className="text-[10px] font-bold">确认删除</span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold mb-3">
+              <ListOrdered className="w-3.5 h-3.5" />
+              <span>明细记账专区</span>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                记账本
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60">
+                共 {(transactions || []).length} 笔明细
+              </span>
+              {selectedDateFilter && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                  <span>已筛选: {selectedDateFilter}</span>
+                  <button
+                    onClick={() => setSelectedDateFilter(null)}
+                    className="hover:text-amber-900 dark:hover:text-amber-200"
+                    title="清除日期筛选"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              )}
+              {currentUser && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>云端已同步</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            {/* Generate Receipt Button */}
+            <button
+              id="btn-ledger-receipt"
+              onClick={() => {
+                setReceiptSingleTxId(null);
+                setIsReceiptModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs sm:text-sm font-semibold shadow-2xs active:scale-95 transition-all"
+              title="生成账单小票"
+            >
+              <Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>
+                {selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE'
+                  ? `项目小票 (${projects.find((p) => p.id === selectedProjectId)?.name || '账本项目'})`
+                  : '账单小票'}
+              </span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+            </button>
+
+            {/* Recurring Tasks Button */}
+            {onOpenRecurringTasks && (
+              <button
+                id="btn-ledger-recurring"
+                onClick={onOpenRecurringTasks}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+                title="管理周期自动记账任务"
+              >
+                <CalendarClock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>周期任务</span>
+                {typeof recurringTasksCount === 'number' && recurringTasksCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-600 text-white font-bold">
+                    {recurringTasksCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Trash Bin Button */}
+            {onOpenTrashBin && (
+              <button
+                id="btn-ledger-trash"
+                onClick={onOpenTrashBin}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+                title="查看已删除流水与一键防误删恢复"
+              >
+                <ArchiveRestore className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                <span>回收站</span>
+                {typeof trashCount === 'number' && trashCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-600 text-white font-bold">
+                    {trashCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Cloud Sync Button */}
+            {onTriggerSync && (
+              <button
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                title="立即同步最新账本明细到云端服务器"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-600' : 'text-slate-500'}`} />
+                <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+              </button>
+            )}
+
+            {/* Upload Button */}
+            <button
+              id="btn-ledger-upload"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+              title="上传导入微信/支付宝账单、银行流水或标准表格"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>上传导入</span>
+            </button>
+
+            {/* Export Button */}
+            <button
+              id="btn-ledger-export"
+              onClick={() => setIsExportModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+              title="导出 Excel / CSV / JSON"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>导出</span>
+            </button>
+
+            {/* Primary Add Record Button */}
+            <button
+              id="btn-ledger-add"
+              onClick={() => onOpenNewTx('EXPENSE', undefined, selectedDateFilter || undefined)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
+              <span>记一笔</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Aggregate Stats Across All Transactions (与账本项目 / 信用卡专区统一的5列统计) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">流水总数</span>
+            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+              {(transactions || []).length}
+            </div>
+            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              支出 {overallLedgerStats.expenseCount} 笔 · 收入 {overallLedgerStats.incomeCount} 笔
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
+            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">总收入</span>
+            <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+              +{formatCurrency(overallLedgerStats.totalIncome, privacyMode)}
+            </div>
+            <div className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1">
+              工资收入与各类报销收款
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-100/80 dark:border-rose-900/40">
+            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">退款冲红</span>
+            <div className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+              +{formatCurrency(overallLedgerStats.totalRefund, privacyMode)}
+            </div>
+            <div className="text-xs text-rose-500/80 dark:text-rose-400/80 mt-1">
+              已退款原路冲红抵消
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50">
+            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">实际支出</span>
+            <div className="text-2xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
+              -{formatCurrency(overallLedgerStats.netExpense, privacyMode)}
+            </div>
+            <div className="text-xs text-rose-600/80 dark:text-rose-500/80 mt-1">
+              剔除退款冲红后的净支出
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 sm:col-span-2 lg:col-span-1">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">净结余</span>
+            <div
+              className={`text-2xl font-bold font-mono mt-1 ${
+                overallLedgerStats.netBalance >= 0
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {overallLedgerStats.netBalance >= 0 ? '+' : ''}
+              {formatCurrency(overallLedgerStats.netBalance, privacyMode)}
+            </div>
+            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              {overallLedgerStats.netBalance >= 0 ? '当期收支结余健康' : '支出大于收入'}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -712,7 +1537,136 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         )}
       </div>
 
-      {/* 3. Unified Filters & Search Toolbar */}
+      {/* Feature 5: 收支结构与分类排行 Mini-Dashboard (支持点击分类交互式下钻筛选) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xs transition-all">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-900/60">
+              <PieChart className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-base font-bold text-slate-900 dark:text-white font-mono">
+                  收支结构与分类排行
+                </span>
+                {selectedCategory !== 'ALL' && (
+                  <span className="text-[11px] font-sans font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 animate-pulse flex items-center gap-1">
+                    <span>已筛选: {selectedCategory}</span>
+                    <button
+                      onClick={() => setSelectedCategory('ALL')}
+                      className="hover:text-rose-600 font-black ml-0.5"
+                      title="清除分类筛选"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                点击任一分类卡片即可直接交互式下钻筛选，查看对应全部流水
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Breakdown Type Switch */}
+            <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 text-xs">
+              <button
+                onClick={() => setBreakdownType('EXPENSE')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                  breakdownType === 'EXPENSE'
+                    ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-2xs font-semibold'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                支出分类
+              </button>
+              <button
+                onClick={() => setBreakdownType('INCOME')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                  breakdownType === 'INCOME'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-2xs font-semibold'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                收入来源
+              </button>
+            </div>
+
+            <button
+              onClick={() => setIsCategoryBreakdownExpanded((prev) => !prev)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-all"
+            >
+              <span>{isCategoryBreakdownExpanded ? '收起' : '展开'}</span>
+              {isCategoryBreakdownExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        {isCategoryBreakdownExpanded && (
+          <div className="pt-3 animate-in fade-in duration-150">
+            {categoryStats.list.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                当前筛选条件下暂无{breakdownType === 'EXPENSE' ? '支出' : '收入'}明细
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {categoryStats.list.slice(0, 8).map((cat) => {
+                  const isSelected = selectedCategory === cat.name;
+                  return (
+                    <button
+                      key={cat.name}
+                      onClick={() => setSelectedCategory(isSelected ? 'ALL' : cat.name)}
+                      className={`p-3 rounded-2xl border text-left transition-all relative overflow-hidden group cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs'
+                          : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CategoryIcon nameOrIcon={cat.name} className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                            {cat.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-600 shrink-0">
+                          {cat.percent.toFixed(1)}%
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline justify-between text-xs font-mono">
+                        <span className={`font-bold ${breakdownType === 'EXPENSE' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          {formatCurrency(cat.amount, privacyMode)}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          {cat.count} 笔
+                        </span>
+                      </div>
+
+                      {/* Percentage progress bar */}
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-2">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            isSelected
+                              ? 'bg-emerald-500'
+                              : breakdownType === 'EXPENSE'
+                              ? 'bg-rose-500'
+                              : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.max(4, cat.percent))}%` }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 3. Unified Filters & Search Toolbar (含高级多维筛选增强) */}
       <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2.5">
           {/* Search */}
@@ -739,6 +1693,8 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <option value="ALL">全部交易类型</option>
               <option value="EXPENSE">支出消费</option>
               <option value="INCOME">收入进账</option>
+              <option value="REIMBURSABLE">💼 待报销垫付款</option>
+              <option value="SPLIT">🔀 拆分子项账单</option>
               <option value="REFUND">平账冲红退费</option>
               <option value="TRANSFER">账户转账划转</option>
               <option value="REPAYMENT">信用卡与白条还款</option>
@@ -826,6 +1782,128 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         </div>
 
+        {/* Feature 3: Expandable Advanced Multi-Dimensional Filter Drawer */}
+        {isAdvancedFilterOpen && (
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3 animate-in fade-in duration-150">
+            {/* Row 1: Amount Range Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+              <span className="font-semibold text-slate-700 dark:text-slate-300 w-20 shrink-0">
+                💰 金额区间:
+              </span>
+              <div className="flex items-center gap-2 flex-wrap flex-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1.5 text-slate-400 font-mono">¥</span>
+                    <input
+                      type="number"
+                      placeholder="最低金额"
+                      value={amountMin}
+                      onChange={(e) => setAmountMin(e.target.value)}
+                      className="w-24 pl-6 pr-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <span className="text-slate-400">~</span>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1.5 text-slate-400 font-mono">¥</span>
+                    <input
+                      type="number"
+                      placeholder="最高金额"
+                      value={amountMax}
+                      onChange={(e) => setAmountMax(e.target.value)}
+                      className="w-24 pl-6 pr-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Amount Tier Pills */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  {[
+                    { label: '全部金额', min: '', max: '' },
+                    { label: '≤100元', min: '', max: '100' },
+                    { label: '100~500元', min: '100', max: '500' },
+                    { label: '500~2000元', min: '500', max: '2000' },
+                    { label: '≥2000元 (大额)', min: '2000', max: '' },
+                  ].map((tier) => {
+                    const isTierActive = amountMin === tier.min && amountMax === tier.max;
+                    return (
+                      <button
+                        key={tier.label}
+                        type="button"
+                        onClick={() => {
+                          setAmountMin(tier.min);
+                          setAmountMax(tier.max);
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all ${
+                          isTierActive
+                            ? 'bg-emerald-600 text-white font-semibold'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tier.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Date Preset Filters */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+              <span className="font-semibold text-slate-700 dark:text-slate-300 w-20 shrink-0">
+                📅 快捷周期:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                {[
+                  { id: 'ALL', label: '全部' },
+                  { id: 'TODAY', label: '今天' },
+                  { id: 'YESTERDAY', label: '昨天' },
+                  { id: 'THIS_WEEK', label: '本周' },
+                  { id: 'LAST_7_DAYS', label: '近7天' },
+                  { id: 'THIS_MONTH', label: '本月' },
+                  { id: 'LAST_MONTH', label: '上月' },
+                  { id: 'THIS_YEAR', label: '今年' },
+                  { id: 'CUSTOM', label: '自定义起止' },
+                ].map((p) => {
+                  const isPresetActive = selectedDatePreset === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelectedDatePreset(p.id as any)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                        isPresetActive
+                          ? 'bg-emerald-600 text-white font-bold shadow-2xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+
+                {/* Custom Date Range Pickers */}
+                {selectedDatePreset === 'CUSTOM' && (
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <input
+                      type="date"
+                      value={customDateStart}
+                      onChange={(e) => setCustomDateStart(e.target.value)}
+                      className="px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-mono"
+                    />
+                    <span className="text-slate-400">至</span>
+                    <input
+                      type="date"
+                      value={customDateEnd}
+                      onChange={(e) => setCustomDateEnd(e.target.value)}
+                      className="px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Sub-bar with Counts, Order & Download Template */}
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
@@ -846,13 +1924,30 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Feature 3: Advanced Filter Toggle Button */}
+            <button
+              onClick={() => setIsAdvancedFilterOpen((prev) => !prev)}
+              className={`text-xs px-2.5 py-1 rounded-xl border flex items-center gap-1.5 font-medium transition-all ${
+                isAdvancedFilterOpen || amountMin || amountMax || selectedDatePreset !== 'ALL'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 font-semibold shadow-2xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:bg-slate-200'
+              }`}
+              title="展开金额区间、时间范围等高级多维筛选"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>高级筛选</span>
+              {(amountMin || amountMax || selectedDatePreset !== 'ALL') && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              )}
+            </button>
+
             <button
               onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
               className="text-xs text-slate-600 dark:text-slate-300 hover:text-emerald-600 flex items-center gap-1 font-medium transition-colors"
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>{sortOrder === 'desc' ? '最新日期在前 (倒序)' : '最早日期在前 (正序)'}</span>
+              <span>{sortOrder === 'desc' ? '最新在前' : '最早在前'}</span>
             </button>
 
             <button
@@ -861,38 +1956,48 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               title="下载标准 CSV 导入模板"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>导入模板</span>
+              <span>模板</span>
             </button>
 
             {(searchTerm ||
               selectedDateFilter ||
               selectedType !== 'ALL' ||
+              selectedCategory !== 'ALL' ||
               selectedProjectId !== 'ALL' ||
               selectedAccountId !== 'ALL' ||
               selectedMonth !== 'ALL' ||
-              selectedCurrency !== 'ALL') && (
+              selectedCurrency !== 'ALL' ||
+              amountMin ||
+              amountMax ||
+              selectedDatePreset !== 'ALL') && (
               <button
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedDateFilter(null);
                   setSelectedType('ALL');
+                  setSelectedCategory('ALL');
                   setSelectedProjectId('ALL');
                   setSelectedAccountId('ALL');
                   setSelectedMonth('ALL');
                   setSelectedCurrency('ALL');
+                  setAmountMin('');
+                  setAmountMax('');
+                  setSelectedDatePreset('ALL');
+                  setCustomDateStart('');
+                  setCustomDateEnd('');
                 }}
-                className="text-xs text-rose-500 hover:text-rose-600 font-semibold"
+                className="text-xs text-rose-500 hover:text-rose-600 font-semibold ml-1"
               >
-                重置所有筛选
+                重置全部筛选
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* 4. Sequential Chronological Transactions List (账本明细 - 采用与日历同款背景卡片及图标底色) */}
+      {/* 4. Sequential Chronological Transactions List (账本明细 - 支持按天聚合时间轴与连续平铺双视图，支持批量多选) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden transition-all">
-        {/* Section Header: 账本明细卡片头部 (与收支日历同款卡片背景框与图标底色) */}
+        {/* Section Header: 账本明细卡片头部 */}
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/60">
@@ -919,19 +2024,85 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 </button>
               </span>
             )}
+
+            {selectedCategory !== 'ALL' && (
+              <span className="text-xs px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-medium border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                <span>🏷️ 已选分类: {selectedCategory}</span>
+                <button
+                  onClick={() => setSelectedCategory('ALL')}
+                  className="text-indigo-700 dark:text-indigo-400 hover:text-rose-600 font-bold ml-0.5"
+                  title="清除分类过滤"
+                >
+                  ×
+                </button>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs font-mono text-slate-400 flex-wrap">
+            {/* Feature 4: View Mode Switcher (按天分组 vs 连续列表) */}
+            <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode('GROUPED')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                  viewMode === 'GROUPED'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+                title="按日期分组时间轴展示"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                <span>按天分组</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode('FLAT')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                  viewMode === 'FLAT'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+                title="连续平铺列表展示"
+              >
+                <Rows3 className="w-3.5 h-3.5" />
+                <span>连续列表</span>
+              </button>
+            </div>
+
+            {/* Feature 1: Batch Mode Toggle Button */}
+            <button
+              onClick={() => {
+                setIsBatchMode((prev) => !prev);
+                if (isBatchMode) {
+                  setSelectedTxIds(new Set());
+                }
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-semibold border transition-all shadow-2xs ${
+                isBatchMode
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
+              }`}
+              title="开启或退出批量管理模式"
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              <span>{isBatchMode ? `批量中 (${selectedTxIds.size})` : '批量管理'}</span>
+            </button>
+
             <button
               onClick={() => {
                 setReceiptSingleTxId(null);
                 setIsReceiptModalOpen(true);
               }}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-400 font-semibold border border-amber-200/80 dark:border-amber-800/60 transition-colors shadow-2xs"
-              title="一键生成当前明细小票"
+              title="一键生成当前明细小票（支持导出当前所选项目的账单小票）"
             >
               <Receipt className="w-3.5 h-3.5" />
-              <span>生成账单小票</span>
+              <span>
+                {selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE'
+                  ? `生成「${projects.find((p) => p.id === selectedProjectId)?.name || '项目'}」小票`
+                  : '账单小票'}
+              </span>
             </button>
 
             <button
@@ -940,12 +2111,68 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               title="点击切换时间排序"
             >
               <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>{sortOrder === 'desc' ? '时间倒序' : '时间正序'}</span>
+              <span>{sortOrder === 'desc' ? '倒序' : '正序'}</span>
             </button>
           </div>
         </div>
 
-        {/* Dedicated Daily Focus Consumption Banner (当点击日历日期快速筛选时，醒目显示当天消费明细统计与快捷记账) */}
+        {/* Feature 1: Batch Actions Assistant Bar (当开启批量管理时显示快速全选助手) */}
+        {isBatchMode && (
+          <div className="px-4 py-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 border-b border-emerald-100 dark:border-emerald-900/40 flex items-center justify-between text-xs flex-wrap gap-2 animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+              <span className="font-semibold text-emerald-800 dark:text-emerald-300">
+                ✓ 批量模式已开启
+              </span>
+              <span>·</span>
+              <span>
+                已选 <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{selectedTxIds.size}</strong> / {filteredTransactions.length} 笔
+              </span>
+              {selectedTxIds.size > 0 && (
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 hidden sm:inline">
+                  (已选支出: -{formatCurrency(batchSelectedStats.expense, privacyMode)} / 收入: +{formatCurrency(batchSelectedStats.income, privacyMode)})
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-emerald-50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold"
+              >
+                全选本页 ({filteredTransactions.length})
+              </button>
+              <button
+                type="button"
+                onClick={handleInvertSelection}
+                className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+              >
+                反选
+              </button>
+              {selectedTxIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-rose-50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+                >
+                  清空已选
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBatchMode(false);
+                  setSelectedTxIds(new Set());
+                }}
+                className="px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium"
+              >
+                退出
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Dedicated Daily Focus Consumption Banner */}
         {selectedDateFilter && (
           <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-blue-950/40 border-b border-emerald-200/60 dark:border-emerald-900/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-in fade-in duration-200">
             <div className="flex items-center gap-3">
@@ -1007,7 +2234,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <p className="text-xs text-slate-400 mt-1">
                 {selectedDateFilter
                   ? `点击下方按钮即可为 ${selectedDateFilter} 快速补录消费账单`
-                  : '您可以点击右上角“记一笔”快速添加，或点击“上传导入”批量导入历史账单'}
+                  : '您可以点击右上角“记一笔”快速添加，或点击“批量导入”上传历史账单'}
               </p>
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
@@ -1030,228 +2257,378 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
-              {filteredTransactions.map((tx) => {
-                const acc = accountMap.get(tx.accountId);
-                const targetAcc = tx.targetAccountId ? accountMap.get(tx.targetAccountId) : null;
-                const isExpense = tx.type === 'EXPENSE';
-                const isIncome = tx.type === 'INCOME';
-                const isTransfer = tx.type === 'TRANSFER';
-                const isRepayment = tx.type === 'REPAYMENT';
-                const isForeign = tx.currency && tx.currency !== 'CNY';
-                const curInfo = isForeign ? getCurrencyInfo(tx.currency!) : null;
-
-                return (
-                  <div
-                    key={tx.id}
-                    className="px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-3 group"
-                  >
-                    {/* Left: Icon & Description & Metadata */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                          isExpense
-                            ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400'
-                            : isIncome
-                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400'
-                            : isRepayment
-                            ? 'bg-purple-100 dark:bg-purple-950/80 text-purple-600 dark:text-purple-400'
-                            : 'bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400'
-                        }`}
-                      >
-                        <CategoryIcon
-                          nameOrIcon={tx.category}
-                          className="w-4 h-4"
-                          defaultIcon={
-                            isExpense
-                              ? ArrowDownRight
-                              : isIncome
-                              ? ArrowUpRight
-                              : isRepayment
-                              ? ReceiptText
-                              : RotateCw
-                          }
-                        />
+          <div>
+            {/* Feature 4: Grouped Timeline View (按天分组时间轴) */}
+            {viewMode === 'GROUPED' ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {groupedTransactions.map((group) => (
+                  <div key={group.date} className="relative">
+                    {/* Day Group Header Bar */}
+                    <div className="px-4 sm:px-5 py-2.5 bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-bold font-mono text-slate-800 dark:text-slate-100">
+                          {group.date}
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {group.weekday}
+                        </span>
+                        {group.isToday && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            今天
+                          </span>
+                        )}
+                        {group.isYesterday && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                            昨天
+                          </span>
+                        )}
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          ({group.transactions.length} 笔)
+                        </span>
                       </div>
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                            {tx.description || tx.category}
+                      <div className="flex items-center gap-3 text-xs font-mono">
+                        {group.totalExpense > 0 && (
+                          <span className="text-rose-600 dark:text-rose-400">
+                            支: -{formatCurrency(group.totalExpense, privacyMode)}
                           </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-                            {tx.category}
+                        )}
+                        {group.totalIncome > 0 && (
+                          <span className="text-emerald-700 dark:text-emerald-400">
+                            收: +{formatCurrency(group.totalIncome, privacyMode)}
                           </span>
-                          {tx.projectName && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedProjectId(tx.projectId || tx.projectName || 'ALL')}
-                              className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 hover:bg-indigo-100 transition-colors flex items-center gap-0.5"
-                              title={`点击筛选「${tx.projectName}」项目明细`}
-                            >
-                              📁 {tx.projectName}
-                            </button>
-                          )}
-                          {tx.tag && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100/80 dark:bg-slate-800/80 text-slate-400">
-                              #{tx.tag}
-                            </span>
-                          )}
-                          {tx.isRefund && (
-                            <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800">
-                              平账冲红凭证
-                            </span>
-                          )}
-                          {tx.refundedAmount && tx.refundedAmount > 0 ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
-                              已冲红退款 ¥{tx.refundedAmount.toFixed(2)}
-                            </span>
-                          ) : null}
-                          {tx.merchant && (
-                            <span className="text-[10px] text-slate-400">
-                              商户: {tx.merchant}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Date, Time & Account Path */}
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1 flex-wrap font-mono">
-                          <span className="font-medium text-slate-600 dark:text-slate-300">
-                            {tx.date}
-                          </span>
-                          {tx.time && (
-                            <span className="flex items-center gap-0.5 text-slate-500 dark:text-slate-400">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              {tx.time}
-                            </span>
-                          )}
-                          <span>·</span>
-                          <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
-                            <span>{acc?.name || '账户'}</span>
-                            {acc?.cardNumberLast4 && (
-                              <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
-                                *{acc.cardNumberLast4}
-                              </span>
-                            )}
-                          </span>
-                          {targetAcc && (
-                            <>
-                              <span>➔</span>
-                              <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
-                                <span>{targetAcc.name}</span>
-                                {targetAcc.cardNumberLast4 && (
-                                  <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
-                                    *{targetAcc.cardNumberLast4}
-                                  </span>
-                                )}
-                              </span>
-                            </>
-                          )}
-                          {tx.counterparty && (
-                            <>
-                              <span>·</span>
-                              <span>对方: {tx.counterparty}</span>
-                            </>
-                          )}
-                        </div>
+                        )}
+                        <span className={`text-[11px] font-semibold ${group.net >= 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                          净: {group.net >= 0 ? '+' : ''}{formatCurrency(group.net, privacyMode)}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Right: Amount, Foreign Currency & Actions */}
-                    <div className="text-right flex items-center gap-3 sm:gap-5 flex-shrink-0">
-                      <div>
-                        <div
-                          className={`text-sm sm:text-base font-bold font-mono ${
-                            isExpense
-                              ? 'text-rose-600 dark:text-rose-400'
-                              : isIncome
-                              ? 'text-emerald-700 dark:text-emerald-400'
-                              : 'text-blue-600 dark:text-blue-400'
-                          }`}
-                        >
-                          {isExpense
-                            ? `-${formatCurrency(tx.amount, privacyMode)}`
-                            : isIncome
-                            ? `+${formatCurrency(tx.amount, privacyMode)}`
-                            : formatCurrency(tx.amount, privacyMode)}
-                        </div>
-
-                        {/* Net expenditure after red-ink refund offset */}
-                        {isExpense && tx.refundedAmount && tx.refundedAmount > 0 && (
-                          <div className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                            净支: {formatCurrency(Math.max(0, tx.amount - tx.refundedAmount), privacyMode)}
-                          </div>
-                        )}
-
-                        {isForeign && curInfo && (
-                          <div className="text-[10px] text-blue-700 dark:text-blue-300 font-mono">
-                            原币: {curInfo.symbol}{tx.originalAmount || tx.amount}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Quick Action buttons */}
-                      <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
-                        {/* Direct Red-ink Reversal Action for Expense Bills */}
-                        {isExpense && onRefundTransaction && (
-                          <button
-                            onClick={() => onRefundTransaction(tx)}
-                            className="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 transition-all flex items-center gap-1 shadow-2xs"
-                            title="对该笔支出账单平账冲红 (退款入账并冲减净支出)"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            <span>冲红</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            setReceiptSingleTxId(tx.id);
-                            setIsReceiptModalOpen(true);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
-                          title="生成此笔消费小票"
-                        >
-                          <Receipt className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => onEditTransaction(tx)}
-                          className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          title="编辑此记录"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirmDeleteId === tx.id) {
-                              onDeleteTransaction(tx.id);
-                              setConfirmDeleteId(null);
-                            } else {
-                              setConfirmDeleteId(tx.id);
-                              setTimeout(() => {
-                                setConfirmDeleteId((cur) => (cur === tx.id ? null : cur));
-                              }, 3500);
-                            }
-                          }}
-                          className={`p-1.5 rounded-lg transition-all flex items-center gap-1 ${
-                            confirmDeleteId === tx.id
-                              ? 'bg-rose-600 text-white hover:bg-rose-700 px-2'
-                              : 'text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                          }`}
-                          title={confirmDeleteId === tx.id ? '点击确认删除此记录' : '删除此记录'}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          {confirmDeleteId === tx.id && (
-                            <span className="text-[10px] font-bold">确认删除</span>
-                          )}
-                        </button>
-                      </div>
+                    {/* Day's Transactions List */}
+                    <div className="divide-y divide-slate-100/70 dark:divide-slate-800/60">
+                      {group.transactions.map((tx) => renderTransactionRow(tx))}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : (
+              /* Flat Continuous List View (连续列表) */
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                {filteredTransactions.map((tx) => renderTransactionRow(tx))}
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Feature 1: Floating Batch Dock (固定于底部中央悬浮 dock) */}
+      {isBatchMode && selectedTxIds.size > 0 && (
+        <div className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700 shadow-2xl rounded-2xl px-4 py-3 flex items-center gap-3 sm:gap-4 flex-wrap max-w-[95vw] animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+              已选 <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-base">{selectedTxIds.size}</strong> 笔
+            </span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono hidden md:inline">
+              (支: -{formatCurrency(batchSelectedStats.expense, privacyMode)} / 收: +{formatCurrency(batchSelectedStats.income, privacyMode)})
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                setBatchSelectedCategory(getStoredExpenseCategories()[0]?.name || '餐饮美食');
+                setBatchModal('CATEGORY');
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-all"
+            >
+              <Tag className="w-3.5 h-3.5 text-indigo-500" />
+              <span>修改分类</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setBatchSelectedProject(projects[0]?.id || 'CLEAR');
+                setBatchModal('PROJECT');
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-all"
+            >
+              <FolderKanban className="w-3.5 h-3.5 text-blue-500" />
+              <span>指派项目</span>
+            </button>
+
+            <button
+              onClick={handleBatchExportSelected}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-all"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <span>导出CSV</span>
+            </button>
+
+            <button
+              onClick={() => setBatchModal('DELETE')}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200/80 dark:border-rose-900/80 flex items-center gap-1 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>批量删除</span>
+            </button>
+
+            <button
+              onClick={handleClearSelection}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all"
+              title="清空当前勾选"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 1: Batch Delete Confirm Modal */}
+      {batchModal === 'DELETE' && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-rose-100 dark:bg-rose-950/80 text-rose-600">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  确认批量删除流水？
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  将永久删除已勾选的 {selectedTxIds.size} 笔账单记录
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 space-y-1">
+              <p className="font-semibold">⚠️ 重要提示：</p>
+              <p>相关账户的余额将自动进行原路回退与冲账，操作后无法撤销。</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setBatchModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBatchDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+              >
+                确认删除 {selectedTxIds.size} 笔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 1: Batch Assign Project Modal */}
+      {batchModal === 'PROJECT' && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-blue-100 dark:bg-blue-950/80 text-blue-600">
+                <FolderKanban className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  批量指派归属项目
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  为选中的 {selectedTxIds.size} 笔账单流水统一关联项目
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-2">
+                选择目标项目:
+              </label>
+              <select
+                value={batchSelectedProject}
+                onChange={(e) => setBatchSelectedProject(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm font-medium focus:outline-none focus:border-indigo-500"
+              >
+                <option value="CLEAR">❌ 清除项目关联 (设为无项目)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    📁 {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setBatchModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBatchProject}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+              >
+                确认应用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 1: Batch Modify Category Modal */}
+      {batchModal === 'CATEGORY' && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600">
+                <Tag className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  批量修改消费分类
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  将选中的 {selectedTxIds.size} 笔账单流水分类统一修改
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-2">
+                选择新分类:
+              </label>
+              <select
+                value={batchSelectedCategory}
+                onChange={(e) => setBatchSelectedCategory(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm font-medium focus:outline-none focus:border-indigo-500"
+              >
+                <optgroup label="支出常用分类">
+                  {getStoredExpenseCategories().map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="收入来源分类">
+                  {getStoredIncomeCategories().map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setBatchModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBatchCategory}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+              >
+                确认修改分类
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 2: Quick Duplicate Transaction Modal (一键再记一笔 / 极速克隆) */}
+      {duplicateTargetTx && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
+                <CopyPlus className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  再记一笔 / 复制该账单
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  以原账单为模板，极速记录一笔新消费
+                </p>
+              </div>
+            </div>
+
+            {/* Transaction Preview Card */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-500">账单描述:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100">
+                  {duplicateTargetTx.description || duplicateTargetTx.category}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-500">交易金额:</span>
+                <span className="font-bold text-base text-rose-600 dark:text-rose-400">
+                  ¥{duplicateTargetTx.amount.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-500">扣款账户:</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {accountMap.get(duplicateTargetTx.accountId)?.name || '原账户'}
+                </span>
+              </div>
+              {duplicateTargetTx.projectName && (
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-500">归属项目:</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">
+                    📁 {duplicateTargetTx.projectName}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleInstantCloneTx(duplicateTargetTx)}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <span>⚡ 一键极速入账 (记录为今天消费)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleEditCloneTx(duplicateTargetTx)}
+                className="w-full py-2 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                <span>载入记账表单微调（修改金额/时间）</span>
+              </button>
+            </div>
+
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => setDuplicateTargetTx(null)}
+                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-medium"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload / Batch Import Modal */}
       {isImportModalOpen && (
@@ -1281,7 +2658,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         />
       )}
 
-      {/* Consumption Receipt Modal (生动逼真出票动效与小票分享) */}
+      {/* Consumption Receipt Modal (生动逼真出票动效与小票分享，全面支持账本项目打单) */}
       {isReceiptModalOpen && (
         <ReceiptModal
           isOpen={isReceiptModalOpen}
@@ -1291,8 +2668,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           }}
           transactions={sortedTransactions}
           accounts={accounts}
+          projects={projects}
           selectedDate={selectedDateFilter}
           initialSingleTxId={receiptSingleTxId}
+          initialProjectId={selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE' ? selectedProjectId : null}
         />
       )}
     </div>
