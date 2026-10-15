@@ -399,70 +399,119 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             </div>
           </div>
 
-          {/* Quick Actions for this single project */}
+          {/* Quick Actions for this single project (纯功能图标展示，悬停显示文字浮层，与资产账户风格一致) */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* 1. 记支出 */}
             <button
+              id="btn-project-add-expense"
+              type="button"
               onClick={() => onOpenNewTx('EXPENSE', undefined, undefined, activeProject.id)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="为此项目记一笔支出"
+              aria-label="记支出"
             >
-              <ArrowDownRight className="w-4 h-4" />
-              <span>记支出</span>
+              <ArrowDownRight className="w-4 h-4 text-rose-500 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                记支出
+              </span>
             </button>
 
+            {/* 2. 记收入 */}
             <button
+              id="btn-project-add-income"
+              type="button"
               onClick={() => onOpenNewTx('INCOME', undefined, undefined, activeProject.id)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="为此项目记一笔收入 (如副业进账、报销返款、AA分摊)"
+              aria-label="记收入"
             >
-              <ArrowUpRight className="w-4 h-4" />
-              <span>记收入</span>
+              <ArrowUpRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                记收入
+              </span>
             </button>
 
+            {/* 3. 平账冲红 */}
             <button
+              id="btn-project-refund"
+              type="button"
               onClick={() => onOpenNewTx('REFUND', undefined, undefined, activeProject.id)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 text-xs font-bold shadow-2xs active:scale-95 transition-all"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="对该项目花出去的费用进行退费平账冲红"
+              aria-label="平账冲红"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>平账冲红</span>
+              <RotateCcw className="w-4 h-4 text-rose-500 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                平账冲红
+              </span>
             </button>
 
+            {/* 4. 编辑项目信息 */}
             <button
+              id="btn-project-edit"
+              type="button"
               onClick={() => handleOpenEditor(activeProject)}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="编辑此项目信息"
+              aria-label="编辑项目"
             >
-              <Pencil className="w-4 h-4" />
+              <Pencil className="w-4 h-4 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                编辑项目
+              </span>
             </button>
 
-            {/* 明确的【归档项目 / 取消归档】功能 */}
+            {/* 5. 归档项目 / 取消归档 */}
             <button
+              id="btn-project-archive"
+              type="button"
               onClick={() => handleArchiveProject(activeProject, !Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED'))}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+              className={`relative p-2 rounded-xl bg-transparent transition-all flex items-center justify-center active:scale-95 group border ${
                 Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED')
-                  ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 shadow-2xs'
-                  : 'bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                  ? 'hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700'
+                  : 'hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700'
               }`}
               title={Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? '取消归档，重新恢复显示在主界面' : '归档此项目 (主界面隐藏并安全保留数据)'}
+              aria-label={Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? '取消归档' : '归档项目'}
             >
-              <Archive className="w-3.5 h-3.5" />
-              <span>{Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? '取消归档并恢复' : '归档此项目'}</span>
+              <Archive className={`w-4 h-4 transition-transform group-hover:scale-110 ${Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? 'text-amber-500' : ''}`} />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                {Boolean(activeProject.isArchived || activeProject.status === 'ARCHIVED') ? '取消归档并恢复' : '归档此项目'}
+              </span>
             </button>
 
+            {/* 6. 设为进行中 / 标记已结项 */}
             <button
+              id="btn-project-toggle-status"
+              type="button"
               onClick={() => handleToggleProjectStatus(activeProject)}
-              className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
+              title={activeProject.status === 'COMPLETED' ? '设为进行中' : '标记已结项'}
+              aria-label={activeProject.status === 'COMPLETED' ? '设为进行中' : '标记已结项'}
             >
-              {activeProject.status === 'COMPLETED' ? '设为进行中' : '标记已结项'}
+              {activeProject.status === 'COMPLETED' ? (
+                <Clock className="w-4 h-4 text-blue-500 transition-transform group-hover:scale-110" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 transition-transform group-hover:scale-110" />
+              )}
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                {activeProject.status === 'COMPLETED' ? '设为进行中' : '标记已结项'}
+              </span>
             </button>
 
+            {/* 7. 删除项目 */}
             <button
+              id="btn-project-delete"
+              type="button"
               onClick={() => openDeleteProjectConfirm(activeProject)}
-              className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 transition-colors"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="删除此项目 (不可逆高危操作)"
+              aria-label="删除项目"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4 text-rose-500 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                删除此项目
+              </span>
             </button>
           </div>
         </div>
@@ -1029,7 +1078,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
         /* ========================================================================= */
         <>
           {/* Top Banner & Metric Summary (参考 CreditCardsSummary 布局模式重构) */}
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 text-xs font-semibold mb-3">
@@ -1052,24 +1101,30 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Quick Actions / CTA */}
-              <div className="flex items-center gap-3 flex-wrap">
+              {/* Quick Actions / CTA (功能图标与主要操作) */}
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
                 {onTriggerSync && (
                   <button
+                    id="btn-projects-cloud-sync"
+                    type="button"
                     onClick={handleManualSync}
                     disabled={isSyncing}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                    className="relative p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group disabled:opacity-50"
                     title="立即同步最新项目与流水到云端服务器"
+                    aria-label="云端同步"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
-                    <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-indigo-600' : 'group-hover:rotate-180 transition-transform duration-300 text-slate-600 dark:text-slate-300'}`} />
+                    <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                      {isSyncing ? '正在同步...' : '云端同步'}
+                    </span>
                   </button>
                 )}
 
                 <button
                   id="btn-add-project-main"
+                  type="button"
                   onClick={() => handleOpenEditor(null)}
-                  className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow-xs active:scale-95 transition-all text-sm"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
                 >
                   <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
                   <span>新增账本</span>

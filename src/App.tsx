@@ -695,29 +695,39 @@ export default function App() {
     showToast(`🗑️ 已批量删除 ${txIds.length} 笔账单流水（已暂存回收站防误删）`);
   };
 
-  // 🔄 Recurring Tasks Handlers
+  // 🔄 Recurring Tasks Handlers (Guaranteed no task loss on consecutive creations)
   const handleSaveRecurringTask = (task: RecurringTask) => {
     if (!currentUser) return;
-    const existing = recurringTasks.find((t) => t.id === task.id);
-    let updated: RecurringTask[];
-    if (existing) {
-      updated = recurringTasks.map((t) => (t.id === task.id ? task : t));
-      showToast(`✨ 周期规则「${task.name}」已更新`);
-    } else {
-      updated = [task, ...recurringTasks];
-      showToast(`✨ 周期规则「${task.name}」已创建`);
-    }
-    setRecurringTasks(updated);
-    saveRecurringTasks(currentUser.id, updated);
+    setRecurringTasks((prev) => {
+      const currentStored = getRecurringTasks(currentUser.id);
+      // 聚合当前内存与本地存储的所有已知任务，确保连续新增任务绝不丢失前序任务
+      const taskMap = new Map<string, RecurringTask>();
+      currentStored.forEach((t) => taskMap.set(t.id, t));
+      prev.forEach((t) => taskMap.set(t.id, t));
+      const isExisting = taskMap.has(task.id);
+      taskMap.set(task.id, task);
+
+      const updated = Array.from(taskMap.values());
+      saveRecurringTasks(currentUser.id, updated);
+      showToast(isExisting ? `✨ 周期规则「${task.name}」已更新` : `✨ 周期规则「${task.name}」已创建`);
+      return updated;
+    });
   };
 
   const handleDeleteRecurringTask = (taskId: string) => {
     if (!currentUser) return;
-    const target = recurringTasks.find((t) => t.id === taskId);
-    const updated = recurringTasks.filter((t) => t.id !== taskId);
-    setRecurringTasks(updated);
-    saveRecurringTasks(currentUser.id, updated);
-    showToast(`🗑️ 周期规则「${target?.name || ''}」已删除`);
+    setRecurringTasks((prev) => {
+      const currentStored = getRecurringTasks(currentUser.id);
+      const taskMap = new Map<string, RecurringTask>();
+      currentStored.forEach((t) => taskMap.set(t.id, t));
+      prev.forEach((t) => taskMap.set(t.id, t));
+      const target = taskMap.get(taskId);
+      taskMap.delete(taskId);
+      const updated = Array.from(taskMap.values());
+      saveRecurringTasks(currentUser.id, updated);
+      showToast(`🗑️ 周期规则「${target?.name || ''}」已删除`);
+      return updated;
+    });
   };
 
   const handleExecuteRecurringTask = (taskId: string) => {

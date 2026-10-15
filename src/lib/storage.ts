@@ -200,14 +200,14 @@ export const executeFullCloudSync = async (
   };
 
   try {
-    // 1. 先从服务端拉取并无损合并两端数据
     const fetchRes = await fetchLatestDataFromServer(userId);
     const accounts = fetchRes.success && fetchRes.accounts ? fetchRes.accounts : getAccounts(userId);
     const transactions = fetchRes.success && fetchRes.transactions ? fetchRes.transactions : getTransactions(userId);
     const projects = fetchRes.success && fetchRes.projects ? fetchRes.projects : getProjects(userId);
+    const recurringTasks = fetchRes.success && fetchRes.recurringTasks ? fetchRes.recurringTasks : getRecurringTasks(userId);
 
     // 2. 将合并后的全量数据持久化推送至服务端/NAS
-    const serverRes = await syncDataToServer(userId, accounts, transactions, projects, user);
+    const serverRes = await syncDataToServer(userId, accounts, transactions, projects, user, recurringTasks);
 
     const nowIso = new Date().toISOString();
 
@@ -453,6 +453,7 @@ export const getRecurringTasks = (userId: string): RecurringTask[] => {
 export const saveRecurringTasks = (userId: string, tasks: RecurringTask[]) => {
   try {
     localStorage.setItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`, JSON.stringify(tasks));
+    setLocalLastUpdated(userId);
   } catch (err) {
     console.warn('LocalStorage saveRecurringTasks warning:', err);
   }
@@ -755,6 +756,13 @@ export const fetchLatestDataFromServer = async (
       const localAccs = getAccounts(userId);
       const localTxs = getTransactions(userId);
       const localProjs = getProjects(userId);
+      const localRec = getRecurringTasks(userId);
+
+      // 安全双向无损合并周期任务，防止空数组冲刷掉用户刚创建的周期规则
+      const mergedRecMap = new Map<string, RecurringTask>();
+      localRec.forEach((t) => mergedRecMap.set(t.id, t));
+      serverRec.forEach((t) => mergedRecMap.set(t.id, t));
+      const resolvedRec = mergedRecMap.size > 0 ? Array.from(mergedRecMap.values()) : serverRec;
 
       // 核心判断逻辑：
       // 1. 如果当前端口/域名的本地缓存为空（例如在 localhost 记账后切换到自定义域名，新源首开），直接拉取服务端的最新全量数据
@@ -766,7 +774,7 @@ export const fetchLatestDataFromServer = async (
         localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${userId}`, JSON.stringify(serverAccs));
         localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${userId}`, JSON.stringify(serverTxs));
         localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${userId}`, JSON.stringify(serverProjs));
-        localStorage.setItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`, JSON.stringify(serverRec));
+        localStorage.setItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${userId}`, JSON.stringify(resolvedRec));
         if (serverLastUpdated) {
           setLocalLastUpdated(userId, serverLastUpdated);
         }
@@ -787,7 +795,7 @@ export const fetchLatestDataFromServer = async (
           accounts: serverAccs,
           transactions: serverTxs,
           projects: serverProjs,
-          recurringTasks: serverRec,
+          recurringTasks: resolvedRec,
           user: data.user,
           lastUpdated: serverLastUpdated,
         };
@@ -795,7 +803,7 @@ export const fetchLatestDataFromServer = async (
 
       // 如果当前本地已包含更新的数据，则以当前本地为主，并确保服务端也同步拥有最新全量
       if (localAccs.length > 0 || localTxs.length > 0 || localProjs.length > 0) {
-        syncDataToServer(userId, localAccs, localTxs, localProjs, getCurrentUser() || undefined, getRecurringTasks(userId)).catch(() => {});
+        syncDataToServer(userId, localAccs, localTxs, localProjs, getCurrentUser() || undefined, resolvedRec).catch(() => {});
       }
 
       return {
@@ -803,7 +811,7 @@ export const fetchLatestDataFromServer = async (
         accounts: localAccs,
         transactions: localTxs,
         projects: localProjs,
-        recurringTasks: getRecurringTasks(userId),
+        recurringTasks: resolvedRec,
         user: data.user,
         lastUpdated: localUpdated || serverLastUpdated,
       };

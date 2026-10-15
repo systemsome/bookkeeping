@@ -34,6 +34,7 @@ import {
   ChevronsUpDown,
   MoreHorizontal,
   RefreshCw,
+  Palette,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory, AssetGroup, LedgerProject, UserProfile } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
@@ -98,17 +99,55 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     return map;
   }, [projects]);
 
-  // Drag & Drop Layout State
-  const [isReorderMode, setIsReorderMode] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Native Drag & Drop Sorting (原生无感拖拽排序，无需繁杂的模式切换按钮，按住卡片随时拖动排序)
   const [draggedAccountId, setDraggedAccountId] = useState<string | null>(null);
   const [dragOverAccountId, setDragOverAccountId] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedAccountId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverAccountId !== id) {
+      setDragOverAccountId(id);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain') || draggedAccountId;
+    if (sourceId && sourceId !== targetId) {
+      const fromIndex = accounts.findIndex((a) => a.id === sourceId);
+      const toIndex = accounts.findIndex((a) => a.id === targetId);
+      if (fromIndex !== -1 && toIndex !== -1) {
+        const newAccounts = [...accounts];
+        const [moved] = newAccounts.splice(fromIndex, 1);
+        newAccounts.splice(toIndex, 0, moved);
+        if (onReorderAccounts) {
+          onReorderAccounts(newAccounts);
+          showToast(`✨ 已更新「${moved.name}」卡片排版位置`);
+        }
+      }
+    }
+    setDraggedAccountId(null);
+    setDragOverAccountId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedAccountId(null);
+    setDragOverAccountId(null);
+  };
 
   // Collapsed Category Sections State (默认全部展开展示卡面，支持用户手动折叠/展开)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [cardentifyGalleryAccount, setCardentifyGalleryAccount] = useState<FinancialAccount | null>(null);
   const [isGalleryOpenGeneral, setIsGalleryOpenGeneral] = useState<boolean>(false);
-  const [globalWakeMode, setGlobalWakeMode] = useState<'hidden' | 'pinned'>('hidden');
   const [deletingTableAccountId, setDeletingTableAccountId] = useState<string | null>(null);
 
   // 清除自定义卡面图片，恢复默认官方设计
@@ -161,23 +200,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
       .catch(() => {});
   }, [isGalleryOpenGeneral]);
 
-  // 顶部功能按键折叠/收起菜单状态（响应用户隐藏诉求，保持界面极简）
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState<boolean>(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setIsMoreMenuOpen(false);
-      }
-    };
-    if (isMoreMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMoreMenuOpen]);
 
   const toggleGroupCollapse = (groupId: string) => {
     setCollapsedGroups((prev) => ({
@@ -238,159 +261,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   };
 
   // Reorder Core
-  const handleReorder = (fromId: string, toId: string) => {
-    if (!fromId || !toId || fromId === toId) return;
-    const fromIndex = accounts.findIndex((a) => a.id === fromId);
-    const toIndex = accounts.findIndex((a) => a.id === toId);
-    if (fromIndex === -1 || toIndex === -1) return;
 
-    const newAccounts = [...accounts];
-    const [moved] = newAccounts.splice(fromIndex, 1);
-    newAccounts.splice(toIndex, 0, moved);
-
-    if (onReorderAccounts) {
-      onReorderAccounts(newAccounts);
-      showToast(`✨ 已更新「${moved.name}」卡片排版位置`);
-    }
-  };
-
-  const handleMoveUp = (accountId: string) => {
-    const idx = accounts.findIndex((a) => a.id === accountId);
-    if (idx <= 0) return;
-    const newAccounts = [...accounts];
-    const [item] = newAccounts.splice(idx, 1);
-    newAccounts.splice(idx - 1, 0, item);
-    onReorderAccounts?.(newAccounts);
-    showToast(`✨ 卡片「${item.name}」已往前调整`);
-  };
-
-  const handleMoveDown = (accountId: string) => {
-    const idx = accounts.findIndex((a) => a.id === accountId);
-    if (idx < 0 || idx >= accounts.length - 1) return;
-    const newAccounts = [...accounts];
-    const [item] = newAccounts.splice(idx, 1);
-    newAccounts.splice(idx + 1, 0, item);
-    onReorderAccounts?.(newAccounts);
-    showToast(`✨ 卡片「${item.name}」已往后调整`);
-  };
-
-  const handleMoveTop = (accountId: string) => {
-    const idx = accounts.findIndex((a) => a.id === accountId);
-    if (idx <= 0) return;
-    const newAccounts = [...accounts];
-    const [item] = newAccounts.splice(idx, 1);
-    newAccounts.unshift(item);
-    onReorderAccounts?.(newAccounts);
-    showToast(`✨ 卡片「${item.name}」已成功置顶`);
-  };
-
-  // Quick Preset Sorts
-  const handleSortByBalance = () => {
-    const sorted = [...accounts].sort((a, b) => b.balance - a.balance);
-    onReorderAccounts?.(sorted);
-    showToast('✨ 已按账户资产与余额由高到低排列');
-  };
-
-  const handleSortByCategory = () => {
-    const categoryOrder: Record<AccountCategory, number> = {
-      DEBIT_CARD: 1,
-      CREDIT_CARD: 2,
-      JD_BAITIAO: 3,
-      HUABEI: 4,
-      ALIPAY: 5,
-      WECHAT: 6,
-      YUEBAO: 7,
-      FUND: 8,
-      GOLD: 9,
-      JD_FINANCE: 10,
-      CASH: 11,
-      RECEIVABLE: 12,
-      PAYABLE: 13,
-    };
-    const sorted = [...accounts].sort((a, b) => {
-      const orderA = categoryOrder[a.category] || 99;
-      const orderB = categoryOrder[b.category] || 99;
-      return orderA - orderB;
-    });
-    onReorderAccounts?.(sorted);
-    showToast('✨ 已按卡片大类标准排版规整');
-  };
-
-  const handleSortByDueDate = () => {
-    const sorted = [...accounts].sort((a, b) => {
-      const isCreditA = a.category === 'CREDIT_CARD' || a.category === 'JD_BAITIAO' || a.category === 'HUABEI';
-      const isCreditB = b.category === 'CREDIT_CARD' || b.category === 'JD_BAITIAO' || b.category === 'HUABEI';
-      if (isCreditA && !isCreditB) return -1;
-      if (!isCreditA && isCreditB) return 1;
-      return (a.dueDay || 99) - (b.dueDay || 99);
-    });
-    onReorderAccounts?.(sorted);
-    showToast('✨ 已优先排列还款日临近的信贷卡片');
-  };
-
-  // 一键结合 CardArt (cardart.cc) 与 Cardentify (cards.no2.ac) 全量规整卡面外观
-  const handleNormalizeAllCardFaces = () => {
-    let updatedCount = 0;
-    const normalized = accounts.map((acc) => {
-      const card = matchBestCardentifyCard(acc.name, acc.bankName, acc.category, acc.cardTier);
-      if (card) {
-        updatedCount++;
-        let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
-        const brandUp = (card.brand || '').toUpperCase();
-        if (brandUp.includes('VISA')) net = 'VISA';
-        else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
-        else if (brandUp.includes('AMEX')) net = 'AMEX';
-        else if (brandUp.includes('JCB')) net = 'JCB';
-
-        const presetId = String(card.id).startsWith('card') ? String(card.id) : `cardentify-${card.id}`;
-
-        return {
-          ...acc,
-          cardImageUrl: card.imageUrl,
-          cardPresetId: presetId,
-          cardNetwork: net,
-          cardTier: acc.cardTier || (card.name.includes('白金') ? '白金卡' : card.name.includes('金卡') ? '金卡' : '标准卡'),
-          bankName: acc.bankName || card.issuerName,
-        };
-      }
-      return acc;
-    });
-
-    if (onReorderAccounts) {
-      onReorderAccounts(normalized);
-      showToast(`🎨 已成功将 ${updatedCount} 张卡面对齐规整为 CardArt & Cardentify 高清卡面！`);
-    }
-  };
-
-  // HTML5 Drag Events
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    e.dataTransfer.setData('text/plain', id);
-    e.dataTransfer.effectAllowed = 'move';
-    setDraggedAccountId(id);
-  };
-
-  const handleDragOver = (e: React.DragEvent, id: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverAccountId !== id) {
-      setDragOverAccountId(id);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    const sourceId = e.dataTransfer.getData('text/plain') || draggedAccountId;
-    if (sourceId && sourceId !== targetId) {
-      handleReorder(sourceId, targetId);
-    }
-    setDraggedAccountId(null);
-    setDragOverAccountId(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedAccountId(null);
-    setDragOverAccountId(null);
-  };
 
   const handleOpenQuickReconcile = (acc: FinancialAccount) => {
     setReconcilingAccount(acc);
@@ -664,7 +535,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
       )}
 
       {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-800 text-purple-700 dark:text-purple-400 text-xs font-semibold mb-3">
@@ -688,238 +559,98 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-            {/* Active Reorder Mode Indicator */}
-            {isReorderMode && (
+            {/* 1-3. View Mode Switcher: 大类排版 / 平铺卡面 / 表格明细 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
+            <div className="flex items-center bg-transparent p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
               <button
-                onClick={() => setIsReorderMode(false)}
-                className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-xl shadow-xs transition-all active:scale-95 animate-pulse"
-                title="点击退出拖动排序并保存排版"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>完成排版</span>
-              </button>
-            )}
-
-            {/* View Mode Switcher: Grouped, Card, Table */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
-              <button
+                type="button"
                 onClick={() => setViewMode('GROUPED')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                className={`relative p-2 rounded-lg transition-all flex items-center justify-center group ${
                   viewMode === 'GROUPED'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-slate-900 text-white dark:bg-slate-700 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="大类分组排版 (按6大资产大类分区排列)"
+                title="大类排版"
+                aria-label="大类排版"
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>大类排版</span>
+                <Layers className="w-4 h-4" />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  大类排版
+                </span>
               </button>
+
               <button
+                type="button"
                 onClick={() => setViewMode('CARD')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                className={`relative p-2 rounded-lg transition-all flex items-center justify-center group ${
                   viewMode === 'CARD'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-slate-900 text-white dark:bg-slate-700 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="平铺卡面 (真实银行卡质感卡面)"
+                title="平铺卡面"
+                aria-label="平铺卡面"
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>平铺卡面</span>
+                <LayoutGrid className="w-4 h-4" />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  平铺卡面
+                </span>
               </button>
+
               <button
+                type="button"
                 onClick={() => setViewMode('TABLE')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                className={`relative p-2 rounded-lg transition-all flex items-center justify-center group ${
                   viewMode === 'TABLE'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-slate-900 text-white dark:bg-slate-700 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="数据明细表格"
+                title="表格明细"
+                aria-label="表格明细"
               >
-                <List className="w-3.5 h-3.5" />
-                <span>表格明细</span>
+                <List className="w-4 h-4" />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  表格明细
+                </span>
               </button>
             </div>
 
-            {/* Cloud Sync Button */}
+            {/* 4. 云端同步 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
             {onTriggerSync && (
               <button
+                id="btn-accounts-cloud-sync"
+                type="button"
                 onClick={handleManualSync}
                 disabled={isSyncing}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                className="relative p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group disabled:opacity-50"
                 title="立即同步最新资产账户到云端服务器"
+                aria-label="云端同步"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-purple-600' : 'text-slate-500'}`} />
-                <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-purple-600' : 'group-hover:rotate-180 transition-transform duration-300 text-slate-600 dark:text-slate-300'}`} />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  {isSyncing ? '正在同步...' : '云端同步'}
+                </span>
               </button>
             )}
 
-            {/* 更多管理工具收折菜单 */}
-            <div className="relative" ref={moreMenuRef}>
-              <button
-                id="btn-more-account-actions"
-                type="button"
-                onClick={() => setIsMoreMenuOpen((prev) => !prev)}
-                className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-xl border shadow-2xs transition-all active:scale-95 ${
-                  isMoreMenuOpen
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
-                }`}
-                title="管理工具（卡面艺廊、智能规整、批量校对等）"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-                <span>更多管理</span>
-              </button>
+            {/* 5. CardArt 卡面艺廊 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
+            <button
+              id="btn-open-cardart-gallery"
+              type="button"
+              onClick={() => setIsGalleryOpenGeneral(true)}
+              className="relative p-2 rounded-xl bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
+              title={`CardArt 卡面艺廊 (${totalGalleryCards.toLocaleString()} 款)`}
+              aria-label="CardArt 卡面艺廊"
+            >
+              <Palette className="w-4 h-4 text-rose-500 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                CardArt 卡面艺廊 ({totalGalleryCards.toLocaleString()}款)
+              </span>
+            </button>
 
-              {isMoreMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 sm:w-72 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200/90 dark:border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-slate-100 dark:divide-slate-800">
-                  {/* 1. 添加新账户 */}
-                  <div className="p-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreMenuOpen(false);
-                        onAddAccount('DEBIT_CARD');
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                        <Plus className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-900 dark:text-white">添加新账户</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">录入借记卡、信用卡或资产账户</div>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* 2. 卡面相关工具（CardArt卡面艺廊、全网卡面智能规整、隐藏式唤醒） */}
-                  <div className="p-1 space-y-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreMenuOpen(false);
-                        setIsGalleryOpenGeneral(true);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-amber-500 to-rose-600 text-white flex items-center justify-center shrink-0 text-sm shadow-2xs">
-                        🎨
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                          <span>CardArt卡面艺廊</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 font-bold border border-rose-200 dark:border-rose-800/60">
-                            {totalGalleryCards.toLocaleString()} 款
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">浏览 Apple Pay 高清卡面艺廊</div>
-                      </div>
-                    </button>
-
-                    {accounts.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMoreMenuOpen(false);
-                          handleNormalizeAllCardFaces();
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-950 dark:text-indigo-200 text-xs sm:text-sm font-medium transition-colors"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
-                          <Sparkles className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-indigo-900 dark:text-indigo-200">全网卡面智能规整</div>
-                          <div className="text-[11px] text-indigo-600/80 dark:text-indigo-400/80 truncate">智能匹配并规整高清无损卡面</div>
-                        </div>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreMenuOpen(false);
-                        const nextMode = globalWakeMode === 'hidden' ? 'pinned' : 'hidden';
-                        setGlobalWakeMode(nextMode);
-                        showToast(
-                          nextMode === 'hidden'
-                            ? '🍃 已开启隐藏式唤醒：卡面默认保持纯净艺术原貌，悬浮或轻触卡面即可唤醒卡号与可用余额'
-                            : '📌 已切换为卡面始终常显：所有卡片常显卡号与额度明细'
-                        );
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm ${
-                          globalWakeMode === 'hidden'
-                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
-                            : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
-                        }`}
-                      >
-                        {globalWakeMode === 'hidden' ? '🍃' : '📌'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-slate-900 dark:text-white">
-                          {globalWakeMode === 'hidden' ? '隐藏式唤醒: 开启' : '卡面明细: 始终常显'}
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                          {globalWakeMode === 'hidden' ? '卡面纯净艺术，触碰唤醒信息' : '所有卡面始终常显信息'}
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* 3. 账户维护工具（批量校对、拖动排序） */}
-                  {accounts.length > 0 && (
-                    <div className="p-1 space-y-0.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMoreMenuOpen(false);
-                          onOpenBatchReconcile();
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
-                          <Sliders className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-slate-900 dark:text-white">批量校对</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">快速校准所有账户余额与额度</div>
-                        </div>
-                      </button>
-
-                      {accounts.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsMoreMenuOpen(false);
-                            setIsReorderMode(!isReorderMode);
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-950 dark:text-purple-300 text-xs sm:text-sm font-medium transition-colors"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
-                            <ArrowUpDown className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-purple-900 dark:text-purple-200">
-                              {isReorderMode ? '完成拖动排版' : '拖动排序与排版'}
-                            </div>
-                            <div className="text-[11px] text-purple-600/80 dark:text-purple-400/80 truncate">开启拖拽调整卡面先后顺序</div>
-                          </div>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Primary Add Account Button */}
+            {/* 6. Primary Add Account Button */}
             <button
               id="btn-add-account-main"
               onClick={() => onAddAccount('DEBIT_CARD')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
             >
               <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
               <span>添加资产</span>
@@ -1054,60 +785,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           })}
       </div>
 
-      {/* REORDER TOOLBAR (when in reorder mode) */}
-      {isReorderMode && accounts.length > 1 && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/90 shadow-2xs space-y-3 animate-in fade-in duration-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-600 text-white">
-                <Move className="w-4 h-4" />
-              </div>
-              <div>
-                <h4 className="text-xs sm:text-sm font-bold text-purple-950">
-                  拖拽自定义卡片排版模式
-                </h4>
-                <p className="text-[11px] sm:text-xs text-purple-700">
-                  长按任意卡片即可直接拖动位置，或使用快捷置顶/前移/后移按钮，松开自动保存。
-                </p>
-              </div>
-            </div>
 
-            {/* Quick Sorters */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] font-semibold text-purple-800">一键快捷排版：</span>
-              <button
-                onClick={handleSortByBalance}
-                className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-purple-100 text-purple-900 text-xs font-semibold border border-purple-200 shadow-2xs transition-colors flex items-center gap-1"
-              >
-                <ArrowDownWideNarrow className="w-3 h-3 text-purple-600" />
-                <span>余额从高到低</span>
-              </button>
-              <button
-                onClick={handleSortByCategory}
-                className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-purple-100 text-purple-900 text-xs font-semibold border border-purple-200 shadow-2xs transition-colors flex items-center gap-1"
-              >
-                <Layers className="w-3 h-3 text-purple-600" />
-                <span>按大类标准规整</span>
-              </button>
-              <button
-                onClick={handleSortByDueDate}
-                className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-purple-100 text-purple-900 text-xs font-semibold border border-purple-200 shadow-2xs transition-colors flex items-center gap-1"
-              >
-                <Calendar className="w-3 h-3 text-purple-600" />
-                <span>还款日临近优先</span>
-              </button>
-              <button
-                onClick={handleNormalizeAllCardFaces}
-                className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1"
-                title="一键规整所有卡面与 Cardentify / Apple Pay 对齐"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Cardentify卡面质感规整</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Empty State */}
       {accounts.length === 0 ? (
@@ -1404,7 +1082,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 {/* Cards Grid for this category (when expanded) */}
                 {!isCollapsed && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 pt-1 animate-in fade-in duration-200">
-                    {groupAccounts.map((acc, index) => {
+                    {groupAccounts.map((acc) => {
                       const isDraggingThis = draggedAccountId === acc.id;
                       const isOverThis = dragOverAccountId === acc.id && !isDraggingThis;
 
@@ -1416,18 +1094,19 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                           onDragOver={(e) => handleDragOver(e, acc.id)}
                           onDrop={(e) => handleDrop(e, acc.id)}
                           onDragEnd={handleDragEnd}
-                          className={`transition-all duration-200 rounded-3xl ${
+                          className={`transition-all duration-200 rounded-3xl cursor-grab active:cursor-grabbing ${
                             isDraggingThis
                               ? 'opacity-30 scale-95 ring-2 ring-purple-500 shadow-2xl'
                               : isOverThis
                               ? 'scale-102 ring-4 ring-purple-400 bg-purple-50/50 p-1 shadow-xl'
                               : ''
                           }`}
+                          title="按住卡片可直接拖动排版位置"
                         >
                           <AccountCardFace
                             account={acc}
                             privacyMode={privacyMode}
-                            wakeMode={globalWakeMode}
+                            wakeMode="hidden"
                             projectName={
                               acc.projectName ||
                               (acc.projectId ? projectMap.get(acc.projectId)?.name : undefined)
@@ -1445,12 +1124,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                             onOpenRepayment={onOpenRepayment}
                             onOpenNewTx={onOpenNewTx}
                             onOpenCardentifyGallery={(targetAcc) => setCardentifyGalleryAccount(targetAcc)}
-                            isReorderMode={isReorderMode}
-                            reorderIndex={index}
-                            totalCount={groupAccounts.length}
-                            onMoveUp={() => handleMoveUp(acc.id)}
-                            onMoveDown={() => handleMoveDown(acc.id)}
-                            onMoveTop={() => handleMoveTop(acc.id)}
+                            isReorderMode={false}
                             onAutoRegenColor={(accountId) => {
                               const newPal = getRandomCardBackground();
                               onDirectUpdateAccount(accountId, { cardBgColor: newPal.gradient });
@@ -1466,9 +1140,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           })}
         </div>
       ) : viewMode === 'CARD' ? (
-        /* REALISTIC CARD FACE GRID (Flat with Drag and Drop) */
+        /* REALISTIC CARD FACE GRID (Natural Drag & Drop Support) */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {filteredAccounts.map((acc, index) => {
+          {filteredAccounts.map((acc) => {
             const isDraggingThis = draggedAccountId === acc.id;
             const isOverThis = dragOverAccountId === acc.id && !isDraggingThis;
 
@@ -1480,18 +1154,19 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 onDragOver={(e) => handleDragOver(e, acc.id)}
                 onDrop={(e) => handleDrop(e, acc.id)}
                 onDragEnd={handleDragEnd}
-                className={`transition-all duration-200 rounded-3xl ${
+                className={`transition-all duration-200 rounded-3xl cursor-grab active:cursor-grabbing ${
                   isDraggingThis
                     ? 'opacity-30 scale-95 ring-2 ring-purple-500 shadow-2xl'
                     : isOverThis
                     ? 'scale-102 ring-4 ring-purple-400 bg-purple-50/50 p-1 shadow-xl'
                     : ''
                 }`}
+                title="按住卡片可直接拖动排版位置"
               >
                 <AccountCardFace
                   account={acc}
                   privacyMode={privacyMode}
-                  wakeMode={globalWakeMode}
+                  wakeMode="hidden"
                   projectName={
                     acc.projectName ||
                     (acc.projectId ? projectMap.get(acc.projectId)?.name : undefined)
@@ -1509,12 +1184,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   onOpenRepayment={onOpenRepayment}
                   onOpenNewTx={onOpenNewTx}
                   onOpenCardentifyGallery={(targetAcc) => setCardentifyGalleryAccount(targetAcc)}
-                  isReorderMode={isReorderMode}
-                  reorderIndex={index}
-                  totalCount={filteredAccounts.length}
-                  onMoveUp={() => handleMoveUp(acc.id)}
-                  onMoveDown={() => handleMoveDown(acc.id)}
-                  onMoveTop={() => handleMoveTop(acc.id)}
+                  isReorderMode={false}
                   onAutoRegenColor={(accountId) => {
                     const newPal = getRandomCardBackground();
                     onDirectUpdateAccount(accountId, { cardBgColor: newPal.gradient });
@@ -1525,13 +1195,12 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           })}
         </div>
       ) : (
-        /* DENSE TABLE LIST VIEW (with Drag & Drop Support) */
+        /* DENSE TABLE LIST VIEW (Natural Drag & Drop Support) */
         <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                 <tr>
-                  <th className="py-3 px-3 w-10 text-center">排版</th>
                   <th className="py-3 px-4">账户卡片</th>
                   <th className="py-3 px-4">资产大类</th>
                   <th className="py-3 px-4">持卡人/卡号</th>
@@ -1555,22 +1224,15 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                       onDragOver={(e) => handleDragOver(e, acc.id)}
                       onDrop={(e) => handleDrop(e, acc.id)}
                       onDragEnd={handleDragEnd}
-                      className={`transition-colors ${
+                      className={`transition-colors cursor-grab active:cursor-grabbing ${
                         isDraggingThis
                           ? 'opacity-30 bg-purple-50'
                           : isOverThis
                           ? 'bg-purple-100/70 border-y-2 border-purple-400'
                           : 'hover:bg-slate-50/70'
                       }`}
+                      title="按住此行可直接上下拖动调整排序"
                     >
-                      <td className="py-3 px-3 text-center">
-                        <div
-                          className="cursor-grab active:cursor-grabbing inline-flex p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
-                          title="按住上下拖拽排版"
-                        >
-                          <GripVertical className="w-4 h-4" />
-                        </div>
-                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-mono font-bold flex items-center justify-center">
@@ -1620,23 +1282,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Row Move buttons */}
-                          <button
-                            onClick={() => handleMoveUp(acc.id)}
-                            disabled={index === 0}
-                            className="p-1 rounded text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100"
-                            title="上移"
-                          >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleMoveDown(acc.id)}
-                            disabled={index >= filteredAccounts.length - 1}
-                            className="p-1 rounded text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100"
-                            title="下移"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
 
                           <button
                             onClick={() => handleOpenQuickReconcile(acc)}

@@ -376,20 +376,66 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     return [...unifiedCardArtList, ...unifiedCardentifyList];
   }, [unifiedCardArtList, unifiedCardentifyList]);
 
-  // Top popular banks for quick chip filtration
+  // Top popular institutions / banks for quick chip filtration with accurate matching across live card pool
   const topBanks = useMemo(() => {
-    const counts: Record<string, number> = {};
-    cardentifyList.forEach((c) => {
-      const b = c.issuerName?.trim();
-      if (b) {
-        counts[b] = (counts[b] || 0) + 1;
+    const targetList =
+      activeSource === 'CARDART'
+        ? unifiedCardArtList
+        : activeSource === 'CARDENTIFY'
+        ? unifiedCardentifyList
+        : allUnifiedCards;
+
+    const POPULAR_BANKS = [
+      '招商银行',
+      '中国工商银行',
+      '中国建设银行',
+      '中国银行',
+      '交通银行',
+      '中信银行',
+      '浦发银行',
+      '广发银行',
+      '平安银行',
+      '民生银行',
+      '兴业银行',
+      '光大银行',
+      '华夏银行',
+      '汇丰银行',
+      '渣打银行',
+      '花旗银行',
+      '美国运通',
+      'JCB',
+    ];
+
+    const results: [string, number][] = [];
+
+    POPULAR_BANKS.forEach((bank) => {
+      const bankTerms = expandSearchTerms(bank);
+      let matchCount = 0;
+      targetList.forEach((card) => {
+        if (card.issuerName === bank) {
+          matchCount++;
+          return;
+        }
+        const text = (
+          card.name +
+          ' ' +
+          (card.issuerName || '') +
+          ' ' +
+          (card.titleEn || '') +
+          ' ' +
+          (card.tags?.join(' ') || '')
+        ).toLowerCase();
+        if (bankTerms.some((t) => text.includes(t))) {
+          matchCount++;
+        }
+      });
+      if (matchCount > 0) {
+        results.push([bank, matchCount]);
       }
     });
-    return Object.entries(counts)
-      .filter(([_, count]) => count >= 5)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 16);
-  }, [cardentifyList]);
+
+    return results.sort((a, b) => b[1] - a[1]);
+  }, [allUnifiedCards, unifiedCardArtList, unifiedCardentifyList, activeSource]);
 
   // Filtered Cards
   const filteredCards = useMemo(() => {

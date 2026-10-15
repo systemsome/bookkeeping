@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS } from './src/lib/constants';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS } from './src/lib/constants';
 import { expandSearchTerms } from './src/lib/brandHelper';
 
 // Data directory for persistent storage (especially in Docker / NAS mounts)
@@ -128,6 +128,7 @@ function loadPersistedStores() {
             accounts: Array.isArray(val?.accounts) ? val.accounts : [],
             transactions: Array.isArray(val?.transactions) ? val.transactions : [],
             projects: Array.isArray(val?.projects) ? val.projects : [],
+            recurringTasks: Array.isArray(val?.recurringTasks) ? val.recurringTasks : [],
             lastUpdated: val?.lastUpdated || new Date().toISOString(),
           };
           localSyncStore.set(uid, ledger);
@@ -151,6 +152,7 @@ function loadPersistedStores() {
         accounts: INITIAL_DEMO_ACCOUNTS,
         transactions: INITIAL_DEMO_TRANSACTIONS,
         projects: INITIAL_DEMO_PROJECTS,
+        recurringTasks: INITIAL_DEMO_RECURRING_TASKS,
         lastUpdated: new Date().toISOString(),
       };
       localSyncStore.set('demo-user-888', defaultLedger);
@@ -735,6 +737,7 @@ async function startServer() {
         accounts: Array.isArray(data.accounts) ? data.accounts : [],
         transactions: Array.isArray(data.transactions) ? data.transactions : [],
         projects: Array.isArray(data.projects) ? data.projects : [],
+        recurringTasks: Array.isArray(data.recurringTasks) ? data.recurringTasks : [],
         lastUpdated: data.lastUpdated,
       });
     }
@@ -743,13 +746,14 @@ async function startServer() {
       accounts: [],
       transactions: [],
       projects: [],
+      recurringTasks: [],
       message: 'No synced data yet',
     });
   });
 
   // Sync Post
   app.post('/api/sync', (req, res) => {
-    const { userId, user, accounts, transactions, projects, senderDeviceId } = req.body || {};
+    const { userId, user, accounts, transactions, projects, recurringTasks, senderDeviceId } = req.body || {};
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
@@ -772,6 +776,7 @@ async function startServer() {
       accounts: normalizedAccounts,
       transactions: Array.isArray(transactions) ? transactions : (existing.transactions || []),
       projects: Array.isArray(projects) ? projects : (existing.projects || []),
+      recurringTasks: Array.isArray(recurringTasks) ? recurringTasks : (existing.recurringTasks || []),
       lastUpdated: nowIso,
     };
 

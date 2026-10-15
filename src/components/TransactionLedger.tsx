@@ -1126,7 +1126,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold mb-3">
@@ -1161,103 +1161,130 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons: 纯功能图标展示，鼠标悬停显示文字浮层，与资产账户与导航栏风格统一 */}
           <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-            {/* Generate Receipt Button */}
+            {/* 1. Generate Receipt Button (纯功能图标，悬停显示文字) */}
             <button
               id="btn-ledger-receipt"
+              type="button"
               onClick={() => {
                 setReceiptSingleTxId(null);
                 setIsReceiptModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs sm:text-sm font-semibold shadow-2xs active:scale-95 transition-all"
-              title="生成账单小票"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
+              title={
+                selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE'
+                  ? `项目小票 (${projects.find((p) => p.id === selectedProjectId)?.name || '账本项目'})`
+                  : '账单小票'
+              }
+              aria-label="账单小票"
             >
-              <Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>
+              <Receipt className="w-4 h-4 text-amber-500 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
                 {selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE'
                   ? `项目小票 (${projects.find((p) => p.id === selectedProjectId)?.name || '账本项目'})`
                   : '账单小票'}
               </span>
-              <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
             </button>
 
-            {/* Recurring Tasks Button */}
+            {/* 2. Recurring Tasks Button (纯功能图标，悬停显示文字) */}
             {onOpenRecurringTasks && (
               <button
                 id="btn-ledger-recurring"
+                type="button"
                 onClick={onOpenRecurringTasks}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+                className="relative p-2 rounded-xl bg-transparent hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
                 title="管理周期自动记账任务"
+                aria-label="周期任务"
               >
-                <CalendarClock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span>周期任务</span>
+                <CalendarClock className="w-4 h-4 text-indigo-500 transition-transform group-hover:scale-110" />
                 {typeof recurringTasksCount === 'number' && recurringTasksCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-600 text-white font-bold">
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 min-w-[18px] text-center rounded-full text-[10px] bg-indigo-600 text-white font-mono font-bold shadow-xs">
                     {recurringTasksCount}
                   </span>
                 )}
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  周期任务{typeof recurringTasksCount === 'number' && recurringTasksCount > 0 ? ` (${recurringTasksCount})` : ''}
+                </span>
               </button>
             )}
 
-            {/* Trash Bin Button */}
+            {/* 3. Trash Bin Button (纯功能图标，悬停显示文字) */}
             {onOpenTrashBin && (
               <button
                 id="btn-ledger-trash"
+                type="button"
                 onClick={onOpenTrashBin}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+                className="relative p-2 rounded-xl bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
                 title="查看已删除流水与一键防误删恢复"
+                aria-label="回收站"
               >
-                <ArchiveRestore className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                <span>回收站</span>
+                <ArchiveRestore className="w-4 h-4 text-rose-500 transition-transform group-hover:scale-110" />
                 {typeof trashCount === 'number' && trashCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-600 text-white font-bold">
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 min-w-[18px] text-center rounded-full text-[10px] bg-rose-600 text-white font-mono font-bold shadow-xs">
                     {trashCount}
                   </span>
                 )}
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  回收站{typeof trashCount === 'number' && trashCount > 0 ? ` (${trashCount})` : ''}
+                </span>
               </button>
             )}
 
-            {/* Cloud Sync Button */}
+            {/* 4. Cloud Sync Button (纯功能图标，悬停显示文字) */}
             {onTriggerSync && (
               <button
+                id="btn-ledger-cloud-sync"
+                type="button"
                 onClick={handleManualSync}
                 disabled={isSyncing}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                className="relative p-2 rounded-xl bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group disabled:opacity-50"
                 title="立即同步最新账本明细到云端服务器"
+                aria-label="云端同步"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-600' : 'text-slate-500'}`} />
-                <span>{isSyncing ? '正在同步...' : '云端同步'}</span>
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-amber-600' : 'group-hover:rotate-180 transition-transform duration-300 text-slate-600 dark:text-slate-300'}`} />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  {isSyncing ? '正在同步...' : '云端同步'}
+                </span>
               </button>
             )}
 
-            {/* Upload Button */}
+            {/* 5. Upload Import Button (纯功能图标，悬停显示文字) */}
             <button
               id="btn-ledger-upload"
+              type="button"
               onClick={() => setIsImportModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="上传导入微信/支付宝账单、银行流水或标准表格"
+              aria-label="上传导入"
             >
-              <UploadCloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>上传导入</span>
+              <UploadCloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                上传导入
+              </span>
             </button>
 
-            {/* Export Button */}
+            {/* 6. Export Button (纯功能图标，悬停显示文字) */}
             <button
               id="btn-ledger-export"
+              type="button"
               onClick={() => setIsExportModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm shadow-2xs active:scale-95 transition-all"
+              className="relative p-2 rounded-xl bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
               title="导出 Excel / CSV / JSON"
+              aria-label="导出明细"
             >
-              <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>导出</span>
+              <Download className="w-4 h-4 text-blue-600 dark:text-blue-400 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                导出明细
+              </span>
             </button>
 
-            {/* Primary Add Record Button */}
+            {/* 7. Primary Add Record Button (与资产账户“添加资产”统一) */}
             <button
               id="btn-ledger-add"
+              type="button"
               onClick={() => onOpenNewTx('EXPENSE', undefined, selectedDateFilter || undefined)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all"
             >
               <Plus className="w-4 h-4 text-emerald-400 stroke-[3]" />
               <span>记一笔</span>
@@ -2094,11 +2121,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 setReceiptSingleTxId(null);
                 setIsReceiptModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-400 font-semibold border border-amber-200/80 dark:border-amber-800/60 transition-colors shadow-2xs"
+              className="relative p-1.5 rounded-xl bg-transparent hover:bg-amber-50 dark:hover:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center group"
               title="一键生成当前明细小票（支持导出当前所选项目的账单小票）"
+              aria-label="账单小票"
             >
-              <Receipt className="w-3.5 h-3.5" />
-              <span>
+              <Receipt className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
                 {selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE'
                   ? `生成「${projects.find((p) => p.id === selectedProjectId)?.name || '项目'}」小票`
                   : '账单小票'}
