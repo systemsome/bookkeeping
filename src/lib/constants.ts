@@ -493,8 +493,31 @@ export const INITIAL_DEMO_TRANSACTIONS: Transaction[] = [
     accountId: 'acc-jd-baitiao',
     category: '日用百货',
     tag: '家居消耗',
-    description: '京东自营购买空气炸锅配件与厨房耗材',
+    description: '京东自营购买空气炸锅配件与厨房耗材 (已拆分子项)',
     merchant: '京东自营旗舰店',
+    splitItems: [
+      {
+        id: 'split-3-1',
+        category: '日用百货',
+        subCategory: '厨房耗材',
+        amount: 219.00,
+        description: '耐高温硅胶油刷与空气炸锅专用烤纸',
+      },
+      {
+        id: 'split-3-2',
+        category: '数码电器',
+        subCategory: '小家电配件',
+        amount: 250.00,
+        description: '空气炸锅双层烤架与防烫夹',
+      },
+      {
+        id: 'split-3-3',
+        category: '餐饮美食',
+        subCategory: '调料食材',
+        amount: 120.00,
+        description: '烧烤撒料包与低脂喷雾橄榄油',
+      },
+    ],
     createdAt: '2026-08-14T20:10:00Z',
   },
   {

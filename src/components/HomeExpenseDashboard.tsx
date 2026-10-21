@@ -177,12 +177,16 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
             {onOpenRecurringTasks && (
               <button
                 id="btn-home-recurring"
+                type="button"
                 onClick={onOpenRecurringTasks}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-indigo-600 text-xs font-semibold border border-indigo-200 shadow-2xs transition-colors"
+                className="relative p-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 shadow-2xs transition-all flex items-center justify-center active:scale-95 group"
                 title="管理固定房租、订阅、会员等周期自动记账任务"
+                aria-label="周期任务"
               >
-                <CalendarClock className="w-3.5 h-3.5 text-indigo-500" />
-                <span>周期任务</span>
+                <CalendarClock className="w-4 h-4 text-indigo-500 transition-transform group-hover:scale-110" />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                  周期任务
+                </span>
               </button>
             )}
             <button

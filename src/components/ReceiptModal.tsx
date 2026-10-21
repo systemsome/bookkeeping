@@ -1671,50 +1671,86 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     {targetTransactions.map((tx, idx) => {
                       const acc = accountMap.get(tx.accountId);
                       const isExp = tx.type === 'EXPENSE';
+                      const hasSplit = Boolean(tx.splitItems && tx.splitItems.length > 0);
                       return (
-                        <div key={tx.id} className="py-2 flex items-center justify-between gap-1">
-                          {/* Item Name & Meta */}
-                          <div className="w-2/5 shrink-0 pr-1">
-                            <div className="font-semibold flex items-center gap-1 truncate">
-                              <span className="opacity-50 text-[10px] font-mono">
-                                {String(idx + 1).padStart(2, '0')}.
-                              </span>
-                              <span className="truncate">{tx.category}</span>
+                        <div key={tx.id} className="py-2 space-y-1.5">
+                          <div className="flex items-center justify-between gap-1">
+                            {/* Item Name & Meta */}
+                            <div className="w-2/5 shrink-0 pr-1">
+                              <div className="font-semibold flex items-center gap-1 truncate">
+                                <span className="opacity-50 text-[10px] font-mono">
+                                  {String(idx + 1).padStart(2, '0')}.
+                                </span>
+                                <span className="truncate">{tx.category}</span>
+                                {hasSplit && (
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-mono font-bold shrink-0">
+                                    拆分{tx.splitItems!.length}项
+                                  </span>
+                                )}
+                              </div>
+                              {tx.projectName && (
+                                <div className="text-[9px] font-medium text-indigo-600 dark:text-indigo-400 truncate flex items-center gap-0.5">
+                                  <span>📁</span>
+                                  <span className="truncate">{tx.projectName}</span>
+                                </div>
+                              )}
+                              {tx.description && (
+                                <div className="text-[10px] opacity-70 truncate font-sans">
+                                  {tx.description}
+                                </div>
+                              )}
+                              <div className="text-[9px] opacity-50 font-mono">
+                                {tx.date} {tx.time || ''}
+                              </div>
                             </div>
-                            {tx.projectName && (
-                              <div className="text-[9px] font-medium text-indigo-600 dark:text-indigo-400 truncate flex items-center gap-0.5">
-                                <span>📁</span>
-                                <span className="truncate">{tx.projectName}</span>
-                              </div>
-                            )}
-                            {tx.description && (
-                              <div className="text-[10px] opacity-70 truncate font-sans">
-                                {tx.description}
-                              </div>
-                            )}
-                            <div className="text-[9px] opacity-50 font-mono">
-                              {tx.date} {tx.time || ''}
+
+                            {/* Account */}
+                            <div className="w-1/4 shrink-0 text-center text-[10px] opacity-80 truncate font-sans">
+                              {acc ? (
+                                <span title={`${acc.name}${acc.cardNumberLast4 ? ` (尾号 ${acc.cardNumberLast4})` : ''}`}>
+                                  {acc.bankName || acc.name}
+                                  {acc.cardNumberLast4 ? ` (*${acc.cardNumberLast4})` : ''}
+                                </span>
+                              ) : (
+                                '默认账户'
+                              )}
+                            </div>
+
+                            {/* Amount */}
+                            <div className="w-1/3 shrink-0 text-right font-mono font-bold">
+                              <span className={isExp ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                                {isExp ? '-' : '+'}¥{tx.amount.toFixed(2)}
+                              </span>
                             </div>
                           </div>
 
-                          {/* Account */}
-                          <div className="w-1/4 shrink-0 text-center text-[10px] opacity-80 truncate font-sans">
-                            {acc ? (
-                              <span title={`${acc.name}${acc.cardNumberLast4 ? ` (尾号 ${acc.cardNumberLast4})` : ''}`}>
-                                {acc.bankName || acc.name}
-                                {acc.cardNumberLast4 ? ` (*${acc.cardNumberLast4})` : ''}
-                              </span>
-                            ) : (
-                              '默认账户'
-                            )}
-                          </div>
-
-                          {/* Amount */}
-                          <div className="w-1/3 shrink-0 text-right font-mono font-bold">
-                            <span className={isExp ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                              {isExp ? '-' : '+'}¥{tx.amount.toFixed(2)}
-                            </span>
-                          </div>
+                          {/* 🔀 小票拆分细目清单 (Itemized Split Breakdown) */}
+                          {hasSplit && (
+                            <div className="ml-3 pl-2 border-l-2 border-indigo-400/60 dark:border-indigo-600/60 space-y-1 bg-indigo-50/40 dark:bg-indigo-950/20 py-1.5 px-2 rounded-r-lg font-mono">
+                              <div className="text-[9px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
+                                <span>└ 拆分子项细目 ({tx.splitItems!.length}项):</span>
+                                <span className="opacity-70 text-[8px]">占比</span>
+                              </div>
+                              {tx.splitItems!.map((item, sIdx) => {
+                                const sPct = tx.amount > 0 ? (((item.amount || 0) / tx.amount) * 100).toFixed(0) : '0';
+                                return (
+                                  <div key={item.id || sIdx} className="flex items-center justify-between text-[10px] opacity-90 gap-1.5">
+                                    <div className="truncate max-w-[160px] font-sans">
+                                      <span className="opacity-50">#{sIdx + 1} </span>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">{item.category}</span>
+                                      {item.description && (
+                                        <span className="opacity-70 text-[9px]"> ({item.description})</span>
+                                      )}
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className="font-bold">¥{(item.amount || 0).toFixed(2)}</span>
+                                      <span className="text-[9px] opacity-60 ml-1">({sPct}%)</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

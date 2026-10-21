@@ -171,6 +171,7 @@ export default function App() {
   const [txModalDefaultDate, setTxModalDefaultDate] = useState<string | undefined>(undefined);
   const [txModalProjectId, setTxModalProjectId] = useState<string | undefined>(undefined);
   const [txModalRefundedTxId, setTxModalRefundedTxId] = useState<string | undefined>(undefined);
+  const [txModalSplitEnabled, setTxModalSplitEnabled] = useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const [isRepayModalOpen, setIsRepayModalOpen] = useState(false);
@@ -477,7 +478,8 @@ export default function App() {
     type: string = 'EXPENSE',
     accountId?: string,
     defaultDate?: string,
-    projectId?: string
+    projectId?: string,
+    splitEnabled?: boolean
   ) => {
     setEditingTransaction(null);
     setTxModalDefaultType(type as TransactionType);
@@ -485,6 +487,7 @@ export default function App() {
     setTxModalDefaultDate(defaultDate);
     setTxModalProjectId(projectId);
     setTxModalRefundedTxId(undefined);
+    setTxModalSplitEnabled(Boolean(splitEnabled));
     setIsTxModalOpen(true);
   };
 
@@ -494,16 +497,22 @@ export default function App() {
     setTxModalRefundedTxId(tx.id);
     setTxModalAccountId(tx.accountId);
     setTxModalProjectId(tx.projectId);
+    setTxModalSplitEnabled(false);
     setIsTxModalOpen(true);
   };
 
-  const handleEditTransaction = (tx: Transaction) => {
+  const handleEditTransaction = (tx: Transaction, splitEnabled?: boolean) => {
     setEditingTransaction(tx);
     setTxModalDefaultType(tx.type);
     setTxModalAccountId(tx.accountId);
     setTxModalDefaultDate(tx.date);
     setTxModalProjectId(tx.projectId);
     setTxModalRefundedTxId(tx.refundedTxId);
+    setTxModalSplitEnabled(
+      splitEnabled !== undefined
+        ? splitEnabled
+        : Boolean(tx.splitItems && tx.splitItems.length > 0)
+    );
     setIsTxModalOpen(true);
   };
 
@@ -1224,8 +1233,8 @@ export default function App() {
               onBatchUpdateTransactions={handleBatchUpdateTx}
               onDuplicateTransaction={handleDuplicateTransaction}
               onEditTransaction={handleEditTransaction}
-              onOpenNewTx={(type, accId, date, projId) =>
-                handleOpenNewTx(type || 'EXPENSE', accId, date, projId)
+              onOpenNewTx={(type, accId, date, projId, splitEnabled) =>
+                handleOpenNewTx(type || 'EXPENSE', accId, date, projId, splitEnabled)
               }
               onRefundTransaction={handleRefundExpense}
               onImportTransactions={handleImportTransactions}
@@ -1254,8 +1263,8 @@ export default function App() {
               }}
               onSaveProject={handleDirectSaveProject}
               onDeleteProject={handleDeleteProject}
-              onOpenNewTx={(type, accId, date, projId) =>
-                handleOpenNewTx(type || 'EXPENSE', accId, date, projId)
+              onOpenNewTx={(type, accId, date, projId, splitEnabled) =>
+                handleOpenNewTx(type || 'EXPENSE', accId, date, projId, splitEnabled)
               }
               onEditTransaction={handleEditTransaction}
               onDeleteTransaction={handleDeleteTx}
@@ -1349,6 +1358,7 @@ export default function App() {
           initialRefundedTxId={txModalRefundedTxId}
           initialTransaction={editingTransaction}
           initialDate={txModalDefaultDate}
+          initialSplitEnabled={txModalSplitEnabled}
           allTransactions={transactions || []}
           onClose={() => {
             setIsTxModalOpen(false);
@@ -1356,6 +1366,7 @@ export default function App() {
             setTxModalDefaultDate(undefined);
             setTxModalProjectId(undefined);
             setTxModalRefundedTxId(undefined);
+            setTxModalSplitEnabled(false);
           }}
           onSubmit={handleSubmitTransaction}
         />

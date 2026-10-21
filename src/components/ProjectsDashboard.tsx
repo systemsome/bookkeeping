@@ -29,6 +29,7 @@ import {
   Wallet,
   Cloud,
   RefreshCw,
+  Split,
 } from 'lucide-react';
 import {
   LedgerProject,
@@ -43,6 +44,7 @@ import { calculateProjectStats } from '../lib/storage';
 import { formatCurrency } from '../lib/formatters';
 import { CategoryIcon } from './CategoryIcon';
 import { AccountCardFace } from './AccountCardFace';
+import { SplitDetailModal } from './SplitDetailModal';
 
 interface ProjectsDashboardProps {
   projects?: LedgerProject[];
@@ -52,8 +54,8 @@ interface ProjectsDashboardProps {
   currentUser?: UserProfile | null;
   onSaveProject?: (project: LedgerProject) => void;
   onDeleteProject?: (projectId: string) => void;
-  onOpenNewTx?: (type?: TransactionType, accountId?: string, defaultDate?: string, projectId?: string) => void;
-  onEditTransaction?: (tx: Transaction) => void;
+  onOpenNewTx?: (type?: TransactionType, accountId?: string, defaultDate?: string, projectId?: string, splitEnabled?: boolean) => void;
+  onEditTransaction?: (tx: Transaction, splitEnabled?: boolean) => void;
   onDeleteTransaction?: (id: string) => void;
   onRefundTransaction?: (originalTx: Transaction) => void;
   onOpenProjectEditor?: (project?: LedgerProject | null) => void;
@@ -112,6 +114,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<LedgerProject | null>(null);
   const [deleteAckChecked, setDeleteAckChecked] = useState(false);
   const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
+  const [viewingSplitTx, setViewingSplitTx] = useState<Transaction | null>(null);
 
   const openDeleteProjectConfirm = (proj: LedgerProject) => {
     setDeleteAckChecked(false);
@@ -967,6 +970,17 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                               #{tx.tag}
                             </span>
                           )}
+                          {tx.splitItems && tx.splitItems.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setViewingSplitTx(tx)}
+                              className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                              title="点击查看单笔拆分构成占比与子项详情"
+                            >
+                              <Split className="w-3 h-3 text-indigo-500" />
+                              <span>拆分 {tx.splitItems.length} 项</span>
+                            </button>
+                          )}
                           {isRefund && (
                             <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800">
                               平账冲红凭证
@@ -1032,6 +1046,24 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                             <span>冲红</span>
                           </button>
                         )}
+                        {/* 🔀 Split Details / Quick Split Action */}
+                        {tx.splitItems && tx.splitItems.length > 0 ? (
+                          <button
+                            onClick={() => setViewingSplitTx(tx)}
+                            className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors"
+                            title={`查看拆分明细看板 (${tx.splitItems.length}个子项)`}
+                          >
+                            <Split className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (isExpense || isIncome) && onEditTransaction ? (
+                          <button
+                            onClick={() => onEditTransaction(tx, true)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                            title="对此笔账单开启拆分记账"
+                          >
+                            <Split className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => onEditTransaction(tx)}
                           className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -1758,6 +1790,19 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* 🔀 拆分账单全屏详情与占比看板弹窗 (SplitDetailModal) */}
+      {viewingSplitTx && (
+        <SplitDetailModal
+          isOpen={!!viewingSplitTx}
+          onClose={() => setViewingSplitTx(null)}
+          transaction={viewingSplitTx}
+          accounts={accounts || []}
+          onEditTransaction={(tx) => {
+            setViewingSplitTx(null);
+            if (onEditTransaction) onEditTransaction(tx, true);
+          }}
+        />
       )}
     </div>
   );

@@ -40,14 +40,14 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner & Metric Summary */}
-      <div className="rounded-3xl bg-white border border-slate-200/80 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-semibold mb-3">
               <CreditCard className="w-3.5 h-3.5" />
               <span>信用卡专区</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
               信用卡与额度还款管理
             </h2>
           </div>
@@ -56,8 +56,9 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
           <div className="flex items-center gap-3">
             <button
               id="btn-credit-repay-all"
+              type="button"
               onClick={() => onOpenRepayment()}
-              className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-xs active:scale-95 transition-all text-sm"
+              className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold px-4 py-2 rounded-xl shadow-xs active:scale-95 transition-all text-xs sm:text-sm"
             >
               <ReceiptText className="w-4 h-4" />
               <span>一键快速还款</span>
@@ -66,33 +67,33 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
         </div>
 
         {/* 3 Metric Pillars */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/60">
-            <span className="text-xs text-slate-500 font-medium">总授信信用额度</span>
-            <div className="text-2xl font-bold text-slate-900 mt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">总授信信用额度</span>
+            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
               {formatCurrency(summary.totalCreditLimit, privacyMode)}
             </div>
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               共绑定 {creditAccounts.length} 张信贷卡片
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-rose-50/50 border border-rose-100">
-            <span className="text-xs text-rose-700 font-medium">当前已用金额 (待还账单)</span>
-            <div className="text-2xl font-bold text-rose-600 mt-1">
+          <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40">
+            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">当前已用金额 (待还账单)</span>
+            <div className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
               {formatCurrency(summary.totalUsedCredit, privacyMode)}
             </div>
-            <div className="text-xs text-rose-500 mt-1">
+            <div className="text-xs text-rose-500 dark:text-rose-400/80 mt-1">
               额度占用率: {summary.creditUtilizationRate.toFixed(1)}%
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100">
-            <span className="text-xs text-emerald-700 font-medium">当前剩余可用总额度</span>
-            <div className="text-2xl font-bold text-emerald-700 mt-1">
+          <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
+            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">当前剩余可用总额度</span>
+            <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
               {formatCurrency(summary.totalAvailableCredit, privacyMode)}
             </div>
-            <div className="text-xs text-emerald-600 mt-1">
+            <div className="text-xs text-emerald-600 dark:text-emerald-400/80 mt-1">
               随时可刷卡或白条消费
             </div>
           </div>

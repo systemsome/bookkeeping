@@ -17,8 +17,6 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -250,6 +248,28 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     (accounts || []).forEach((a) => map.set(a.id, a));
     return map;
   }, [accounts]);
+
+  // Project map for quick lookup
+  const projectMap = useMemo(() => {
+    const map = new Map<string, LedgerProject>();
+    (projects || []).forEach((p) => map.set(p.id, p));
+    return map;
+  }, [projects]);
+
+  // Expanded split transaction rows state
+  const [expandedSplitTxIds, setExpandedSplitTxIds] = useState<Set<string>>(new Set());
+
+  const toggleSplitExpand = (txId: string) => {
+    setExpandedSplitTxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(txId)) {
+        next.delete(txId);
+      } else {
+        next.add(txId);
+      }
+      return next;
+    });
+  };
 
   // Extract unique months for month selectors
   const availableMonths = useMemo(() => {
@@ -556,6 +576,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         const matchCounterparty = tx.counterparty?.toLowerCase().includes(term);
         const matchCurrency = tx.currency?.toLowerCase().includes(term);
         const matchProject = tx.projectName?.toLowerCase().includes(term);
+        const matchSplit = tx.splitItems?.some(
+          (s) =>
+            s.category?.toLowerCase().includes(term) ||
+            s.description?.toLowerCase().includes(term) ||
+            s.subCategory?.toLowerCase().includes(term)
+        );
         if (
           !matchDesc &&
           !matchCat &&
@@ -563,7 +589,8 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           !matchTag &&
           !matchCounterparty &&
           !matchCurrency &&
-          !matchProject
+          !matchProject &&
+          !matchSplit
         ) {
           return false;
         }
@@ -587,6 +614,40 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     searchTerm,
     dateHelpers,
   ]);
+
+  // Split Transactions stats and toggle all
+  const totalSplitCount = useMemo(() => {
+    return (transactions || []).filter((tx) => tx.splitItems && tx.splitItems.length > 0).length;
+  }, [transactions]);
+
+  const filteredSplitCount = useMemo(() => {
+    return filteredTransactions.filter((tx) => tx.splitItems && tx.splitItems.length > 0).length;
+  }, [filteredTransactions]);
+
+  const isAllSplitsExpanded = useMemo(() => {
+    const splitTxIds = filteredTransactions
+      .filter((tx) => tx.splitItems && tx.splitItems.length > 0)
+      .map((tx) => tx.id);
+    return splitTxIds.length > 0 && splitTxIds.every((id) => expandedSplitTxIds.has(id));
+  }, [filteredTransactions, expandedSplitTxIds]);
+
+  const handleToggleAllSplits = () => {
+    const splitTxIds = filteredTransactions
+      .filter((tx) => tx.splitItems && tx.splitItems.length > 0)
+      .map((tx) => tx.id);
+    if (splitTxIds.length === 0) return;
+
+    const allExpanded = splitTxIds.every((id) => expandedSplitTxIds.has(id));
+    setExpandedSplitTxIds((prev) => {
+      const next = new Set(prev);
+      if (allExpanded) {
+        splitTxIds.forEach((id) => next.delete(id));
+      } else {
+        splitTxIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
 
   // Feature 1: Multi-select helpers
   const toggleTxSelection = (id: string) => {
@@ -834,15 +895,22 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     const isForeign = tx.currency && tx.currency !== 'CNY';
     const curInfo = isForeign ? getCurrencyInfo(tx.currency!) : null;
     const isSelected = selectedTxIds.has(tx.id);
+    const hasSplits = Boolean(tx.splitItems && tx.splitItems.length > 0);
+    const isSplitExpanded = expandedSplitTxIds.has(tx.id);
 
     return (
       <div
         key={tx.id}
-        onClick={isBatchMode ? () => toggleTxSelection(tx.id) : undefined}
-        className={`px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-3 group ${
-          isBatchMode ? 'cursor-pointer select-none' : ''
-        } ${isSelected ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''}`}
+        className={`transition-colors ${isSelected ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''} ${
+          isSplitExpanded ? 'bg-indigo-50/20 dark:bg-indigo-950/15' : ''
+        }`}
       >
+        <div
+          onClick={isBatchMode ? () => toggleTxSelection(tx.id) : undefined}
+          className={`px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-3 group ${
+            isBatchMode ? 'cursor-pointer select-none' : ''
+          }`}
+        >
         {/* Left: Checkbox (Feature 1) & Icon & Description & Metadata */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           {/* Feature 1: Multi-select Checkbox */}
@@ -936,11 +1004,25 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   <span>{tx.reimbursementStatus === 'REIMBURSED' ? '已报销到账' : '待报销垫付'}</span>
                 </span>
               )}
-              {tx.splitItems && tx.splitItems.length > 0 && (
-                <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-1">
-                  <Split className="w-3 h-3" />
-                  <span>拆分 {tx.splitItems.length} 项</span>
-                </span>
+              {hasSplits && (
+                <button
+                  type="button"
+                  id={`btn-split-toggle-${tx.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSplitExpand(tx.id);
+                  }}
+                  className={`px-2.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                    isSplitExpanded
+                      ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500 shadow-sm'
+                      : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
+                  }`}
+                  title={isSplitExpanded ? '点击收起已拆分子项明细' : '点击展开查看已拆分明细'}
+                  aria-expanded={isSplitExpanded}
+                >
+                  <Split className="w-3.5 h-3.5" />
+                  <span>已拆分 {tx.splitItems!.length} 项</span>
+                </button>
               )}
               {tx.isRefund && (
                 <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800">
@@ -1037,6 +1119,26 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
           {/* Quick Action buttons */}
           <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+            {/* Split Expand/Collapse Action Button */}
+            {hasSplits && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSplitExpand(tx.id);
+                }}
+                className={`p-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                  isSplitExpanded
+                    ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold'
+                    : 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'
+                }`}
+                title={isSplitExpanded ? '收起拆分明细' : '展开拆分明细'}
+                aria-label={isSplitExpanded ? '收起拆分明细' : '展开拆分明细'}
+              >
+                <Split className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Direct Red-ink Reversal Action for Expense Bills */}
             {isExpense && onRefundTransaction && (
               <button
@@ -1119,6 +1221,133 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Expanded Split Items Breakdown Drawer */}
+        {hasSplits && isSplitExpanded && (
+          <div className="border-t border-indigo-100/90 dark:border-indigo-900/50 bg-slate-50/80 dark:bg-slate-900/80 px-4 sm:px-6 py-3.5 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                  <Split className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  拆分记账明细子项
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                  (共 {tx.splitItems!.length} 笔)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                {(() => {
+                  const splitSum = tx.splitItems!.reduce((acc, it) => acc + (it.amount || 0), 0);
+                  const diff = Math.abs(splitSum - tx.amount);
+                  return (
+                    <div className="flex items-center gap-2 text-xs font-mono">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        子项合计: <strong className="text-slate-900 dark:text-white font-bold">{formatCurrency(splitSum, privacyMode)}</strong>
+                      </span>
+                      {diff < 0.01 ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-0.5">
+                          <Check className="w-3 h-3" /> 完全匹配
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
+                          差额: {splitSum > tx.amount ? '+' : ''}{(splitSum - tx.amount).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditTransaction(tx);
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="在编辑窗口中调整或增删子项"
+                >
+                  <Pencil className="w-3 h-3" />
+                  <span>编辑拆分</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSplitExpand(tx.id);
+                  }}
+                  className="px-2 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="收起子项明细"
+                >
+                  <span>收起</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Split Sub-Items List */}
+            <div className="space-y-1.5 pt-0.5">
+              {tx.splitItems!.map((item, idx) => {
+                const percent = tx.amount > 0 ? ((item.amount / tx.amount) * 100).toFixed(1) : '0.0';
+                const subProject = item.projectId ? projectMap.get(item.projectId) : null;
+                return (
+                  <div
+                    key={item.id || idx}
+                    className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-3 text-xs shadow-2xs hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-bold flex items-center justify-center shrink-0 border border-indigo-100 dark:border-indigo-900/60">
+                        #{idx + 1}
+                      </span>
+                      <CategoryIcon
+                        nameOrIcon={item.category}
+                        className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0"
+                      />
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {item.category || '未分类'}
+                        </span>
+                        {item.subCategory && (
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                            / {item.subCategory}
+                          </span>
+                        )}
+                        {subProject && (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 font-semibold">
+                            📁 {subProject.name}
+                          </span>
+                        )}
+                        {item.description && (
+                          <span className="text-slate-500 dark:text-slate-400 text-[11px] truncate">
+                            — {item.description}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 text-right font-mono">
+                      <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400">
+                        <div className="w-12 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 rounded-full"
+                            style={{ width: `${Math.min(100, Math.max(2, parseFloat(percent)))}%` }}
+                          />
+                        </div>
+                        <span className="w-10 text-right">{percent}%</span>
+                      </div>
+                      <span className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                        {formatCurrency(item.amount, privacyMode)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1454,11 +1683,6 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 title={isCalendarExpanded ? '点击收起收支日历' : '点击展开收支日历'}
               >
                 <span>{isCalendarExpanded ? '收起日历' : '展开日历'}</span>
-                {isCalendarExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
               </button>
             </div>
           </div>
@@ -1625,7 +1849,6 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-all"
             >
               <span>{isCategoryBreakdownExpanded ? '收起' : '展开'}</span>
-              {isCategoryBreakdownExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div>
@@ -1721,7 +1944,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <option value="EXPENSE">支出消费</option>
               <option value="INCOME">收入进账</option>
               <option value="REIMBURSABLE">💼 待报销垫付款</option>
-              <option value="SPLIT">🔀 拆分子项账单</option>
+              <option value="SPLIT">🔀 拆分子项账单 ({totalSplitCount})</option>
               <option value="REFUND">平账冲红退费</option>
               <option value="TRANSFER">账户转账划转</option>
               <option value="REPAYMENT">信用卡与白条还款</option>
@@ -1952,6 +2175,24 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Quick Filter Pill for Split Transactions */}
+            {totalSplitCount > 0 && (
+              <button
+                type="button"
+                id="btn-filter-split-txs"
+                onClick={() => setSelectedType((prev) => (prev === 'SPLIT' ? 'ALL' : 'SPLIT'))}
+                className={`text-xs px-2.5 py-1 rounded-xl border flex items-center gap-1.5 transition-all shadow-2xs ${
+                  selectedType === 'SPLIT'
+                    ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                    : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 font-medium'
+                }`}
+                title="快速仅查看已拆分子项的账单"
+              >
+                <Split className="w-3.5 h-3.5" />
+                <span>已拆分账单 ({totalSplitCount})</span>
+              </button>
+            )}
+
             {/* Feature 3: Advanced Filter Toggle Button */}
             <button
               onClick={() => setIsAdvancedFilterOpen((prev) => !prev)}
@@ -2115,6 +2356,24 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <CheckSquare className="w-3.5 h-3.5" />
               <span>{isBatchMode ? `批量中 (${selectedTxIds.size})` : '批量管理'}</span>
             </button>
+
+            {/* Split Transactions: Expand All / Collapse All Button */}
+            {filteredSplitCount > 0 && (
+              <button
+                type="button"
+                id="btn-toggle-all-splits"
+                onClick={handleToggleAllSplits}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all shadow-2xs cursor-pointer ${
+                  isAllSplitsExpanded
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                }`}
+                title={isAllSplitsExpanded ? '一键收起所有已拆分账单的子项明细' : '一键展开所有已拆分账单的子项明细'}
+              >
+                <Split className="w-3.5 h-3.5" />
+                <span>{isAllSplitsExpanded ? '收起全部拆分' : `展开全部拆分 (${filteredSplitCount})`}</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
