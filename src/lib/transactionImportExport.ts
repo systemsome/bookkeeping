@@ -127,6 +127,28 @@ export const exportTransactions = (
   const rows = transactions.map((t, idx) => {
     const acc = accountMap.get(t.accountId);
     const targetAcc = t.targetAccountId ? accountMap.get(t.targetAccountId) : null;
+    const splitDetailStr =
+      t.splitItems && t.splitItems.length > 0
+        ? t.splitItems
+            .map(
+              (s, i) =>
+                `#${i + 1} ${s.category}${s.subCategory ? `/${s.subCategory}` : ''}: ¥${s.amount}${
+                  s.description ? ` (${s.description})` : ''
+                }`
+            )
+            .join(' | ')
+        : '';
+    const refundStatusStr = t.isRefund
+      ? `平账冲红凭证(原单¥${t.refundedTxAmount || t.amount})`
+      : t.refundedAmount && t.refundedAmount > 0
+      ? `已冲红退款¥${t.refundedAmount.toFixed(2)}`
+      : '';
+    const reimburseStr = t.isReimbursable
+      ? t.reimbursementStatus === 'REIMBURSED'
+        ? '已报销'
+        : '待报销'
+      : '';
+
     return {
       '序号': idx + 1,
       '交易日期': t.date || '',
@@ -140,6 +162,10 @@ export const exportTransactions = (
       '扣款/收支账户': acc ? acc.name : '未指定账户',
       '目标账户': targetAcc ? targetAcc.name : '',
       '商户/交易对手': t.merchant || t.counterparty || '',
+      '关联项目': t.projectName || '',
+      '拆分明细': splitDetailStr,
+      '报销状态': reimburseStr,
+      '平账冲红状态': refundStatusStr,
       '标签': t.tag || '',
       '备注说明': t.description || '',
       '交易流水号(ID)': t.id,
@@ -163,6 +189,10 @@ export const exportTransactions = (
         { wch: 16 }, // 扣款账户
         { wch: 16 }, // 目标账户
         { wch: 16 }, // 商户/对方
+        { wch: 16 }, // 关联项目
+        { wch: 28 }, // 拆分明细
+        { wch: 10 }, // 报销状态
+        { wch: 16 }, // 平账冲红状态
         { wch: 10 }, // 标签
         { wch: 22 }, // 备注
         { wch: 20 }, // ID

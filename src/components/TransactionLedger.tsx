@@ -1242,11 +1242,18 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
                 {(() => {
                   const splitSum = tx.splitItems!.reduce((acc, it) => acc + (it.amount || 0), 0);
-                  const diff = Math.abs(splitSum - tx.amount);
+                  const isForeign = Boolean(tx.currency && tx.currency !== 'CNY');
+                  const targetBase = isForeign && tx.originalAmount !== undefined ? tx.originalAmount : tx.amount;
+                  const curInfo = isForeign ? getCurrencyInfo(tx.currency!) : null;
+                  const curSymbol = curInfo?.symbol || '¥';
+                  const diff = Math.abs(splitSum - targetBase);
                   return (
                     <div className="flex items-center gap-2 text-xs font-mono">
                       <span className="text-slate-500 dark:text-slate-400">
-                        子项合计: <strong className="text-slate-900 dark:text-white font-bold">{formatCurrency(splitSum, privacyMode)}</strong>
+                        子项合计:{' '}
+                        <strong className="text-slate-900 dark:text-white font-bold">
+                          {privacyMode ? '****' : `${curSymbol} ${splitSum.toFixed(2)}`}
+                        </strong>
                       </span>
                       {diff < 0.01 ? (
                         <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-0.5">
@@ -1254,7 +1261,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         </span>
                       ) : (
                         <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
-                          差额: {splitSum > tx.amount ? '+' : ''}{(splitSum - tx.amount).toFixed(2)}
+                          差额: {splitSum > targetBase ? '+' : ''}{curSymbol}{(splitSum - targetBase).toFixed(2)}
                         </span>
                       )}
                     </div>
@@ -1291,7 +1298,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             {/* Split Sub-Items List */}
             <div className="space-y-1.5 pt-0.5">
               {tx.splitItems!.map((item, idx) => {
-                const percent = tx.amount > 0 ? ((item.amount / tx.amount) * 100).toFixed(1) : '0.0';
+                const isForeign = Boolean(tx.currency && tx.currency !== 'CNY');
+                const targetBase = isForeign && tx.originalAmount !== undefined ? tx.originalAmount : tx.amount;
+                const percent = targetBase > 0 ? ((item.amount / targetBase) * 100).toFixed(1) : '0.0';
+                const curInfo = isForeign ? getCurrencyInfo(tx.currency!) : null;
+                const curSymbol = curInfo?.symbol || '¥';
                 const subProject = item.projectId ? projectMap.get(item.projectId) : null;
                 return (
                   <div
@@ -1339,7 +1350,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         <span className="w-10 text-right">{percent}%</span>
                       </div>
                       <span className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
-                        {formatCurrency(item.amount, privacyMode)}
+                        {privacyMode ? '****' : `${curSymbol} ${item.amount.toFixed(2)}`}
                       </span>
                     </div>
                   </div>

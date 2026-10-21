@@ -139,6 +139,12 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
       const range = getPresetDateRange(preset);
       setStartDate(range.startDate);
       setEndDate(range.endDate);
+    } else {
+      if (!startDate || !endDate) {
+        const range = getPresetDateRange('THIS_MONTH');
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
+      }
     }
   };
 
@@ -171,10 +177,20 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
         const acc = accountMap.get(tx.accountId);
         const targetAcc = tx.targetAccountId ? accountMap.get(tx.targetAccountId) : null;
         const match =
-          (tx.note && tx.note.toLowerCase().includes(q)) ||
+          (tx.description && tx.description.toLowerCase().includes(q)) ||
           (tx.merchant && tx.merchant.toLowerCase().includes(q)) ||
+          (tx.counterparty && tx.counterparty.toLowerCase().includes(q)) ||
+          (tx.projectName && tx.projectName.toLowerCase().includes(q)) ||
           (tx.category && tx.category.toLowerCase().includes(q)) ||
+          (tx.tag && tx.tag.toLowerCase().includes(q)) ||
           (tx.tags && tx.tags.some((tag) => tag.toLowerCase().includes(q))) ||
+          (tx.splitItems &&
+            tx.splitItems.some(
+              (s) =>
+                s.category?.toLowerCase().includes(q) ||
+                s.description?.toLowerCase().includes(q) ||
+                s.subCategory?.toLowerCase().includes(q)
+            )) ||
           (acc && (acc.name.toLowerCase().includes(q) || (acc.bankName && acc.bankName.toLowerCase().includes(q)))) ||
           (targetAcc && (targetAcc.name.toLowerCase().includes(q) || (targetAcc.bankName && targetAcc.bankName.toLowerCase().includes(q))));
         if (!match) return false;
@@ -257,11 +273,23 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
 
   // Smart default filename
   const defaultFileNameSuggestion = useMemo(() => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, '0');
+    if (datePreset === 'THIS_MONTH') {
+      return `财务记账流水明细_本月(${currYear}年${currMonth}月)`;
+    }
+    if (datePreset === 'THIS_YEAR') {
+      return `财务记账流水明细_本年(${currYear}年度)`;
+    }
+    if (datePreset === 'LAST_MONTH') {
+      return `财务记账流水明细_上月`;
+    }
     if (startDate && endDate) {
-      return `财务记账明细_${startDate.replace(/-/g, '')}至${endDate.replace(/-/g, '')}`;
+      return `财务记账流水明细_${startDate.replace(/-/g, '')}至${endDate.replace(/-/g, '')}`;
     }
     return `财务记账流水全量明细`;
-  }, [startDate, endDate]);
+  }, [datePreset, startDate, endDate]);
 
   // Execute Export
   const handleExecuteExport = () => {
@@ -333,21 +361,21 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
               {/* Quick Presets Pills */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {[
-                  { id: 'THIS_MONTH', label: '本月' },
+                  { id: 'THIS_MONTH', label: '📅 本月' },
+                  { id: 'THIS_YEAR', label: '📆 本年' },
+                  { id: 'CUSTOM', label: '⚙️ 自定义范围' },
                   { id: 'LAST_MONTH', label: '上月' },
-                  { id: 'LAST_7_DAYS', label: '近7天' },
                   { id: 'LAST_30_DAYS', label: '近30天' },
                   { id: 'LAST_90_DAYS', label: '近90天' },
-                  { id: 'THIS_YEAR', label: '今年' },
-                  { id: 'ALL', label: '全部时间' },
+                  { id: 'ALL', label: '全部历史' },
                 ].map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => handlePresetSelect(item.id as DatePresetType)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       datePreset === item.id
-                        ? 'bg-blue-600 text-white shadow-2xs'
+                        ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
                         : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700'
                     }`}
                   >
@@ -628,13 +656,13 @@ export const TransactionExportModal: React.FC<TransactionExportModalProps> = ({
                               )}
                             </td>
 
-                            {/* Merchant & Note */}
+                            {/* Merchant & Description */}
                             <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 max-w-[200px] truncate">
                               <div className="font-medium truncate text-slate-800 dark:text-slate-200">
-                                {tx.merchant || tx.note || '-'}
+                                {tx.merchant || tx.description || '-'}
                               </div>
-                              {tx.merchant && tx.note && (
-                                <div className="text-[10px] text-slate-400 truncate">{tx.note}</div>
+                              {tx.merchant && tx.description && (
+                                <div className="text-[10px] text-slate-400 truncate">{tx.description}</div>
                               )}
                             </td>
 

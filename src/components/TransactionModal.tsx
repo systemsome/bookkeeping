@@ -1351,10 +1351,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                       <div className="flex items-center gap-3">
                         <span className="text-slate-500 dark:text-slate-400">
-                          母单总额: <strong className="font-mono text-slate-800 dark:text-slate-200">¥{mainAmount.toFixed(2)}</strong>
+                          母单总额: <strong className="font-mono text-slate-800 dark:text-slate-200">{currentCurrencyInfo.symbol}{mainAmount.toFixed(2)}</strong>
                         </span>
                         <span className="text-slate-500 dark:text-slate-400">
-                          子项合计: <strong className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">¥{splitTotal.toFixed(2)}</strong>
+                          子项合计: <strong className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{currentCurrencyInfo.symbol}{splitTotal.toFixed(2)}</strong>
                         </span>
                       </div>
 
@@ -1366,7 +1366,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       ) : diff > 0 ? (
                         <div className="flex items-center gap-2">
                           <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                            ⚠️ 还差 ¥{diff.toFixed(2)} 未分配
+                            ⚠️ 还差 {currentCurrencyInfo.symbol}{diff.toFixed(2)} 未分配
                           </span>
                           <button
                             type="button"
@@ -1379,7 +1379,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       ) : (
                         <div className="flex items-center gap-2">
                           <span className="text-rose-600 font-semibold">
-                            ⚠️ 超出总金额 ¥{Math.abs(diff).toFixed(2)}
+                            ⚠️ 超出总金额 {currentCurrencyInfo.symbol}{Math.abs(diff).toFixed(2)}
                           </span>
                           <button
                             type="button"
@@ -1412,7 +1412,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                               key={item.id || idx}
                               style={{ width: `${Math.max(1, pct)}%` }}
                               className={`h-full ${colors[idx % colors.length]}`}
-                              title={`${item.category}: ¥${(item.amount || 0).toFixed(2)} (${pct.toFixed(1)}%)`}
+                              title={`${item.category}: ${currentCurrencyInfo.symbol}${(item.amount || 0).toFixed(2)} (${pct.toFixed(1)}%)`}
                             />
                           );
                         })}
@@ -1463,9 +1463,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         </div>
 
                         {/* Sub-item Amount */}
-                        <div className="relative w-28 sm:w-32 shrink-0">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                            ¥
+                        <div className="relative w-28 sm:w-36 shrink-0">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none select-none">
+                            {currentCurrencyInfo.symbol}
                           </span>
                           <input
                             type="number"
@@ -1473,7 +1473,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             placeholder="0.00"
                             value={item.amount || ''}
                             onChange={(e) => updateSplitItem(item.id, { amount: parseFloat(e.target.value) || 0 })}
-                            className="w-full pl-6 pr-2.5 py-1.5 text-xs font-mono font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-400"
+                            style={{
+                              paddingLeft:
+                                currentCurrencyInfo.symbol.length >= 3
+                                  ? '2.5rem'
+                                  : currentCurrencyInfo.symbol.length === 2
+                                  ? '2.0rem'
+                                  : '1.6rem',
+                            }}
+                            className="w-full pr-2.5 py-1.5 text-xs font-mono font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-400 transition-colors"
                           />
                         </div>
 
@@ -1542,7 +1550,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         onClick={fillRemainingSplitItem}
                         className="py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
                       >
-                        <span>补齐未分 ¥{diff.toFixed(2)}</span>
+                        <span>补齐未分 {currentCurrencyInfo.symbol}{diff.toFixed(2)}</span>
                       </button>
                     );
                   }
