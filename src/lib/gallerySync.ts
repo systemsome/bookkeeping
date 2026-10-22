@@ -63,8 +63,8 @@ export async function syncDualLibrariesOnline(force = false): Promise<DualSyncRe
         addedEntify = cacheCardentifyCards(data.cardentifyCards);
       }
 
-      const officialArtCount = data.cardartCount || 7589;
-      const officialEntifyCount = data.cardentifyCount || 749;
+      const officialArtCount = data.cardartCount || 10136;
+      const officialEntifyCount = data.cardentifyCount || 814;
       const officialTotal = data.totalCount || (officialArtCount + officialEntifyCount);
       const nowIso = data.lastSyncedAt || new Date().toISOString();
 
@@ -105,13 +105,13 @@ export async function syncDualLibrariesOnline(force = false): Promise<DualSyncRe
   // Fallback to official synchronized stats
   return {
     success: true,
-    totalCount: 8338,
-    cardArtCount: 7589,
-    cardentifyCount: 749,
+    totalCount: 10950,
+    cardArtCount: 10136,
+    cardentifyCount: 814,
     newCardsCount: 0,
-    message: '双库当前共有 8,338 款高清卡面 (CardArt: 7,589 款 · Cardentify: 749 款)',
+    message: '双库当前共有 10,950 款高清卡面 (CardArt: 10,136 款 · Cardentify: 814 款)',
     timestamp: new Date().toISOString(),
-    sourceBreakdown: { cardart: 7589, cardentify: 749 },
+    sourceBreakdown: { cardart: 10136, cardentify: 814 },
   };
 }
 
@@ -128,8 +128,8 @@ export async function fetchDualGalleryStats(): Promise<{
     const res = await fetch('/api/gallery/stats');
     if (res.ok) {
       const data = await res.json();
-      const artCount = data.cardartCount || 7589;
-      const entifyCount = data.cardentifyCount || 749;
+      const artCount = data.cardartCount || 10136;
+      const entifyCount = data.cardentifyCount || 814;
       const total = data.totalCount || (artCount + entifyCount);
       const lastSynced = data.lastSyncedAt || new Date().toISOString();
 
@@ -156,9 +156,9 @@ export async function fetchDualGalleryStats(): Promise<{
   } catch {}
 
   return {
-    totalCount: 8338,
-    cardartCount: 7589,
-    cardentifyCount: 749,
+    totalCount: 10950,
+    cardartCount: 10136,
+    cardentifyCount: 814,
     lastSyncedAt: new Date().toISOString(),
   };
 }

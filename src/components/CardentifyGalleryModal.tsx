@@ -121,9 +121,9 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     cardartCount: number;
     cardentifyCount: number;
   }>({
-    totalCount: 8338,
-    cardartCount: 7589,
-    cardentifyCount: 749,
+    totalCount: 10950,
+    cardartCount: 10136,
+    cardentifyCount: 814,
   });
 
   // Proactive auto-sync whenever the gallery modal is open, repeated every 10 seconds
@@ -199,9 +199,9 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
 
       if (e?.detail) {
         setGalleryStats({
-          totalCount: e.detail.total || 8338,
-          cardartCount: e.detail.cardArtCount || 7589,
-          cardentifyCount: e.detail.cardentifyCount || 749,
+          totalCount: e.detail.total || 10950,
+          cardartCount: e.detail.cardArtCount || 10136,
+          cardentifyCount: e.detail.cardentifyCount || 814,
         });
       } else {
         fetchDualGalleryStats()

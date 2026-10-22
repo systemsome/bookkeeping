@@ -47,8 +47,8 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
 
-  const [cardArtCount, setCardArtCount] = useState<number>(7589);
-  const [cardentifyCount, setCardentifyCount] = useState<number>(749);
+  const [cardArtCount, setCardArtCount] = useState<number>(10136);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(814);
 
   useEffect(() => {
     const handleUpdate = (e?: any) => {
@@ -426,7 +426,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
                   className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium transition-colors"
                 >
                   <Palette className="w-3 h-3" />
-                  <span>CardArt ({cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '7,589款'})</span>
+                  <span>CardArt ({cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '10,136款'})</span>
                   <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                 </a>
                 <span className="text-slate-300 dark:text-slate-700">·</span>
@@ -437,7 +437,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
                   className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-400 hover:underline font-medium transition-colors"
                 >
                   <Sparkles className="w-3 h-3" />
-                  <span>Cardentify ({cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '749款'})</span>
+                  <span>Cardentify ({cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '814款'})</span>
                   <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                 </a>
               </div>

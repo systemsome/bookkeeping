@@ -913,6 +913,12 @@ async function startServer() {
           break;
         }
         const arr: any = await response.json();
+        if (Array.isArray(arr)) {
+          const totalIdx = arr.indexOf('total');
+          if (totalIdx !== -1 && typeof arr[totalIdx + 1] === 'number' && arr[totalIdx + 1] > 0) {
+            cardartOfficialCount = arr[totalIdx + 1];
+          }
+        }
         const itemsIdx = arr.indexOf('items');
         if (itemsIdx === -1) break;
         const itemsRef = arr[itemsIdx + 1];
@@ -1357,13 +1363,13 @@ async function startServer() {
 
   // ==========================================
   // Dual-Library Unified Sync & Stats Endpoints
-  // Automatically aligns with official website figures:
-  // CardArt (https://cardart.cc/): dynamically parses live cards count (7,589+ cards)
-  // Cardentify (https://cards.no2.ac/): queries /api/cards live collection (749+ cards)
+  // Automatically aligns with live official website figures:
+  // CardArt (https://cardart.cc/): dynamically queries live explore.data / total cards (10,136+ cards)
+  // Cardentify (https://cards.no2.ac/): queries /api/cards live collection (814+ cards)
   // Synchronized every 10 seconds with bidirectional data exchange
   // ==========================================
-  let cardartOfficialCount = 7589;
-  let cardentifyOfficialCount = 749;
+  let cardartOfficialCount = 10136;
+  let cardentifyOfficialCount = 814;
   let lastOfficialStatsChecked = 0;
 
   async function refreshOfficialWebsiteStats(): Promise<{ cardartCount: number; cardentifyCount: number }> {
@@ -1373,25 +1379,43 @@ async function startServer() {
       return { cardartCount: cardartOfficialCount, cardentifyCount: cardentifyOfficialCount };
     }
 
-    // 1. Fetch CardArt live official banner count
+    // 1. Fetch CardArt live official banner count via explore.data
     try {
-      const res1 = await fetch('https://cardart.cc/', {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (CardArt-Stats-Client)',
-        },
+      const resExplore = await fetch('https://cardart.cc/explore.data', {
+        headers: BROWSER_HEADERS,
       });
-      if (res1.ok) {
-        const text1 = await res1.text();
-        const match1 = text1.match(/([0-9,]+)\s+cards\s+(?:and\s+counting)?/i);
-        if (match1 && match1[1]) {
-          const parsed = parseInt(match1[1].replace(/,/g, ''), 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            cardartOfficialCount = parsed;
+      if (resExplore.ok) {
+        const arr: any = await resExplore.json();
+        if (Array.isArray(arr)) {
+          const totalIdx = arr.indexOf('total');
+          if (totalIdx !== -1 && typeof arr[totalIdx + 1] === 'number' && arr[totalIdx + 1] > 0) {
+            cardartOfficialCount = arr[totalIdx + 1];
           }
         }
       }
     } catch (e) {
-      console.warn('[CardArt] Warning fetching official count:', e);
+      console.warn('[CardArt] Warning fetching explore.data count:', e);
+    }
+
+    // Fallback: If explore.data didn't set it, scrape from homepage HTML
+    if (cardartOfficialCount <= 7589) {
+      try {
+        const res1 = await fetch('https://cardart.cc/', {
+          headers: BROWSER_HEADERS,
+        });
+        if (res1.ok) {
+          const text1 = await res1.text();
+          const match1 = text1.match(/"total",\s*(\d+)/) || text1.match(/([0-9,]+)\s+cards/i);
+          if (match1 && match1[1]) {
+            const parsed = parseInt(match1[1].replace(/,/g, ''), 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              cardartOfficialCount = parsed;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[CardArt] Warning fetching homepage count:', e);
+      }
     }
 
     // 2. Fetch Cardentify live official count
@@ -1473,18 +1497,18 @@ async function startServer() {
       cardentifyCount: matchedCardentify.length,
       total: matchedCardArt.length + matchedCardentify.length,
       totalCatalogCount: cardartMemoryCards.length + cardentifyMemoryCards.length,
-      officialTotalCount: (cardartOfficialCount || 7589) + (cardentifyOfficialCount || 749),
+      officialTotalCount: (cardartOfficialCount || 10136) + (cardentifyOfficialCount || 814),
     });
   });
 
   app.get('/api/gallery/stats', async (req, res) => {
     const officialStats = await refreshOfficialWebsiteStats().catch(() => ({
-      cardartCount: cardartOfficialCount || 7589,
-      cardentifyCount: cardentifyOfficialCount || 749,
+      cardartCount: cardartOfficialCount || 10136,
+      cardentifyCount: cardentifyOfficialCount || 814,
     }));
 
-    const cardartCount = officialStats.cardartCount || 7589;
-    const cardentifyCount = officialStats.cardentifyCount || 749;
+    const cardartCount = officialStats.cardartCount || cardartOfficialCount || 10136;
+    const cardentifyCount = officialStats.cardentifyCount || cardentifyOfficialCount || 814;
     const totalCount = cardartCount + cardentifyCount;
 
     return res.json({

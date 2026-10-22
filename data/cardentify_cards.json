@@ -2,13 +2,29 @@
   {
     "id": 696,
     "name": "7-Eleven Gift Card",
-    "bins": [],
+    "bins": [
+      "428313"
+    ],
     "brand": "VISA",
     "type": "Prepaid",
     "country": "AU",
     "issuerName": "7-Eleven Australia",
     "issuerEnglish": "7-Eleven Australia",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/50a144b77323c6dd440ccebfd07b9e621bb9160704c94225ea5e66352ee3e0d9.png",
+    "discontinued": false
+  },
+  {
+    "id": 827,
+    "name": "AMP Bank GO Personal Debit Card",
+    "bins": [
+      "54503423"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "AMP Bank",
+    "issuerEnglish": "AMP Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/3700b6506d5e3dc3f9cd0127c48260b146113e06e57be81b1c4265dd4323c9f2.png",
     "discontinued": false
   },
   {
@@ -26,6 +42,76 @@
     "discontinued": false
   },
   {
+    "id": 814,
+    "name": "ANZ Plus Visa Debit",
+    "bins": [
+      "462239"
+    ],
+    "brand": "VISA",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Australia and New Zealand Banking Group",
+    "issuerEnglish": "Australia and New Zealand Banking Group",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/0bcb81672a7da06bc2c8e25d7b751abbcea1e076759e03c3025658afd23086e5.png",
+    "discontinued": false
+  },
+  {
+    "id": 821,
+    "name": "Bank of Melbourne Visa Debit",
+    "bins": [
+      "423953"
+    ],
+    "brand": "VISA",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Bank of Melbourne",
+    "issuerEnglish": "Bank of Melbourne",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/c7738a46421c848f54974a1ab69b515a591ab8cfd6e1fac0dc8835b8f644f19f.png",
+    "discontinued": false
+  },
+  {
+    "id": 820,
+    "name": "BankSA Visa Debit",
+    "bins": [
+      "423954"
+    ],
+    "brand": "VISA",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "BankSA",
+    "issuerEnglish": "BankSA",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/323a61fa0f1977aab8a741ed3708cd83d123b4756dc22f13ead8f3857997ec2a.png",
+    "discontinued": false
+  },
+  {
+    "id": 824,
+    "name": "Bankwest Debit Mastercard (Pink)",
+    "bins": [
+      "528013"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Bankwest",
+    "issuerEnglish": "Bankwest",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/c3519dccf919e35e2e638f7fbc2be3853f5ac1bbb083f8b50c2703b37856dd55.png",
+    "discontinued": false
+  },
+  {
+    "id": 825,
+    "name": "Bankwest Debit Virtual Mastercard (Fremantle Dockers)",
+    "bins": [
+      "528013"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Bankwest",
+    "issuerEnglish": "Bankwest",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/06b4fcc5b3202bd2de22cd00bbdaf345fd157f6698fff789d3b340f5ac2c9500.png",
+    "discontinued": false
+  },
+  {
     "id": 497,
     "name": "Bybit Card",
     "bins": [
@@ -37,6 +123,62 @@
     "issuerName": "Bybit",
     "issuerEnglish": "Bybit",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/b0f5daeabc17df33f86bfa24adad51b915f7436c31e244c2f3717c0eeb18494e.png",
+    "discontinued": false
+  },
+  {
+    "id": 831,
+    "name": "Bybit Mastercard",
+    "bins": [
+      "539900"
+    ],
+    "brand": "Mastercard",
+    "type": "Prepaid",
+    "country": "AU",
+    "issuerName": "Bybit",
+    "issuerEnglish": "Bybit",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/c6d9fe943772d0ea9f8fa96b106f923de853e988a9b64636bd0eafdf8ec79f0c.png",
+    "discontinued": false
+  },
+  {
+    "id": 833,
+    "name": "Bybit Virtual Mastercard (Football)",
+    "bins": [
+      "539900"
+    ],
+    "brand": "Mastercard",
+    "type": "Prepaid",
+    "country": "AU",
+    "issuerName": "Bybit",
+    "issuerEnglish": "Bybit",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/7089eaac59c62d4a39fe9426ef430112944eaaadc40b34a9ccecc54019e6e159.png",
+    "discontinued": false
+  },
+  {
+    "id": 832,
+    "name": "Bybit Virtual Mastercard (Tomorrowland)",
+    "bins": [
+      "539900"
+    ],
+    "brand": "Mastercard",
+    "type": "Prepaid",
+    "country": "AU",
+    "issuerName": "Bybit",
+    "issuerEnglish": "Bybit",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/52f3086b9014a844900d33f28d826946107c106eebcd7ccfd8a1353f7fbee8e6.png",
+    "discontinued": false
+  },
+  {
+    "id": 830,
+    "name": "CoinJar Card",
+    "bins": [
+      "527528"
+    ],
+    "brand": "Mastercard",
+    "type": "Prepaid",
+    "country": "AU",
+    "issuerName": "CoinJar",
+    "issuerEnglish": "CoinJar",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/a52f0f46547358adfbde03df7a1749d6190587e941ed4446b2bba728e794bc31.png",
     "discontinued": false
   },
   {
@@ -82,6 +224,20 @@
     "discontinued": true
   },
   {
+    "id": 828,
+    "name": "IMB Visa Debit",
+    "bins": [
+      "456441"
+    ],
+    "brand": "VISA",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "IMB Bank",
+    "issuerEnglish": "IMB Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/fe4e5ace6313e8a7bb71330f355cada79db6b843a53a52cd3b2b4e5aa3c68c48.png",
+    "discontinued": false
+  },
+  {
     "id": 605,
     "name": "Macquarie Platinum Debit Mastercard",
     "bins": [
@@ -93,6 +249,48 @@
     "issuerName": "Macquarie Bank",
     "issuerEnglish": "Macquarie Bank",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/7c1b81525fc5afb284e2a81fc6ab16bd092e189ffb35baddd9def7cbfcecc9b8.png",
+    "discontinued": false
+  },
+  {
+    "id": 813,
+    "name": "Mastercard Neo",
+    "bins": [
+      "552351"
+    ],
+    "brand": "Mastercard",
+    "type": "Credit",
+    "country": "AU",
+    "issuerName": "Commonwealth Bank of Australia",
+    "issuerEnglish": "Commonwealth Bank of Australia",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/2d9a5e43bc06bf3065b0d90d57f17dffe8106cc7f4a3e32129c08fe256a74545.png",
+    "discontinued": false
+  },
+  {
+    "id": 826,
+    "name": "Orange Everyday",
+    "bins": [
+      "462263"
+    ],
+    "brand": "VISA",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "ING Bank (Australia)",
+    "issuerEnglish": "ING Bank (Australia)",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/375d0df8df1b5256430dee5f72001dd64605dc6837242eb2291ab5622d9b2c0e.png",
+    "discontinued": false
+  },
+  {
+    "id": 829,
+    "name": "Qantas Pay",
+    "bins": [
+      "538646"
+    ],
+    "brand": "Mastercard",
+    "type": "Prepaid",
+    "country": "AU",
+    "issuerName": "Qantas",
+    "issuerEnglish": "Qantas",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/86b5801f593e4c95a9389e7fd769d499f0c7669c353d4b5be2f9e1aa9ea0e99a.png",
     "discontinued": false
   },
   {
@@ -122,6 +320,90 @@
     "discontinued": false
   },
   {
+    "id": 819,
+    "name": "St.George Visa Debit",
+    "bins": [
+      "423953"
+    ],
+    "brand": "VISA",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "St.George Bank",
+    "issuerEnglish": "St.George Bank",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/bf50dd84d5f26bdc6270bd61e4d84386c67416ed5602fd60506b9c72df01c4ec.png",
+    "discontinued": false
+  },
+  {
+    "id": 816,
+    "name": "The American Express Essential Rewards Credit Card",
+    "bins": [
+      "379515"
+    ],
+    "brand": "AMEX",
+    "type": "Credit",
+    "country": "AU",
+    "issuerName": "American Express",
+    "issuerEnglish": "American Express",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/f2eab514ed5bfe44a35d45628a5c615b741c4d6683cace4f9e5cff2801a91f0f.png",
+    "discontinued": false
+  },
+  {
+    "id": 817,
+    "name": "The Qantas American Express Discovery Card",
+    "bins": [
+      "379515"
+    ],
+    "brand": "AMEX",
+    "type": "Credit",
+    "country": "AU",
+    "issuerName": "American Express",
+    "issuerEnglish": "American Express",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/208bcd9df447e8c2fa89cb3ee52ae2f5f7984f0ebf014c68194e5bb7af1fcd8c.png",
+    "discontinued": false
+  },
+  {
+    "id": 822,
+    "name": "Up Mastercard",
+    "bins": [
+      "518868"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Up",
+    "issuerEnglish": "Up",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/835bdc8a0dbe27749c2c6db57b0f7f58bc6ce7c64470b9b61f37705625a2aeed.png",
+    "discontinued": false
+  },
+  {
+    "id": 823,
+    "name": "Up Mastercard Digital",
+    "bins": [
+      "518868"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Up",
+    "issuerEnglish": "Up",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/b82eab8eda907760c0fa8fb9b3e76a32cc29375ba53e5463aeb8722f60ed197a.png",
+    "discontinued": false
+  },
+  {
+    "id": 815,
+    "name": "Westpac Debit Mastercard",
+    "bins": [
+      "516361"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Westpac",
+    "issuerEnglish": "Westpac",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/01a149adccbe531f4bf0e6bd444fff14d0194afb5629ca61107af977588134b6.png",
+    "discontinued": false
+  },
+  {
     "id": 423,
     "name": "Wise Card Australia",
     "bins": [
@@ -147,6 +429,20 @@
     "issuerName": "Wise",
     "issuerEnglish": "Wise",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/8133a05dbbf4a1be2d219a532d9c2e74bac79ade809503370adeaafa037097b8.png",
+    "discontinued": false
+  },
+  {
+    "id": 812,
+    "name": "World Debit Mastercard",
+    "bins": [
+      "536763"
+    ],
+    "brand": "Mastercard",
+    "type": "Debit",
+    "country": "AU",
+    "issuerName": "Commonwealth Bank of Australia",
+    "issuerEnglish": "Commonwealth Bank of Australia",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/27d232e1df83d48103ba557f4bcdb614ccdfba7d11ee5bc63d4ddf87de67e4e6.png",
     "discontinued": false
   },
   {
@@ -500,7 +796,9 @@
   {
     "id": 447,
     "name": "万事达人民币美元双币借记卡世界卡",
-    "bins": [],
+    "bins": [
+      "559166"
+    ],
     "brand": "Mastercard",
     "type": "Debit",
     "country": "CN",
@@ -526,7 +824,9 @@
   {
     "id": 764,
     "name": "万事达人民币美元双币借记卡金卡",
-    "bins": [],
+    "bins": [
+      "522401"
+    ],
     "brand": "Mastercard",
     "type": "Debit",
     "country": "CN",
@@ -2698,20 +2998,6 @@
     "issuerName": "招商银行",
     "issuerEnglish": "China Merchants Bank",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/8d59aac307030fd6f3a8ad1ce47f9a3c9055eea12426bf593a4db89a665f01a3.jpg",
-    "discontinued": false
-  },
-  {
-    "id": 189,
-    "name": "万事达人民币IC借记卡（普卡）",
-    "bins": [
-      "534293"
-    ],
-    "brand": "Mastercard",
-    "type": "Debit",
-    "country": "CN",
-    "issuerName": "招商银行",
-    "issuerEnglish": "China Merchants Bank",
-    "imageUrl": "https://r2-cardentify.cdn.no2.ac/22561d1547d38f85d3d891b8641b1484e81a445a070c85190355bf8e676a1cf3.webp",
     "discontinued": false
   },
   {
@@ -6751,6 +7037,35 @@
     "issuerName": "American Express",
     "issuerEnglish": "American Express",
     "imageUrl": "https://r2-cardentify.cdn.no2.ac/770910777d221e15abb3222f15309c9385f6c3d4f346b35cfda59a41a0e2c200.png",
+    "discontinued": false
+  },
+  {
+    "id": 811,
+    "name": "BOC CHILL PLATINUM MASTERCARD",
+    "bins": [
+      "552018"
+    ],
+    "brand": "Mastercard",
+    "type": "Credit",
+    "country": "HK",
+    "issuerName": "中國銀行 (香港)",
+    "issuerEnglish": "Bank of China (Hong Kong)",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/ceaf2e7614fc0cad35c3af9409d8ca78a3404806d53ed88ea6b5543294d606f7.png",
+    "discontinued": false
+  },
+  {
+    "id": 810,
+    "name": "BOC Go UnionPay Diamond Card",
+    "bins": [
+      "626210",
+      "626211"
+    ],
+    "brand": "UnionPay",
+    "type": "Credit",
+    "country": "HK",
+    "issuerName": "中國銀行 (香港)",
+    "issuerEnglish": "Bank of China (Hong Kong)",
+    "imageUrl": "https://r2-cardentify.cdn.no2.ac/fddf82e61ba18eabf13829ea10f8acd3c473a73c90b19778ba861661eded516f.png",
     "discontinued": false
   },
   {

@@ -203,7 +203,7 @@ export function getCardArtSyncMeta(): CardArtSyncMeta {
   } catch {}
   return {
     lastSyncTime: new Date().toISOString(),
-    totalCards: inMemoryCardArtCards ? inMemoryCardArtCards.length : 7589,
+    totalCards: inMemoryCardArtCards ? inMemoryCardArtCards.length : 10136,
     status: 'synced',
   };
 }

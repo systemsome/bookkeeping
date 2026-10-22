@@ -80,8 +80,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showThemeMenu, setShowThemeMenu] = useState(false);
 
   // Auto-updating card counts for CardArt (https://cardart.cc/) & Cardentify (https://cards.no2.ac/)
-  const [cardArtCount, setCardArtCount] = useState<number>(7589);
-  const [cardentifyCount, setCardentifyCount] = useState<number>(749);
+  const [cardArtCount, setCardArtCount] = useState<number>(10136);
+  const [cardentifyCount, setCardentifyCount] = useState<number>(814);
 
   useEffect(() => {
     const handleCountUpdate = (e?: any) => {
@@ -540,7 +540,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <p className="font-semibold leading-tight flex items-center gap-1.5">
                             <span className="truncate">CardArt</span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-medium shrink-0">
-                              {cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '7,589款'}
+                              {cardArtCount > 0 ? `${cardArtCount.toLocaleString()}款` : '10,136款'}
                             </span>
                           </p>
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">cardart.cc 创意卡面社区 · 10秒同步</p>
@@ -566,7 +566,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <p className="font-semibold leading-tight flex items-center gap-1.5">
                             <span className="truncate">Cardentify</span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-medium shrink-0">
-                              {cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '749款'}
+                              {cardentifyCount > 0 ? `${cardentifyCount.toLocaleString()}款` : '814款'}
                             </span>
                           </p>
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">cards.no2.ac 高清卡面库 · 10秒同步</p>
