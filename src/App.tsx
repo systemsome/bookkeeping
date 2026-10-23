@@ -1281,6 +1281,8 @@ export default function App() {
                 setEditingProject(p);
                 setIsProjectEditorOpen(true);
               }}
+              onAddTransaction={(txData) => handleSubmitTransaction(txData)}
+              onShowToast={showToast}
             />
           </div>
         )}

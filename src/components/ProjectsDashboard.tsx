@@ -30,6 +30,7 @@ import {
   Cloud,
   RefreshCw,
   Split,
+  Scale,
 } from 'lucide-react';
 import {
   LedgerProject,
@@ -45,6 +46,7 @@ import { formatCurrency } from '../lib/formatters';
 import { CategoryIcon } from './CategoryIcon';
 import { AccountCardFace } from './AccountCardFace';
 import { SplitDetailModal } from './SplitDetailModal';
+import { ProjectQuickReconcileModal } from './ProjectQuickReconcileModal';
 
 interface ProjectsDashboardProps {
   projects?: LedgerProject[];
@@ -63,6 +65,8 @@ interface ProjectsDashboardProps {
   onEditProject?: (project: LedgerProject) => void;
   onTriggerSync?: () => Promise<void>;
   onUpdateAccount?: (account: FinancialAccount) => void;
+  onAddTransaction?: (txData: Omit<Transaction, 'id' | 'createdAt'>) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
@@ -82,6 +86,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   onEditProject,
   onTriggerSync,
   onUpdateAccount,
+  onAddTransaction,
+  onShowToast,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -115,6 +121,20 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
   const [deleteAckChecked, setDeleteAckChecked] = useState(false);
   const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
   const [viewingSplitTx, setViewingSplitTx] = useState<Transaction | null>(null);
+  const [reconcilingProject, setReconcilingProject] = useState<LedgerProject | null>(null);
+
+  const handleConfirmQuickReconcile = (txData: Omit<Transaction, 'id' | 'createdAt'>) => {
+    if (onAddTransaction) {
+      onAddTransaction(txData);
+    }
+    if (onShowToast) {
+      const typeLabel =
+        txData.type === 'REFUND' ? '平账冲红' : txData.type === 'INCOME' ? '补充收入' : '调减支出';
+      onShowToast(
+        `✨ 项目「${txData.projectName || '账本'}」已完成快速平账，自动生成${typeLabel}明细 ¥${txData.amount.toFixed(2)}`
+      );
+    }
+  };
 
   const openDeleteProjectConfirm = (proj: LedgerProject) => {
     setDeleteAckChecked(false);
@@ -449,6 +469,21 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               </span>
             </button>
 
+            {/* 3.5 项目快速平账 (输入实际结余自动冲红或补差生成调账明细) */}
+            <button
+              id="btn-project-quick-reconcile"
+              type="button"
+              onClick={() => setReconcilingProject(activeProject)}
+              className="relative p-2 rounded-xl bg-transparent hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
+              title="项目快速平账：输入实际结余自动冲红或补充金额生成调账明细"
+              aria-label="快速平账"
+            >
+              <Scale className="w-4 h-4 text-indigo-500 transition-transform group-hover:scale-110" />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                快速平账
+              </span>
+            </button>
+
             {/* 4. 编辑项目信息 */}
             <button
               id="btn-project-edit"
@@ -629,8 +664,17 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               {activeProjectStats.netBalance >= 0 ? '+' : ''}
               {formatCurrency(activeProjectStats.netBalance, privacyMode)}
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              收入 - 实际净支出
+            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <span>收入 - 实际净支出</span>
+              <button
+                type="button"
+                onClick={() => setReconcilingProject(activeProject)}
+                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
+                title="项目快速平账：输入实际结余自动冲红或补差"
+              >
+                <Scale className="w-2.5 h-2.5" />
+                <span>快速平账</span>
+              </button>
             </div>
           </div>
 
@@ -1657,6 +1701,19 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                     </button>
 
                     <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReconcilingProject(proj);
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold transition-colors flex items-center gap-1 border border-indigo-200/60 dark:border-indigo-800/60"
+                      title="项目快速平账：输入该项目实际结余自动冲红或补差生成调账明细"
+                    >
+                      <Scale className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>快速平账</span>
+                    </button>
+
+                    <button
                       onClick={() => setSelectedProjectId(proj.id)}
                       className="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-2xs"
                     >
@@ -1802,6 +1859,18 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
             setViewingSplitTx(null);
             if (onEditTransaction) onEditTransaction(tx, true);
           }}
+        />
+      )}
+
+      {/* ⚖️ 项目快速平账调节弹窗 (ProjectQuickReconcileModal) */}
+      {reconcilingProject && (
+        <ProjectQuickReconcileModal
+          project={reconcilingProject}
+          transactions={transactions || []}
+          accounts={accounts || []}
+          privacyMode={privacyMode}
+          onClose={() => setReconcilingProject(null)}
+          onConfirmReconcile={handleConfirmQuickReconcile}
         />
       )}
     </div>

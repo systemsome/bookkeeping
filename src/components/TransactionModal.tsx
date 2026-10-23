@@ -231,13 +231,20 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     initialTransaction?.isReimbursable || false
   );
 
-  // 🔀 拆分记账 (Split Transactions) - 新增流水与编辑流水均支持多子项拆分
+  // 🔀 拆分记账 (Split Transactions) - 新增流水与编辑流水均支持多子项拆分并自动汇总至交易金额
+  type SplitItemWithDraft = SplitItem & {
+    draftAmount?: string;
+  };
+
   const [isSplitEnabled, setIsSplitEnabled] = useState<boolean>(
     Boolean(initialSplitEnabled || (initialTransaction?.splitItems && initialTransaction.splitItems.length > 0))
   );
-  const [splitItems, setSplitItems] = useState<SplitItem[]>(() => {
+  const [splitItems, setSplitItems] = useState<SplitItemWithDraft[]>(() => {
     if (initialTransaction?.splitItems && initialTransaction.splitItems.length > 0) {
-      return initialTransaction.splitItems;
+      return initialTransaction.splitItems.map((item) => ({
+        ...item,
+        draftAmount: item.amount > 0 ? item.amount.toString() : '',
+      }));
     }
     if (initialSplitEnabled) {
       const curAmount = initialTransaction?.amount || 0;
@@ -247,6 +254,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             id: `split_${Date.now()}_1`,
             category: initialTransaction?.category || '餐饮美食',
             amount: curAmount,
+            draftAmount: curAmount.toString(),
             description: initialTransaction?.description || '',
           },
         ];
@@ -256,12 +264,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           id: `split_${Date.now()}_1`,
           category: '餐饮美食',
           amount: 0,
+          draftAmount: '',
           description: '',
         },
         {
           id: `split_${Date.now()}_2`,
           category: '日用百货',
           amount: 0,
+          draftAmount: '',
           description: '',
         },
       ];
@@ -613,6 +623,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               id: `split_${Date.now()}_1`,
               category: category || (type === 'EXPENSE' ? '餐饮美食' : '工资薪酬'),
               amount: curAmount,
+              draftAmount: curAmount.toString(),
               description: description || '',
             },
           ]);
@@ -622,15 +633,23 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               id: `split_${Date.now()}_1`,
               category: category || (type === 'EXPENSE' ? '餐饮美食' : '工资薪酬'),
               amount: 0,
+              draftAmount: '',
               description: '',
             },
             {
               id: `split_${Date.now()}_2`,
               category: type === 'EXPENSE' ? '日用百货' : '其他收入',
               amount: 0,
+              draftAmount: '',
               description: '',
             },
           ]);
+        }
+      } else {
+        // If split items already exist, auto sync sum to amount
+        const currentSum = splitItems.reduce((acc, it) => acc + (it.amount || 0), 0);
+        if (currentSum > 0) {
+          setAmount((Math.round(currentSum * 100) / 100).toString());
         }
       }
     } else {
@@ -641,26 +660,63 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const addSplitItem = (customAmount?: number, customCategory?: string) => {
     const curAmount = parseFloat(amount) || 0;
     const remaining = Math.max(0, curAmount - splitTotal);
-    const newItem: SplitItem = {
+    const itemAmount = customAmount !== undefined ? customAmount : (remaining > 0 ? Math.round(remaining * 100) / 100 : 0);
+    const newItem: SplitItemWithDraft = {
       id: `split_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       category: customCategory || category || (type === 'EXPENSE' ? '餐饮美食' : '其他收入'),
-      amount: customAmount !== undefined ? customAmount : (remaining > 0 ? Math.round(remaining * 100) / 100 : 0),
+      amount: itemAmount,
+      draftAmount: itemAmount > 0 ? itemAmount.toString() : '',
       description: '',
     };
-    setSplitItems((prev) => [...prev, newItem]);
+    setSplitItems((prev) => {
+      const next = [...prev, newItem];
+      if (isSplitEnabled && itemAmount > 0) {
+        const newTotal = next.reduce((acc, it) => acc + (it.amount || 0), 0);
+        if (newTotal > 0) {
+          setAmount((Math.round(newTotal * 100) / 100).toString());
+        }
+      }
+      return next;
+    });
   };
 
-  const updateSplitItem = (id: string, updates: Partial<SplitItem>) => {
-    setSplitItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
+  const updateSplitItem = (id: string, updates: Partial<SplitItemWithDraft>) => {
+    setSplitItems((prev) => {
+      const next = prev.map((item) => (item.id === id ? { ...item, ...updates } : item));
+      if (isSplitEnabled && (updates.amount !== undefined || updates.draftAmount !== undefined)) {
+        const newTotal = next.reduce((acc, it) => acc + (it.amount || 0), 0);
+        if (newTotal > 0) {
+          setAmount((Math.round(newTotal * 100) / 100).toString());
+        } else {
+          // If all items are 0 or empty, clear transaction amount
+          const hasAnyPositive = next.some((it) => (it.amount || 0) > 0);
+          if (!hasAnyPositive) {
+            setAmount('');
+          }
+        }
+      }
+      return next;
+    });
   };
 
   const removeSplitItem = (id: string) => {
-    setSplitItems((prev) => prev.filter((item) => item.id !== id));
+    setSplitItems((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      if (isSplitEnabled) {
+        const newTotal = next.reduce((acc, it) => acc + (it.amount || 0), 0);
+        if (newTotal > 0) {
+          setAmount((Math.round(newTotal * 100) / 100).toString());
+        } else {
+          setAmount('');
+        }
+      }
+      return next;
+    });
   };
 
   const syncSplitTotalToAmount = () => {
     if (splitTotal > 0) {
-      setAmount(splitTotal.toFixed(2));
+      setAmount((Math.round(splitTotal * 100) / 100).toString());
     }
   };
 
@@ -853,28 +909,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     ? '还款单'
                     : '平账冲红'}
                 </span>
-
-                {/* 🔀 顶部拆分记账快捷开关 (新增与编辑均支持) */}
-                {(type === 'EXPENSE' || type === 'INCOME') && (
-                  <button
-                    type="button"
-                    onClick={toggleSplitMode}
-                    className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all shadow-2xs cursor-pointer ${
-                      isSplitEnabled
-                        ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/50'
-                        : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                    }`}
-                    title={isSplitEnabled ? '点击关闭多子项拆分' : '点击开启单笔流水多子项拆分记账（支持新增与编辑）'}
-                  >
-                    <Split className="w-3 h-3" />
-                    <span>{isSplitEnabled ? `已开启拆分 (${splitItems.length}项)` : '开启拆分记账'}</span>
-                  </button>
-                )}
               </div>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block truncate mt-0.5">
-                {isSplitEnabled
-                  ? '✨ 多子项拆分记账模式已激活：单笔账单支持录入多个类目明细与金额，母单自动汇总'
-                  : '清晰记录每一笔资金流动，实时同步联动资产与待还额度'}
+                清晰记录每一笔资金流动，实时同步联动资产与待还额度
               </p>
             </div>
           </div>
@@ -1227,31 +1264,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {/* Amount Big Input Box */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                {isForeign ? `${currentCurrencyInfo.name} (${currency}) 原币金额` : '交易金额 (元)'}
-              </span>
-              <div className="flex items-center gap-2">
-                {(type === 'EXPENSE' || type === 'INCOME') && (
-                  <button
-                    type="button"
-                    onClick={toggleSplitMode}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
-                      isSplitEnabled
-                        ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/40'
-                        : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                    }`}
-                    title="将本笔交易拆分为多个不同类目、金额与备注的子项进行明细记账 (支持新增与修改)"
-                  >
-                    <Split className="w-3.5 h-3.5" />
-                    <span>{isSplitEnabled ? `已开启拆分 (${splitItems.length}项)` : '🔀 拆分记账'}</span>
-                  </button>
-                )}
-                {isForeign && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                    {currentCurrencyInfo.flag} {currency}
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                <span>{isForeign ? `${currentCurrencyInfo.name} (${currency}) 原币金额` : '交易金额 (元)'}</span>
+                {isSplitEnabled && (
+                  <span className="text-[11px] font-normal text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded border border-indigo-200/60 dark:border-indigo-800/60">
+                    拆分模式：由子项金额实时累加
                   </span>
                 )}
-              </div>
+              </span>
+              {isForeign && (
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                  {currentCurrencyInfo.flag} {currency}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2 mt-1">
@@ -1297,277 +1322,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* 🔀 单笔交易多子项拆分编辑区 (Split Transactions Breakdown) - 新增与编辑首屏均可直达 */}
-          {(type === 'EXPENSE' || type === 'INCOME') && isSplitEnabled && (
-            <div className="p-4 sm:p-5 rounded-3xl bg-indigo-50/60 dark:bg-indigo-950/30 border-2 border-indigo-200 dark:border-indigo-800/80 space-y-4 shadow-sm animate-in fade-in zoom-in-95 duration-150">
-              {/* Split Header */}
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-2xs">
-                    <Split className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                        单笔流水拆分记账明细
-                      </h4>
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
-                        {splitItems.length} 个子项
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      支持为每个子项独立指定消费分类、金额与说明，保存后在账单列表中可直接下钻查看详情
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={syncSplitTotalToAmount}
-                    className="text-xs font-bold px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 transition-colors shadow-2xs"
-                    title="将各子项合计金额直接填入上方母单总额"
-                  >
-                    按子项更新总金额
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSplitEnabled(false)}
-                    className="text-xs font-medium px-2.5 py-1 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    关闭拆分
-                  </button>
-                </div>
-              </div>
-
-              {/* Real-time Balancing Tracker & Progress */}
-              {(() => {
-                const mainAmount = parseFloat(amount) || 0;
-                const diff = Math.round((mainAmount - splitTotal) * 100) / 100;
-                const isBalanced = Math.abs(diff) < 0.01 && splitTotal > 0;
-
-                return (
-                  <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          母单总额: <strong className="font-mono text-slate-800 dark:text-slate-200">{currentCurrencyInfo.symbol}{mainAmount.toFixed(2)}</strong>
-                        </span>
-                        <span className="text-slate-500 dark:text-slate-400">
-                          子项合计: <strong className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{currentCurrencyInfo.symbol}{splitTotal.toFixed(2)}</strong>
-                        </span>
-                      </div>
-
-                      {isBalanced ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>已完全配平 (100%)</span>
-                        </span>
-                      ) : diff > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                            ⚠️ 还差 {currentCurrencyInfo.symbol}{diff.toFixed(2)} 未分配
-                          </span>
-                          <button
-                            type="button"
-                            onClick={fillRemainingSplitItem}
-                            className="px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-2xs transition-colors"
-                          >
-                            + 补齐为新子项
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-rose-600 font-semibold">
-                            ⚠️ 超出总金额 {currentCurrencyInfo.symbol}{Math.abs(diff).toFixed(2)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={syncSplitTotalToAmount}
-                            className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shadow-2xs transition-colors"
-                          >
-                            按子项合计更新总额
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Visual Proportion Bar */}
-                    {splitItems.length > 0 && splitTotal > 0 && (
-                      <div className="h-2 w-full rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800">
-                        {splitItems.map((item, idx) => {
-                          const base = mainAmount > 0 ? mainAmount : splitTotal;
-                          const pct = base > 0 ? ((item.amount || 0) / base) * 100 : 0;
-                          const colors = [
-                            'bg-indigo-500',
-                            'bg-rose-500',
-                            'bg-amber-500',
-                            'bg-emerald-500',
-                            'bg-blue-500',
-                            'bg-purple-500',
-                            'bg-teal-500',
-                          ];
-                          return (
-                            <div
-                              key={item.id || idx}
-                              style={{ width: `${Math.max(1, pct)}%` }}
-                              className={`h-full ${colors[idx % colors.length]}`}
-                              title={`${item.category}: ${currentCurrencyInfo.symbol}${(item.amount || 0).toFixed(2)} (${pct.toFixed(1)}%)`}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Sub-items List */}
-              <div className="space-y-2">
-                {splitItems.map((item, idx) => {
-                  const mainAmount = parseFloat(amount) || splitTotal;
-                  const pct = mainAmount > 0 ? (((item.amount || 0) / mainAmount) * 100).toFixed(1) : '0';
-                  const availableCats = (type === 'EXPENSE' ? expenseCategories : incomeCategories).map((c) => c.name);
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 space-y-2 shadow-2xs group hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-mono font-bold flex items-center justify-center shrink-0">
-                          #{idx + 1}
-                        </span>
-
-                        {/* Category Selector with Dropdown + Free typing */}
-                        <div className="flex-1 min-w-[130px]">
-                          <select
-                            value={availableCats.includes(item.category) ? item.category : '__CUSTOM__'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val !== '__CUSTOM__') {
-                                updateSplitItem(item.id, { category: val });
-                              }
-                            }}
-                            className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-400"
-                          >
-                            <optgroup label="选择常用分类">
-                              {availableCats.map((catName) => (
-                                <option key={catName} value={catName}>
-                                  {catName}
-                                </option>
-                              ))}
-                            </optgroup>
-                            <option value="__CUSTOM__">✍️ 自定义子项分类...</option>
-                          </select>
-                        </div>
-
-                        {/* Sub-item Amount */}
-                        <div className="relative w-28 sm:w-36 shrink-0">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none select-none">
-                            {currentCurrencyInfo.symbol}
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={item.amount || ''}
-                            onChange={(e) => updateSplitItem(item.id, { amount: parseFloat(e.target.value) || 0 })}
-                            style={{
-                              paddingLeft:
-                                currentCurrencyInfo.symbol.length >= 3
-                                  ? '2.5rem'
-                                  : currentCurrencyInfo.symbol.length === 2
-                                  ? '2.0rem'
-                                  : '1.6rem',
-                            }}
-                            className="w-full pr-2.5 py-1.5 text-xs font-mono font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-400 transition-colors"
-                          />
-                        </div>
-
-                        <span className="text-[10px] font-mono text-slate-400 w-12 text-right shrink-0">
-                          {pct}%
-                        </span>
-
-                        {/* Remove item */}
-                        <button
-                          type="button"
-                          onClick={() => removeSplitItem(item.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors shrink-0"
-                          title="删除此拆分子项"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* Custom Category Input if not in standard list */}
-                      {!availableCats.includes(item.category) && (
-                        <div className="flex items-center gap-2 pt-1">
-                          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 shrink-0 font-medium">
-                            自定义分类名称:
-                          </span>
-                          <input
-                            type="text"
-                            placeholder="输入子项专属类目"
-                            value={item.category}
-                            onChange={(e) => updateSplitItem(item.id, { category: e.target.value })}
-                            className="flex-1 px-2.5 py-1 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-slate-800 dark:text-white"
-                          />
-                        </div>
-                      )}
-
-                      {/* Sub-item Description / Note */}
-                      <input
-                        type="text"
-                        placeholder="子项说明备注 (选填，如：自己承担部分、饮料零食、办公用纸...)"
-                        value={item.description || ''}
-                        onChange={(e) => updateSplitItem(item.id, { description: e.target.value })}
-                        className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-indigo-400"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Add Sub-item & Quick Balance actions */}
-              <div className="flex items-center gap-2 pt-1 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => addSplitItem()}
-                  className="flex-1 py-2 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>添加拆分子项</span>
-                </button>
-
-                {(() => {
-                  const mainAmount = parseFloat(amount) || 0;
-                  const diff = mainAmount - splitTotal;
-                  if (diff > 0.005) {
-                    return (
-                      <button
-                        type="button"
-                        onClick={fillRemainingSplitItem}
-                        className="py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                      >
-                        <span>补齐未分 {currentCurrencyInfo.symbol}{diff.toFixed(2)}</span>
-                      </button>
-                    );
-                  }
-                  return null;
-                })()}
-
-                <button
-                  type="button"
-                  onClick={syncSplitTotalToAmount}
-                  className="py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                  title="将子项累计金额同步更新至母单金额"
-                >
-                  <span>同步总额</span>
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Foreign Currency Conversion Panel */}
           {isForeign && (
@@ -1644,6 +1398,257 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   <span className="text-[10px] text-blue-700 dark:text-blue-400">将按此金额扣减账户余额与计入月支出</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* 🔀 单笔流水拆分记账 (Split Transactions) - 调整至支付/扣款账户上方 */}
+          {['EXPENSE', 'INCOME'].includes(type) && (
+            <div>
+              {!isSplitEnabled ? (
+                /* 闭合卡片样式：完全与用户提供的参考图一致 */
+                <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Split className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      单笔流水拆分记账 (Split Transactions)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleSplitMode}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors shrink-0"
+                  >
+                    开启拆分
+                  </button>
+                </div>
+              ) : (
+                /* 展开状态：清晰的多子项拆分与金额试算面板 */
+                <div className="p-3.5 sm:p-4 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 space-y-3.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <Split className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                            单笔流水拆分记账
+                          </span>
+                          <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-100/70 dark:bg-indigo-900/60 px-1.5 py-0.5 rounded">
+                            自动同步总金额
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          ({splitItems.length} 个子项 · 填写的金额自动汇总至上方交易金额)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {Math.abs((parseFloat(amount) || 0) - splitTotal) < 0.01 ? (
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          已平衡 {currentCurrencyInfo.symbol}{splitTotal.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                            (parseFloat(amount) || 0) - splitTotal > 0
+                              ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border-amber-200/60 dark:border-amber-800/60'
+                              : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-800/60'
+                          }`}
+                        >
+                          {(parseFloat(amount) || 0) - splitTotal > 0
+                            ? `未分配: ${currentCurrencyInfo.symbol}${((parseFloat(amount) || 0) - splitTotal).toFixed(2)}`
+                            : `超出: ${currentCurrencyInfo.symbol}${Math.abs((parseFloat(amount) || 0) - splitTotal).toFixed(2)}`}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={toggleSplitMode}
+                        className="px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
+                      >
+                        关闭拆分
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 子项列表 */}
+                  <div className="space-y-2">
+                    {splitItems.map((item, index) => {
+                      const totalNum = parseFloat(amount) || 0;
+                      const percent = totalNum > 0 ? Math.round(((item.amount || 0) / totalNum) * 100) : 0;
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shadow-xs"
+                        >
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-[11px] font-bold text-slate-400 w-4 text-center shrink-0">
+                              #{index + 1}
+                            </span>
+                            {/* 子类别选择 */}
+                            <select
+                              value={item.category}
+                              onChange={(e) => updateSplitItem(item.id, { category: e.target.value })}
+                              className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 shrink-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            >
+                              {(type === 'EXPENSE' ? expenseCategories : incomeCategories).map((cat) => (
+                                <option key={cat.id} value={cat.name}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* 子项备注 */}
+                            <input
+                              type="text"
+                              value={item.description || ''}
+                              onChange={(e) => updateSplitItem(item.id, { description: e.target.value })}
+                              placeholder="子项说明 (如水果、蔬菜、日用品)..."
+                              className="flex-1 min-w-[120px] px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2 justify-end shrink-0">
+                            {/* 动态货币符号与金额输入 */}
+                            <div className="relative flex items-center">
+                              <span className="absolute left-2.5 text-xs font-bold text-slate-400 pointer-events-none">
+                                {currentCurrencyInfo.symbol}
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={item.draftAmount !== undefined ? item.draftAmount : (item.amount === 0 ? '' : item.amount.toString())}
+                                onChange={(e) => {
+                                  const rawVal = e.target.value;
+                                  const val = parseFloat(rawVal);
+                                  updateSplitItem(item.id, {
+                                    amount: isNaN(val) ? 0 : val,
+                                    draftAmount: rawVal,
+                                  });
+                                }}
+                                placeholder="0.00"
+                                className="w-24 pl-6 pr-2 py-1.5 text-xs font-bold text-right rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-400"
+                              />
+                            </div>
+
+                            {/* 占比徽标 */}
+                            <span className="w-10 text-[11px] font-semibold text-slate-400 text-right shrink-0">
+                              {percent}%
+                            </span>
+
+                            {/* 删除子项按钮 */}
+                            <button
+                              type="button"
+                              onClick={() => removeSplitItem(item.id)}
+                              disabled={splitItems.length <= 1}
+                              className={`p-1.5 rounded-lg text-slate-400 transition-colors ${
+                                splitItems.length <= 1
+                                  ? 'opacity-30 cursor-not-allowed'
+                                  : 'hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                              }`}
+                              title={splitItems.length <= 1 ? '至少保留一个拆分子项' : '删除该子项'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* 底部操作快捷按钮栏 */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-indigo-100/70 dark:border-indigo-900/40">
+                    <button
+                      type="button"
+                      onClick={() => addSplitItem()}
+                      className="px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700/80 border border-indigo-200 dark:border-indigo-800 rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>添加拆分子项</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      {(parseFloat(amount) || 0) > splitTotal && (
+                        <button
+                          type="button"
+                          onClick={fillRemainingSplitItem}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/50 border border-amber-200/80 dark:border-amber-800/80 rounded-xl transition-colors"
+                        >
+                          补齐未分 ({currentCurrencyInfo.symbol}{((parseFloat(amount) || 0) - splitTotal).toFixed(2)})
+                        </button>
+                      )}
+                      {splitTotal > 0 && Math.abs((parseFloat(amount) || 0) - splitTotal) > 0.01 && (
+                        <button
+                          type="button"
+                          onClick={syncSplitTotalToAmount}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors"
+                        >
+                          按子项更新总额 ({currentCurrencyInfo.symbol}{splitTotal.toFixed(2)})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 归属账本项目关联 (方便统计单项目支出与收入、独立核算结余) */}
+          <div className="p-3 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <FolderKanban className="w-3.5 h-3.5 text-indigo-500" />
+                <span>归属账本项目</span>
+              </label>
+              {projectId && (
+                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800/60">
+                  已关联
+                </span>
+              )}
+            </div>
+
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">-- 不归属特定账本 --</option>
+              {projects.map((proj) => (
+                <option key={proj.id} value={proj.id}>
+                  📁 [{proj.category}] {proj.name} {proj.budget ? `(预算: ¥${proj.budget})` : ''} {proj.status === 'COMPLETED' ? '【已结项】' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 💼 公司 / 他人垫付 (待报销) 追踪 - 位于归属账本项目下方，支付/扣款账户上方 */}
+          {type === 'EXPENSE' && (
+            <div className="p-3 bg-amber-50/60 dark:bg-amber-950/20 rounded-2xl border border-amber-200/70 dark:border-amber-900/40 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                    公司 / 他人垫付 (待报销)
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                    开启后标记为待报销垫付款，后续报销到账可一键核销，不扭曲个人真实月度支出
+                  </span>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                <input
+                  type="checkbox"
+                  checked={isReimbursable}
+                  onChange={(e) => setIsReimbursable(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
             </div>
           )}
 
@@ -2237,34 +2242,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* 归属账本项目关联 (方便统计单项目支出与收入、独立核算结余) */}
-          <div className="p-3 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <FolderKanban className="w-3.5 h-3.5 text-indigo-500" />
-                <span>归属账本项目</span>
-              </label>
-              {projectId && (
-                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800/60">
-                  已关联
-                </span>
-              )}
-            </div>
-
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="">-- 不归属特定账本 --</option>
-              {projects.map((proj) => (
-                <option key={proj.id} value={proj.id}>
-                  📁 [{proj.category}] {proj.name} {proj.budget ? `(预算: ¥${proj.budget})` : ''} {proj.status === 'COMPLETED' ? '【已结项】' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Notes & Merchant Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -2297,34 +2274,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               />
             </div>
           </div>
-
-          {/* 💼 公司 / 他人垫付 (待报销) 追踪 */}
-          {type === 'EXPENSE' && (
-            <div className="p-3 bg-amber-50/60 dark:bg-amber-950/20 rounded-2xl border border-amber-200/70 dark:border-amber-900/40 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <Briefcase className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                    公司 / 他人垫付 (待报销)
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                    开启后标记为待报销垫付款，后续报销到账可一键核销，不扭曲个人真实月度支出
-                  </span>
-                </div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
-                <input
-                  type="checkbox"
-                  checked={isReimbursable}
-                  onChange={(e) => setIsReimbursable(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-              </label>
-            </div>
-          )}
         </form>
       </div>
 
