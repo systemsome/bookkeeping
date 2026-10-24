@@ -169,8 +169,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
   // Overall statistics across all active/visible projects
   const overallStats = useMemo(() => {
-    let totalExpectedIncome = 0;
-    let totalActualIncome = 0;
+    let totalIncome = 0;
     let grossExpense = 0;
     let refundAmount = 0;
     let totalBudget = 0;
@@ -179,8 +178,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     (projects || []).forEach((proj) => {
       const s = projectStatsMap.get(proj.id);
       if (s) {
-        totalExpectedIncome += s.expectedIncome;
-        totalActualIncome += s.totalIncome;
+        totalIncome += s.totalIncome;
         grossExpense += s.grossExpense;
         refundAmount += s.refundAmount;
         if (s.budget) totalBudget += s.budget;
@@ -189,13 +187,11 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     });
 
     const netExpense = Math.max(0, grossExpense - refundAmount);
-    // 核心业务规则：项目的预算金额与应该收入保持持平
-    const netBalance = totalExpectedIncome - netExpense;
+    // 项目总净结余 = 项目实际收入 - 实际净支出
+    const netBalance = totalIncome - netExpense;
 
     return {
-      totalExpectedIncome,
-      totalActualIncome,
-      totalIncome: totalActualIncome,
+      totalIncome,
       grossExpense,
       refundAmount,
       netExpense,
@@ -587,21 +583,19 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
         {/* 6-Metric Financial Scoreboard for this Project */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          {/* 1. 项目应该收入 (与预算金额保持持平) */}
+          {/* 1. 项目收入 (计入该项目的收入明细汇总) */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
             <div className="flex items-center justify-between text-slate-400 mb-1.5">
-              <span className="text-xs font-medium">项目应该收入</span>
+              <span className="text-xs font-medium">项目收入</span>
               <div className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </div>
             </div>
             <div className="text-base sm:text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono">
-              +{formatCurrency(activeProjectStats.expectedIncome, privacyMode)}
+              +{formatCurrency(activeProjectStats.totalIncome, privacyMode)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              {activeProject.budget
-                ? `与预算金额保持持平 (实收 ¥${activeProjectStats.totalIncome.toFixed(2)})`
-                : `共 ${activeProjectStats.incomeCount} 笔收款`}
+              共 {activeProjectStats.incomeCount} 笔收入明细
             </div>
           </div>
 
@@ -672,7 +666,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               {formatCurrency(activeProjectStats.netBalance, privacyMode)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              <span>应该收入 - 实际净支出</span>
+              <span>项目收入 - 实际净支出</span>
               <button
                 type="button"
                 onClick={() => setReconcilingProject(activeProject)}
@@ -1220,9 +1214,9 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               </div>
 
               <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
-                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">项目应该收入</span>
+                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">项目收入</span>
                 <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
-                  +{formatCurrency(overallStats.totalExpectedIncome, privacyMode)}
+                  +{formatCurrency(overallStats.totalIncome, privacyMode)}
                 </div>
               </div>
 
@@ -1511,14 +1505,12 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Financial Matrix (应该收入 / 支出 / 冲红 / 净支出 / 结余) */}
+                    {/* Financial Matrix (项目收入 / 支出 / 冲红 / 净支出 / 结余) */}
                     <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800">
                       <div>
-                        <div className="text-[10px] text-slate-400 font-medium">
-                          应该收入 {proj.budget ? '(与预算持平)' : ''}
-                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">项目收入</div>
                         <div className="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-400 font-mono">
-                          +{formatCurrency(stats.expectedIncome, privacyMode)}
+                          +{formatCurrency(stats.totalIncome, privacyMode)}
                         </div>
                       </div>
 
@@ -1547,7 +1539,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
                       <div className="col-span-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
                         <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                          项目净结余 (应该收入-净支)
+                          项目净结余 (项目收入 - 净支)
                         </span>
                         <span
                           className={`text-xs font-bold font-mono ${

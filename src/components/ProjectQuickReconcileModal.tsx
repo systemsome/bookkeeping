@@ -238,7 +238,7 @@ export const ProjectQuickReconcileModal: React.FC<ProjectQuickReconcileModalProp
                   {formatCurrency(currentBookBalance, privacyMode)}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                  应该收入 ¥{currentStats.expectedIncome.toFixed(2)}{project.budget ? ' (与预算持平)' : ''} · 净支 ¥{currentStats.netExpense.toFixed(2)}
+                  项目收入 ¥{currentStats.totalIncome.toFixed(2)} · 净支 ¥{currentStats.netExpense.toFixed(2)}
                 </div>
               </div>
 
@@ -311,7 +311,7 @@ export const ProjectQuickReconcileModal: React.FC<ProjectQuickReconcileModalProp
                     type="button"
                     onClick={() => handleSetPreset(project.budget! - currentStats.netExpense)}
                     className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 hover:bg-emerald-100"
-                    title="平账至预算剩余金额 (预算应该收入 - 实际净支出)"
+                    title="平账至预算剩余金额 (项目预算 - 实际净支出)"
                   >
                     预算剩余 (¥{(project.budget - currentStats.netExpense).toFixed(2)})
                   </button>

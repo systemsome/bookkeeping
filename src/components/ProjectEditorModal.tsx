@@ -207,14 +207,14 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
             </div>
           </div>
 
-          {/* Budget & Expected Income */}
+          {/* Budget */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                预算金额 / 应该收入 (元)
+                项目预算金额 (元)
               </label>
-              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                ✨ 预算金额与应该收入保持持平
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                可选 · 支出上限控制
               </span>
             </div>
             <div className="relative">
@@ -228,11 +228,11 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
                 placeholder="例如：50000.00"
-                className="w-full pl-7 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
+                className="w-full pl-7 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              本项目的预算金额与应该收入保持持平，作为核算项目规划资金上限与净结余的基准。
+              可设定项目支出预算上限，用于监控项目支出进度与超支预警（项目收入将按实际记入的收入明细汇总）。
             </p>
           </div>
 
