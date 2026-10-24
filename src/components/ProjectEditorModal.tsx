@@ -207,11 +207,16 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
             </div>
           </div>
 
-          {/* Budget */}
+          {/* Budget & Expected Income */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              预算金额 (元)
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                预算金额 / 应该收入 (元)
+              </label>
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                ✨ 预算金额与应该收入保持持平
+              </span>
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-bold font-mono">
                 ¥
@@ -226,6 +231,9 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
                 className="w-full pl-7 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
               />
             </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              本项目的预算金额与应该收入保持持平，作为核算项目规划资金上限与净结余的基准。
+            </p>
           </div>
 
           {/* Dates */}

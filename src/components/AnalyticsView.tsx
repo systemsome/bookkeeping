@@ -232,20 +232,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     <div className="space-y-6">
       {/* Top Banner & Metric Summary (与记账本 / 资产账户 / 账本项目顶部样式完全统一) */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-100 dark:border-teal-800 text-teal-700 dark:text-teal-400 text-xs font-semibold mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800 text-teal-700 dark:text-teal-400 text-xs font-semibold">
               <BarChart3 className="w-3.5 h-3.5" />
-              <span>统计分析专区</span>
+              <span>统计分析</span>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                全维度财务统计与资产分析
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/60 font-mono">
-                {transactions.length} 笔流水 · {accounts.length} 张账户
-              </span>
-            </div>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/60">
+              共 {transactions.length} 笔流水 · {accounts.length} 张账户
+            </span>
           </div>
 
           {/* Quick Actions (纯功能图标展示，悬停显示文字浮层，与其它板块统一) */}
@@ -275,7 +270,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               {summary.netAssets >= 0 ? '+' : ''}{formatCurrency(summary.netAssets, privacyMode)}
             </div>
             <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-              总资产 ¥{formatCurrency(summary.totalAssets, privacyMode)}
+              总资产 {formatCurrency(summary.totalAssets, privacyMode)}
             </div>
           </div>
 

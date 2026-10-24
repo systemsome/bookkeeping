@@ -35,6 +35,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   Palette,
+  Pin,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory, AssetGroup, LedgerProject, UserProfile } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
@@ -82,6 +83,28 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'GROUPED' | 'CARD' | 'TABLE'>('GROUPED');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isAlwaysShowAll, setIsAlwaysShowAll] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('accounts_always_show_all') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleAlwaysShow = () => {
+    setIsAlwaysShowAll((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('accounts_always_show_all', String(next));
+      } catch {}
+      showToast(
+        next
+          ? '📌 已开启一键常显（所有卡片始终展示卡号与额度详情）'
+          : '✨ 已关闭一键常显（卡片恢复悬停与轻触唤醒）'
+      );
+      return next;
+    });
+  };
 
   const handleManualSync = async () => {
     if (!onTriggerSync || isSyncing) return;
@@ -536,26 +559,21 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
       {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-800 text-purple-700 dark:text-purple-400 text-xs font-semibold mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/60 border border-purple-200/70 dark:border-purple-800 text-purple-700 dark:text-purple-400 text-xs font-semibold">
               <Wallet className="w-3.5 h-3.5" />
-              <span>资产账户专区</span>
+              <span>资产账户</span>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                资产账户
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60">
-                共 {accounts.length} 张卡片/账户
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60">
+              共 {accounts.length} 张卡片/账户
+            </span>
+            {currentUser && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>云端已同步</span>
               </span>
-              {currentUser && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>云端已同步</span>
-                </span>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
@@ -631,7 +649,32 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               </button>
             )}
 
-            {/* 5. CardArt 卡面艺廊 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
+            {/* 5. 一键常显 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
+            <button
+              id="btn-accounts-always-show"
+              type="button"
+              onClick={handleToggleAlwaysShow}
+              className={`relative p-2 rounded-xl transition-all flex items-center justify-center active:scale-95 group ${
+                isAlwaysShowAll
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-xs ring-2 ring-amber-400/30'
+                  : 'bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
+              }`}
+              title={isAlwaysShowAll ? '取消一键常显 (当前所有卡片常显详情)' : '一键常显 (所有卡片始终展示详情)'}
+              aria-label={isAlwaysShowAll ? '取消一键常显' : '一键常显'}
+            >
+              <Pin
+                className={`w-4 h-4 transition-transform ${
+                  isAlwaysShowAll
+                    ? 'text-amber-600 dark:text-amber-400 rotate-45 fill-amber-500/20'
+                    : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                }`}
+              />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
+                {isAlwaysShowAll ? '取消一键常显' : '一键常显'}
+              </span>
+            </button>
+
+            {/* 6. CardArt 卡面艺廊 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
             <button
               id="btn-open-cardart-gallery"
               type="button"
@@ -1106,7 +1149,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                           <AccountCardFace
                             account={acc}
                             privacyMode={privacyMode}
-                            wakeMode="hidden"
+                            wakeMode={isAlwaysShowAll ? 'pinned' : 'hidden'}
                             projectName={
                               acc.projectName ||
                               (acc.projectId ? projectMap.get(acc.projectId)?.name : undefined)
@@ -1166,7 +1209,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 <AccountCardFace
                   account={acc}
                   privacyMode={privacyMode}
-                  wakeMode="hidden"
+                  wakeMode={isAlwaysShowAll ? 'pinned' : 'hidden'}
                   projectName={
                     acc.projectName ||
                     (acc.projectId ? projectMap.get(acc.projectId)?.name : undefined)

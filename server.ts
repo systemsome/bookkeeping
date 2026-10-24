@@ -805,6 +805,26 @@ async function startServer() {
     });
   });
 
+  // Reset demo data to official GitHub repository initial demo data
+  app.post('/api/sync/reset-demo', (req, res) => {
+    const defaultLedger = {
+      user: DEFAULT_DEMO_USER,
+      accounts: INITIAL_DEMO_ACCOUNTS,
+      transactions: INITIAL_DEMO_TRANSACTIONS,
+      projects: INITIAL_DEMO_PROJECTS,
+      recurringTasks: INITIAL_DEMO_RECURRING_TASKS,
+      lastUpdated: new Date().toISOString(),
+    };
+    localSyncStore.set('demo-user-888', defaultLedger);
+    localSyncStore.set('demo', defaultLedger);
+    savePersistedStores();
+    return res.json({
+      success: true,
+      message: '已成功重置为 GitHub 官方仓库初始示例数据',
+      ...defaultLedger,
+    });
+  });
+
   // ==========================================
   // CardArt (https://cardart.cc) Real Sync & Query Engine
   // Supports live cursor-based sync with https://cardart.cc/explore.data

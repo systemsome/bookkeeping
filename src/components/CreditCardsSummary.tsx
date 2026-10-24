@@ -41,15 +41,15 @@ export const CreditCardsSummary: React.FC<CreditCardsSummaryProps> = ({
     <div className="space-y-6">
       {/* Top Banner & Metric Summary */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-semibold mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200/70 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-semibold">
               <CreditCard className="w-3.5 h-3.5" />
-              <span>信用卡专区</span>
+              <span>信用卡</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-              信用卡与额度还款管理
-            </h2>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/60">
+              共 {creditAccounts.length} 张信用卡/信贷账户
+            </span>
           </div>
 
           {/* Quick Repayment CTA */}

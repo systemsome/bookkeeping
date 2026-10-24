@@ -746,7 +746,11 @@ export default function App() {
       setAccounts(res.accounts);
       setTransactions((prev) => sortTransactions([res.transaction!, ...prev]));
       setRecurringTasks(res.updatedTasks);
-      showToast(`⚡ 已成功入账「${res.transaction.description}」¥${res.transaction.amount}`);
+      const isCurForeign = res.transaction.currency && res.transaction.currency !== 'CNY';
+      const amtDisplay = isCurForeign
+        ? `${res.transaction.originalAmount !== undefined ? res.transaction.originalAmount : ''} ${res.transaction.currency} (折合 ¥${res.transaction.amount})`
+        : `¥${res.transaction.amount}`;
+      showToast(`⚡ 已成功入账「${res.transaction.description}」${amtDisplay}`);
     }
   };
 

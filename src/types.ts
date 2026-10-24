@@ -246,7 +246,10 @@ export interface RecurringTask {
   userId?: string;
   name: string; // 任务名称，如 "每月固定房租", "iCloud 2TB 订阅", "公司发放月薪"
   type: TransactionType; // 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'REPAYMENT'
-  amount: number; // 记账基准金额
+  amount: number; // 记账基准金额 (折合人民币 CNY)
+  originalAmount?: number; // 外币原币金额 (如 9.99 USD)
+  currency?: string; // 币种代码 (如 'USD', 'EUR', 'JPY', 'HKD', 默认 'CNY')
+  exchangeRate?: number; // 记账汇率 (1 外币 = X 人民币)
   frequency: RecurringFrequency; // 周期频率：每月 / 每周 / 每年 / 每天
   dayOfMonth?: number; // 每月执行日 (1-31)，针对 MONTHLY
   dayOfWeek?: number; // 每周执行日 (0-6，0为周日，1为周一)，针对 WEEKLY

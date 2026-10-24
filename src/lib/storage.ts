@@ -1377,6 +1377,9 @@ export const executeRecurringTask = (
   const { accounts: updatedAccounts, transaction } = addTransaction(userId, {
     type: task.type,
     amount: task.amount,
+    originalAmount: task.originalAmount,
+    currency: task.currency || 'CNY',
+    exchangeRate: task.exchangeRate,
     date: todayStr,
     time: timeStr,
     accountId: task.accountId,
@@ -1429,5 +1432,7 @@ export const setAppLocked = (locked: boolean) => {
 export const resetToDemoData = (userId: string) => {
   saveAccounts(userId, INITIAL_DEMO_ACCOUNTS);
   saveTransactions(userId, INITIAL_DEMO_TRANSACTIONS);
+  saveProjects(userId, INITIAL_DEMO_PROJECTS);
+  saveRecurringTasks(userId, INITIAL_DEMO_RECURRING_TASKS);
 };
 

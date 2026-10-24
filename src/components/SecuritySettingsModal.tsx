@@ -178,10 +178,13 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   };
 
   // Reset to Demo Data
-  const handleResetData = () => {
+  const handleResetData = async () => {
     resetToDemoData(currentUser.id);
+    try {
+      await fetch('/api/sync/reset-demo', { method: 'POST' });
+    } catch {}
     onRefreshData();
-    setSuccessMsg('已成功重置为标准示例资产账本！');
+    setSuccessMsg('已成功重置为标准示例资产账本与 GitHub 官方仓库初始数据！');
   };
 
   return (

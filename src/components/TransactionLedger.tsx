@@ -1367,38 +1367,33 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     <div className="space-y-6">
       {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200/70 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold">
               <ListOrdered className="w-3.5 h-3.5" />
-              <span>明细记账专区</span>
+              <span>记账本</span>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                记账本
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60">
-                共 {(transactions || []).length} 笔明细
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60">
+              共 {(transactions || []).length} 笔明细
+            </span>
+            {selectedDateFilter && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                <span>已筛选: {selectedDateFilter}</span>
+                <button
+                  onClick={() => setSelectedDateFilter(null)}
+                  className="hover:text-amber-900 dark:hover:text-amber-200"
+                  title="清除日期筛选"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </span>
-              {selectedDateFilter && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-                  <span>已筛选: {selectedDateFilter}</span>
-                  <button
-                    onClick={() => setSelectedDateFilter(null)}
-                    className="hover:text-amber-900 dark:hover:text-amber-200"
-                    title="清除日期筛选"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </span>
-              )}
-              {currentUser && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>云端已同步</span>
-                </span>
-              )}
-            </div>
+            )}
+            {currentUser && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>云端已同步</span>
+              </span>
+            )}
           </div>
 
           {/* Action Buttons: 纯功能图标展示，鼠标悬停显示文字浮层，与资产账户与导航栏风格统一 */}

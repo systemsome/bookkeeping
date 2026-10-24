@@ -238,7 +238,7 @@ export const ProjectQuickReconcileModal: React.FC<ProjectQuickReconcileModalProp
                   {formatCurrency(currentBookBalance, privacyMode)}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                  收入 ¥{currentStats.totalIncome.toFixed(2)} · 净支 ¥{currentStats.netExpense.toFixed(2)}
+                  应该收入 ¥{currentStats.expectedIncome.toFixed(2)}{project.budget ? ' (与预算持平)' : ''} · 净支 ¥{currentStats.netExpense.toFixed(2)}
                 </div>
               </div>
 
@@ -272,8 +272,8 @@ export const ProjectQuickReconcileModal: React.FC<ProjectQuickReconcileModalProp
               <label htmlFor="tx-reconcile-target-input" className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
                 项目当前的实际结余金额 (¥)
               </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+              <div className="flex items-center px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all">
+                <span className="shrink-0 text-slate-400 font-bold text-base font-mono select-none mr-2">
                   ¥
                 </span>
                 <input
@@ -285,7 +285,7 @@ export const ProjectQuickReconcileModal: React.FC<ProjectQuickReconcileModalProp
                   placeholder="0.00"
                   required
                   autoFocus
-                  className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-transparent text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none p-0 border-none"
                 />
               </div>
 
@@ -306,6 +306,16 @@ export const ProjectQuickReconcileModal: React.FC<ProjectQuickReconcileModalProp
                 >
                   重置为账面值
                 </button>
+                {project.budget && project.budget > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetPreset(project.budget! - currentStats.netExpense)}
+                    className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 hover:bg-emerald-100"
+                    title="平账至预算剩余金额 (预算应该收入 - 实际净支出)"
+                  >
+                    预算剩余 (¥{(project.budget - currentStats.netExpense).toFixed(2)})
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleAdjustBy(100)}

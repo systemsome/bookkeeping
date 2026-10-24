@@ -950,7 +950,7 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
             </div>
 
             <div className="flex items-center gap-0.5 shrink-0 ml-auto">
-              {/* Wake Pin Mode Toggle */}
+              {/* Wake Pin Mode Toggle (只显示图标不显示名称) */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -958,15 +958,19 @@ export const AccountCardFace: React.FC<AccountCardFaceProps> = ({
                   setIsCardPinned(!isCardPinned);
                   if (isCardPinned) setIsCardAwake(false);
                 }}
-                className={`px-1.5 py-0.5 rounded-lg transition-colors flex items-center gap-0.5 cursor-pointer text-[10px] ${
+                className={`p-1.5 rounded-lg transition-colors flex items-center justify-center cursor-pointer ${
                   isCardPinned
                     ? 'bg-amber-200/80 dark:bg-amber-950 text-amber-900 dark:text-amber-300 font-bold shadow-2xs'
                     : 'hover:bg-white dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
                 title={isCardPinned ? '当前已锁定常显 (点击恢复隐藏唤醒)' : '点击锁定常显明细'}
+                aria-label={isCardPinned ? '当前已锁定常显 (点击恢复隐藏唤醒)' : '点击锁定常显明细'}
               >
-                {isCardPinned ? <Pin className="w-2.5 h-2.5 text-amber-600 shrink-0 rotate-45" /> : <PinOff className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
-                <span>{isCardPinned ? '常显' : '常显'}</span>
+                {isCardPinned ? (
+                  <Pin className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0 rotate-45" />
+                ) : (
+                  <PinOff className="w-3 h-3 text-slate-400 shrink-0" />
+                )}
               </button>
 
               {/* Delete Account with non-blocking inline confirmation */}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   X,
   Plus,
@@ -18,6 +18,11 @@ import {
   Building2,
   Tag as TagIcon,
   HelpCircle,
+  Globe2,
+  ArrowRightLeft,
+  ChevronDown,
+  Check,
+  Search,
 } from 'lucide-react';
 import {
   RecurringTask,
@@ -29,6 +34,14 @@ import {
 } from '../types';
 import { formatCurrency } from '../lib/formatters';
 import { calculateNextDueDate } from '../lib/storage';
+import {
+  SUPPORTED_CURRENCIES,
+  CurrencyItem,
+  fetchLiveForexRates,
+  getCachedForexRates,
+  getCurrencyInfo,
+  ForexRatesResponse,
+} from '../lib/forexRates';
 
 interface RecurringTasksModalProps {
   isOpen: boolean;
@@ -65,6 +78,16 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState<TransactionType>('EXPENSE');
   const [formAmount, setFormAmount] = useState('');
+  const [formCurrency, setFormCurrency] = useState<string>('CNY');
+  const [formCustomRate, setFormCustomRate] = useState<string>('');
+  const [showRateCustomizer, setShowRateCustomizer] = useState<boolean>(false);
+  const [forexRates, setForexRates] = useState<ForexRatesResponse>(() => getCachedForexRates());
+  const [isRefreshingRates, setIsRefreshingRates] = useState<boolean>(false);
+  const [rateFeedback, setRateFeedback] = useState<string>('');
+  const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState<boolean>(false);
+  const [currencySearchQuery, setCurrencySearchQuery] = useState<string>('');
+  const currencyDropdownRef = useRef<HTMLDivElement>(null);
+
   const [formFrequency, setFormFrequency] = useState<RecurringFrequency>('MONTHLY');
   const [formDayOfMonth, setFormDayOfMonth] = useState<number>(1);
   const [formAccountId, setFormAccountId] = useState(accounts[0]?.id || '');
@@ -75,6 +98,100 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
   const [formProjectId, setFormProjectId] = useState('');
   const [formAutoExecute, setFormAutoExecute] = useState(true);
   const [formEnabled, setFormEnabled] = useState(true);
+
+  // Fetch live exchange rates on mount
+  useEffect(() => {
+    let mounted = true;
+    fetchLiveForexRates().then((data) => {
+      if (mounted) {
+        setForexRates(data);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Close currency dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (currencyDropdownRef.current && !currencyDropdownRef.current.contains(e.target as Node)) {
+        setIsCurrencyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const currentCurrencyInfo: CurrencyItem = useMemo(() => {
+    return getCurrencyInfo(formCurrency);
+  }, [formCurrency]);
+
+  const currentExchangeRate: number = useMemo(() => {
+    if (formCurrency === 'CNY') return 1.0;
+    const parsedCustom = parseFloat(formCustomRate);
+    if (!isNaN(parsedCustom) && parsedCustom > 0) {
+      return parsedCustom;
+    }
+    return forexRates.ratesToCny[formCurrency] || currentCurrencyInfo.defaultRate || 1.0;
+  }, [formCurrency, formCustomRate, forexRates, currentCurrencyInfo]);
+
+  const isForeign = formCurrency !== 'CNY';
+
+  const calculatedCnyAmount = useMemo(() => {
+    const rawVal = parseFloat(formAmount);
+    if (isNaN(rawVal) || rawVal <= 0) return 0;
+    if (formCurrency === 'CNY') return rawVal;
+    return Number((rawVal * currentExchangeRate).toFixed(2));
+  }, [formAmount, formCurrency, currentExchangeRate]);
+
+  const filteredCurrencies = useMemo(() => {
+    if (!currencySearchQuery.trim()) return SUPPORTED_CURRENCIES;
+    const q = currencySearchQuery.toLowerCase().trim();
+    return SUPPORTED_CURRENCIES.filter(
+      (c) =>
+        c.code.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        c.symbol.toLowerCase().includes(q)
+    );
+  }, [currencySearchQuery]);
+
+  const handleRefreshForex = async () => {
+    setIsRefreshingRates(true);
+    try {
+      const data = await fetchLiveForexRates(true);
+      setForexRates(data);
+      if (data.ratesToCny[formCurrency]) {
+        setFormCustomRate(data.ratesToCny[formCurrency].toString());
+      }
+      setRateFeedback(`✨ 已获取最新汇率: 1 ${formCurrency} = ${data.ratesToCny[formCurrency] || currentCurrencyInfo.defaultRate} CNY`);
+      setTimeout(() => setRateFeedback(''), 3500);
+    } catch {
+      setRateFeedback('刷新汇率失败，已使用基准缓存汇率');
+      setTimeout(() => setRateFeedback(''), 3500);
+    } finally {
+      setIsRefreshingRates(false);
+    }
+  };
+
+  const handleCurrencyChange = (newCur: string) => {
+    setFormCurrency(newCur);
+    setIsCurrencyDropdownOpen(false);
+    setCurrencySearchQuery('');
+    if (newCur === 'CNY') {
+      setFormCustomRate('');
+      setShowRateCustomizer(false);
+    } else {
+      const standardRate = forexRates.ratesToCny[newCur] || getCurrencyInfo(newCur).defaultRate;
+      setFormCustomRate(standardRate.toString());
+    }
+  };
+
+  const handleQuickAddAmount = (addVal: number) => {
+    const current = parseFloat(formAmount) || 0;
+    const nextVal = (current + addVal).toFixed(2);
+    setFormAmount(nextVal.replace(/\.00$/, ''));
+  };
 
   if (!isOpen) return null;
 
@@ -123,7 +240,15 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
     setIsCreatingNew(true);
     setFormName(t.name);
     setFormType(t.type);
-    setFormAmount(t.amount.toString());
+    const taskCur = t.currency || 'CNY';
+    setFormCurrency(taskCur);
+    if (taskCur !== 'CNY' && t.originalAmount !== undefined && t.originalAmount > 0) {
+      setFormAmount(t.originalAmount.toString());
+    } else {
+      setFormAmount(t.amount.toString());
+    }
+    setFormCustomRate(t.exchangeRate ? t.exchangeRate.toString() : '');
+    setShowRateCustomizer(false);
     setFormFrequency(t.frequency);
     setFormDayOfMonth(t.dayOfMonth || 1);
     setFormAccountId(t.accountId);
@@ -142,6 +267,9 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
     setFormName('');
     setFormType('EXPENSE');
     setFormAmount('');
+    setFormCurrency('CNY');
+    setFormCustomRate('');
+    setShowRateCustomizer(false);
     setFormFrequency('MONTHLY');
     setFormDayOfMonth(1);
     setFormAccountId(accounts[0]?.id || '');
@@ -157,17 +285,27 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
   const cancelEdit = () => {
     setIsCreatingNew(false);
     setEditingTask(null);
+    setIsCurrencyDropdownOpen(false);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmt = parseFloat(formAmount);
-    if (isNaN(numAmt) || numAmt <= 0 || !formName.trim()) return;
+    const rawAmt = parseFloat(formAmount);
+    if (isNaN(rawAmt) || rawAmt <= 0 || !formName.trim()) return;
+
+    const isCurForeign = formCurrency !== 'CNY';
+    const effectiveRate = currentExchangeRate;
+    const finalBaseRmbAmount = isCurForeign
+      ? Number((rawAmt * effectiveRate).toFixed(2))
+      : rawAmt;
 
     const baseTask: Partial<RecurringTask> = {
       name: formName.trim(),
       type: formType,
-      amount: numAmt,
+      amount: finalBaseRmbAmount,
+      originalAmount: isCurForeign ? rawAmt : undefined,
+      currency: formCurrency,
+      exchangeRate: isCurForeign ? effectiveRate : undefined,
       frequency: formFrequency,
       dayOfMonth: formFrequency === 'MONTHLY' ? formDayOfMonth : undefined,
       accountId: formAccountId,
@@ -369,22 +507,282 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
                   </div>
                 </div>
 
-                {/* Amount */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    每期金额 (¥) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    min="0.01"
-                    value={formAmount}
-                    onChange={(e) => setFormAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full px-3 py-2 text-xs sm:text-sm font-mono font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                  />
+                {/* 3. Currency Selector Bar (Full Width across columns) */}
+                <div className="sm:col-span-2 md:col-span-3 relative" ref={currencyDropdownRef}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Globe2 className="w-3.5 h-3.5 text-blue-500" />
+                      <span>账单币种与外汇实时汇率</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRefreshForex}
+                      disabled={isRefreshingRates}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium disabled:opacity-50"
+                      title="从国际汇率公网拉取最新实时汇率"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshingRates ? 'animate-spin' : ''}`} />
+                      <span>{isRefreshingRates ? '更新中...' : '刷新汇率'}</span>
+                    </button>
+                  </div>
+
+                  {/* Currency Pill Trigger Button */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCurrencyDropdownOpen(!isCurrencyDropdownOpen)}
+                      className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl transition-all flex-1 text-left group border shadow-2xs ${
+                        isForeign
+                          ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 hover:border-blue-500'
+                          : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 hover:border-blue-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xl">{currentCurrencyInfo.flag}</span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
+                              {formCurrency}
+                            </span>
+                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                              {currentCurrencyInfo.name} ({currentCurrencyInfo.symbol})
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            {isForeign ? '外币周期账单，到期将自动按设定汇率折算人民币入账' : '国内法定本位币，直接以此金额记账与扣款'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {isForeign && (
+                          <span className="font-mono text-blue-700 dark:text-blue-300 font-bold bg-blue-100/90 dark:bg-blue-900/60 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800">
+                            1 {formCurrency} ≈ {currentExchangeRate} CNY
+                          </span>
+                        )}
+                        <span className="text-xs text-blue-600 dark:text-blue-400 group-hover:underline font-semibold flex items-center gap-0.5">
+                          <span>选择币种</span>
+                          <ChevronDown className="w-4 h-4 opacity-75" />
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Fast CNY reset button */}
+                    {isForeign && (
+                      <button
+                        type="button"
+                        onClick={() => handleCurrencyChange('CNY')}
+                        className="px-3 py-2.5 rounded-xl bg-slate-200/80 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shrink-0 shadow-2xs"
+                        title="快速切换回人民币计价"
+                      >
+                        切回 人民币 (CNY)
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Currency Dropdown Menu */}
+                  {isCurrencyDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-2 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={currencySearchQuery}
+                          onChange={(e) => setCurrencySearchQuery(e.target.value)}
+                          placeholder="搜索币种代码/名称 (如 USD, EUR, 日元, 港币, 英镑)..."
+                          className="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-0.5 modal-custom-scrollbar">
+                        {filteredCurrencies.map((cur) => {
+                          const isSelected = formCurrency === cur.code;
+                          const liveRate = forexRates.ratesToCny[cur.code] || cur.defaultRate;
+                          return (
+                            <button
+                              key={cur.code}
+                              type="button"
+                              onClick={() => handleCurrencyChange(cur.code)}
+                              className={`p-2.5 rounded-xl text-left border flex items-center justify-between transition-all ${
+                                isSelected
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs font-semibold'
+                                  : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200/70 dark:border-slate-700/60 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                              }`}
+                            >
+                              <div className="min-w-0 flex items-center gap-2">
+                                <span className="text-xl shrink-0">{cur.flag}</span>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-xs font-mono truncate">{cur.code}</div>
+                                  <div className={`text-[10px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                    {cur.name} ({cur.symbol})
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                {cur.code !== 'CNY' && (
+                                  <span className={`text-[10px] font-mono block ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                    ≈{liveRate}
+                                  </span>
+                                )}
+                                {isSelected && <Check className="w-3.5 h-3.5 text-white ml-auto mt-0.5" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 px-1">
+                        <span>支持全球 15+ 常用货币实时汇率自动换算</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsCurrencyDropdownOpen(false)}
+                          className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium"
+                        >
+                          关闭
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {rateFeedback && (
+                    <div className="text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-xl mt-1.5 border border-blue-100 dark:border-blue-900/60">
+                      {rateFeedback}
+                    </div>
+                  )}
                 </div>
+
+                {/* 4. Amount Big Input Box (Full Width across columns) */}
+                <div className="sm:col-span-2 md:col-span-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                    <label htmlFor="rec-input-amount" className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span>{isForeign ? `${currentCurrencyInfo.name} (${formCurrency}) 外币每期金额 *` : '每期金额 (元) *'}</span>
+                    </label>
+                    {isForeign && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-mono font-bold bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                        {currentCurrencyInfo.flag} {formCurrency} ({currentCurrencyInfo.symbol})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-slate-400 dark:text-slate-500 font-mono">
+                      {currentCurrencyInfo.symbol}
+                    </span>
+                    <input
+                      id="rec-input-amount"
+                      type="number"
+                      step="0.01"
+                      required
+                      min="0.01"
+                      value={formAmount}
+                      onChange={(e) => setFormAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none font-mono"
+                    />
+                  </div>
+
+                  {/* Quick Increment Buttons */}
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 overflow-x-auto no-scrollbar">
+                    {(formCurrency === 'JPY' || formCurrency === 'KRW'
+                      ? [1000, 5000, 10000, 50000, 100000]
+                      : [5, 10, 50, 100, 500, 1000]
+                    ).map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => handleQuickAddAmount(val)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-mono font-medium transition-colors whitespace-nowrap shadow-2xs"
+                      >
+                        +{val}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormAmount('')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-xs transition-colors"
+                    >
+                      重置
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Foreign Currency Conversion Panel for Recurring Task */}
+                {isForeign && (
+                  <div className="sm:col-span-2 md:col-span-3 p-4 rounded-2xl bg-gradient-to-br from-blue-50/90 via-indigo-50/60 to-sky-50/70 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-sky-950/30 border border-blue-200/80 dark:border-blue-800/60 space-y-3 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 rounded-lg bg-blue-600 text-white shadow-2xs">
+                          <ArrowRightLeft className="w-3.5 h-3.5" />
+                        </span>
+                        <div>
+                          <span className="text-xs font-bold text-blue-950 dark:text-blue-200 block">
+                            当日参考汇率: 1 {formCurrency} = {currentExchangeRate} CNY
+                          </span>
+                          <span className="text-[11px] text-blue-700 dark:text-blue-400">
+                            来源: {forexRates.provider || '国际实时汇率'} ({forexRates.updatedAt})
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowRateCustomizer(!showRateCustomizer)}
+                        className="text-xs font-medium text-blue-800 dark:text-blue-300 hover:underline self-start sm:self-auto"
+                      >
+                        {showRateCustomizer ? '收起微调' : '自定义/微调汇率 ✎'}
+                      </button>
+                    </div>
+
+                    {showRateCustomizer && (
+                      <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-800 border border-blue-200 dark:border-blue-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            实记汇率 (如外币信用卡扣费结算汇率):
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const standardRate = forexRates.ratesToCny[formCurrency] || currentCurrencyInfo.defaultRate;
+                              setFormCustomRate(standardRate.toString());
+                            }}
+                            className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            恢复今日基准 ({forexRates.ratesToCny[formCurrency] || currentCurrencyInfo.defaultRate})
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">1 {formCurrency} =</span>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={formCustomRate}
+                            onChange={(e) => setFormCustomRate(e.target.value)}
+                            placeholder={currentCurrencyInfo.defaultRate.toString()}
+                            className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">CNY</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-3 rounded-xl bg-blue-100/70 dark:bg-blue-950/60 border border-blue-200/90 dark:border-blue-800/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-blue-900 dark:text-blue-200 font-semibold block">
+                          折合记账本位币 (人民币 CNY):
+                        </span>
+                        <span className="text-[11px] text-blue-700 dark:text-blue-400 font-mono">
+                          {currentCurrencyInfo.symbol}{parseFloat(formAmount) || 0} × {currentExchangeRate}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-base sm:text-lg font-black text-blue-950 dark:text-blue-200 font-mono">
+                          ¥ {calculatedCnyAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <span className="text-[10px] text-blue-700 dark:text-blue-400">到期入账时以此金额更新资产并生成外汇记账凭证</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Frequency */}
                 <div>
@@ -619,19 +1017,45 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
                             <span className="font-bold text-sm text-slate-900 dark:text-white truncate max-w-[180px]">
                               {t.name}
                             </span>
+                            {t.currency && t.currency !== 'CNY' && (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800">
+                                {getCurrencyInfo(t.currency).flag} {t.currency}
+                              </span>
+                            )}
                           </div>
 
                           <div className="text-right">
-                            <div
-                              className={`text-base font-bold font-mono ${
-                                isExpense
-                                  ? 'text-rose-600 dark:text-rose-400'
-                                  : 'text-emerald-600 dark:text-emerald-400'
-                              }`}
-                            >
-                              {isExpense ? '-' : '+'}
-                              {formatCurrency(t.amount, privacyMode)}
-                            </div>
+                            {t.currency && t.currency !== 'CNY' ? (
+                              <div>
+                                <div
+                                  className={`text-base font-bold font-mono ${
+                                    isExpense
+                                      ? 'text-rose-600 dark:text-rose-400'
+                                      : 'text-emerald-600 dark:text-emerald-400'
+                                  }`}
+                                >
+                                  {isExpense ? '-' : '+'}
+                                  {getCurrencyInfo(t.currency).symbol}
+                                  {t.originalAmount !== undefined
+                                    ? t.originalAmount.toFixed(2)
+                                    : (t.amount / (t.exchangeRate || 1)).toFixed(2)}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                  折合 {formatCurrency(t.amount, privacyMode)}
+                                </div>
+                              </div>
+                            ) : (
+                              <div
+                                className={`text-base font-bold font-mono ${
+                                  isExpense
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {isExpense ? '-' : '+'}
+                                {formatCurrency(t.amount, privacyMode)}
+                              </div>
+                            )}
                             <span className="text-[10px] text-slate-400">
                               {frequencyLabel(t.frequency, t.dayOfMonth)}
                             </span>

@@ -62,6 +62,7 @@ interface TransactionModalProps {
   initialType?: TransactionType;
   initialAccountId?: string;
   initialProjectId?: string;
+  initialAmount?: number;
   initialRefundedTxId?: string;
   initialTransaction?: Transaction | null;
   initialDate?: string;
@@ -80,6 +81,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   initialType = 'EXPENSE',
   initialAccountId,
   initialProjectId,
+  initialAmount,
   initialRefundedTxId,
   initialTransaction,
   initialDate,
@@ -153,6 +155,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     ? (initialTransaction.currency && initialTransaction.currency !== 'CNY' && initialTransaction.originalAmount !== undefined
         ? initialTransaction.originalAmount.toString()
         : initialTransaction.amount.toString())
+    : initialAmount !== undefined && initialAmount > 0
+    ? initialAmount.toString()
     : '';
 
   const [amount, setAmount] = useState<string>(initialAmountStr);

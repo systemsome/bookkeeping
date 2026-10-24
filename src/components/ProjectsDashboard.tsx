@@ -169,7 +169,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
   // Overall statistics across all active/visible projects
   const overallStats = useMemo(() => {
-    let totalIncome = 0;
+    let totalExpectedIncome = 0;
+    let totalActualIncome = 0;
     let grossExpense = 0;
     let refundAmount = 0;
     let totalBudget = 0;
@@ -178,7 +179,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     (projects || []).forEach((proj) => {
       const s = projectStatsMap.get(proj.id);
       if (s) {
-        totalIncome += s.totalIncome;
+        totalExpectedIncome += s.expectedIncome;
+        totalActualIncome += s.totalIncome;
         grossExpense += s.grossExpense;
         refundAmount += s.refundAmount;
         if (s.budget) totalBudget += s.budget;
@@ -187,10 +189,13 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
     });
 
     const netExpense = Math.max(0, grossExpense - refundAmount);
-    const netBalance = totalIncome - netExpense;
+    // 核心业务规则：项目的预算金额与应该收入保持持平
+    const netBalance = totalExpectedIncome - netExpense;
 
     return {
-      totalIncome,
+      totalExpectedIncome,
+      totalActualIncome,
+      totalIncome: totalActualIncome,
       grossExpense,
       refundAmount,
       netExpense,
@@ -582,19 +587,21 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
         {/* 6-Metric Financial Scoreboard for this Project */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          {/* 1. 项目总收入 */}
+          {/* 1. 项目应该收入 (与预算金额保持持平) */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
             <div className="flex items-center justify-between text-slate-400 mb-1.5">
-              <span className="text-xs font-medium">项目总收入</span>
+              <span className="text-xs font-medium">项目应该收入</span>
               <div className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </div>
             </div>
             <div className="text-base sm:text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono">
-              +{formatCurrency(activeProjectStats.totalIncome, privacyMode)}
+              +{formatCurrency(activeProjectStats.expectedIncome, privacyMode)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              共 {activeProjectStats.incomeCount} 笔收款
+              {activeProject.budget
+                ? `与预算金额保持持平 (实收 ¥${activeProjectStats.totalIncome.toFixed(2)})`
+                : `共 ${activeProjectStats.incomeCount} 笔收款`}
             </div>
           </div>
 
@@ -665,7 +672,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
               {formatCurrency(activeProjectStats.netBalance, privacyMode)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              <span>收入 - 实际净支出</span>
+              <span>应该收入 - 实际净支出</span>
               <button
                 type="button"
                 onClick={() => setReconcilingProject(activeProject)}
@@ -1155,26 +1162,21 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
         <>
           {/* Top Banner & Metric Summary (参考 CreditCardsSummary 布局模式重构) */}
           <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-              <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 text-xs font-semibold mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/70 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 text-xs font-semibold">
                   <FolderKanban className="w-3.5 h-3.5" />
-                  <span>账本项目专区</span>
+                  <span>账本项目</span>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                    账本项目
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
-                    共 {projects.length} 个项目
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
+                  共 {projects.length} 个项目
+                </span>
+                {currentUser && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>云端已同步</span>
                   </span>
-                  {currentUser && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>云端已同步</span>
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* Quick Actions / CTA (功能图标与主要操作) */}
@@ -1215,18 +1217,12 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                 <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                   {projects.length}
                 </div>
-                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  共创建 {projects.length} 个 · 进行中 {overallStats.activeProjectsCount} 个
-                </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
-                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">项目总收入</span>
+                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">项目应该收入</span>
                 <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
-                  +{formatCurrency(overallStats.totalIncome, privacyMode)}
-                </div>
-                <div className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1">
-                  累计收款与进账款项
+                  +{formatCurrency(overallStats.totalExpectedIncome, privacyMode)}
                 </div>
               </div>
 
@@ -1235,18 +1231,12 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                 <div className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
                   +{formatCurrency(overallStats.refundAmount, privacyMode)}
                 </div>
-                <div className="text-xs text-rose-500/80 dark:text-rose-400/80 mt-1">
-                  退费抵消冲减支出
-                </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50">
                 <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">实际支出</span>
                 <div className="text-2xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
                   -{formatCurrency(overallStats.netExpense, privacyMode)}
-                </div>
-                <div className="text-xs text-rose-600/80 dark:text-rose-500/80 mt-1">
-                  剔除退款后的净支出
                 </div>
               </div>
 
@@ -1261,9 +1251,6 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                 >
                   {overallStats.netBalance >= 0 ? '+' : ''}
                   {formatCurrency(overallStats.netBalance, privacyMode)}
-                </div>
-                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  {overallStats.netBalance >= 0 ? '收支盈余充裕' : '当前收支出现赤字'}
                 </div>
               </div>
             </div>
@@ -1524,12 +1511,14 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Financial Matrix (收入 / 支出 / 冲红 / 净支出 / 结余) */}
+                    {/* Financial Matrix (应该收入 / 支出 / 冲红 / 净支出 / 结余) */}
                     <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800">
                       <div>
-                        <div className="text-[10px] text-slate-400 font-medium">项目收入</div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          应该收入 {proj.budget ? '(与预算持平)' : ''}
+                        </div>
                         <div className="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-400 font-mono">
-                          +{formatCurrency(stats.totalIncome, privacyMode)}
+                          +{formatCurrency(stats.expectedIncome, privacyMode)}
                         </div>
                       </div>
 
@@ -1558,7 +1547,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
 
                       <div className="col-span-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
                         <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                          项目净结余 (收入-净支)
+                          项目净结余 (应该收入-净支)
                         </span>
                         <span
                           className={`text-xs font-bold font-mono ${
@@ -1640,7 +1629,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                         {/* Sub-metrics */}
                         <div className="flex items-center justify-between text-[11px] font-mono mt-1.5 text-slate-500 dark:text-slate-400">
                           <span className="truncate">
-                            支出: <strong className="text-slate-700 dark:text-slate-300">¥{formatCurrency(stats.netExpense, privacyMode)}</strong> / 预算: <strong>¥{budgetAmount.toFixed(0)}</strong>
+                            支出: <strong className="text-slate-700 dark:text-slate-300">{formatCurrency(stats.netExpense, privacyMode)}</strong> / 预算: <strong>¥{budgetAmount.toFixed(0)}</strong>
                           </span>
                           <span
                             className={`shrink-0 font-medium ${
@@ -1677,7 +1666,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({
                         </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                           <span>未设总预算上限</span>
-                          <span>净支出: ¥{formatCurrency(stats.netExpense, privacyMode)}</span>
+                          <span>净支出: {formatCurrency(stats.netExpense, privacyMode)}</span>
                         </div>
                       </div>
                     )}
