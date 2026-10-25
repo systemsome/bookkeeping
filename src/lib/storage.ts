@@ -1360,42 +1360,88 @@ export const saveQuickTemplates = (userId: string, templates: QuickTemplate[]) =
 // ==========================================
 // 🔄 周期性任务计算与一键/自动入账 (Recurring Execution)
 // ==========================================
-export const calculateNextDueDate = (task: RecurringTask, fromDateStr?: string): string => {
+export const calculateNextDueDate = (
+  task: RecurringTask,
+  fromDateStr?: string,
+  forceAdvance: boolean = false
+): string => {
   const todayIso = new Date().toISOString().split('T')[0];
-  const baseStr = fromDateStr || task.nextDueDate || todayIso;
-  const baseDate = new Date(baseStr);
-  const validBase = isNaN(baseDate.getTime()) ? new Date() : baseDate;
+  const refDateStr = fromDateStr || todayIso;
+  const refDate = new Date(refDateStr);
+  const now = isNaN(refDate.getTime()) ? new Date() : refDate;
 
-  const stepNext = (d: Date): Date => {
-    const next = new Date(d.getTime());
-    if (task.frequency === 'DAILY') {
-      next.setDate(next.getDate() + 1);
-    } else if (task.frequency === 'WEEKLY') {
-      next.setDate(next.getDate() + 7);
-    } else if (task.frequency === 'MONTHLY') {
-      const targetDay = task.dayOfMonth || 1;
-      next.setMonth(next.getMonth() + 1);
-      const maxDays = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-      next.setDate(Math.min(targetDay, maxDays));
-    } else if (task.frequency === 'YEARLY') {
-      next.setFullYear(next.getFullYear() + 1);
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-11
+  const freq = task.frequency || 'MONTHLY';
+
+  if (freq === 'MONTHLY') {
+    const targetDay = Math.max(1, Math.min(31, task.dayOfMonth || 1));
+
+    // 计算当月的目标日期 (若当月总天数不足 targetDay 则取当月最后一天，如 2 月 28/29 日)
+    const daysInThisMonth = new Date(y, m + 1, 0).getDate();
+    const actualDayThisMonth = Math.min(targetDay, daysInThisMonth);
+    const candidateThisMonth = `${y}-${String(m + 1).padStart(2, '0')}-${String(actualDayThisMonth).padStart(2, '0')}`;
+
+    // 计算次月的目标日期
+    const nextMonthObj = new Date(y, m + 1, 1);
+    const nextY = nextMonthObj.getFullYear();
+    const nextM = nextMonthObj.getMonth();
+    const daysInNextMonth = new Date(nextY, nextM + 1, 0).getDate();
+    const actualDayNextMonth = Math.min(targetDay, daysInNextMonth);
+    const candidateNextMonth = `${nextY}-${String(nextM + 1).padStart(2, '0')}-${String(actualDayNextMonth).padStart(2, '0')}`;
+
+    // 核心判定：
+    // 1. 如果强制推入下一周期 (forceAdvance，例如刚执行过记账)，或者今天已执行过该任务，推入次月
+    if (forceAdvance || (task.lastExecutedDate && task.lastExecutedDate >= candidateThisMonth)) {
+      return candidateNextMonth;
     }
-    return next;
-  };
 
-  let candidate = stepNext(validBase);
-  // 确保推进后的下次执行日期严格大于今日(todayStr)，防止在今日或过去日期中循环重试
-  const todayDate = new Date(todayIso);
-  let safetyLoop = 0;
-  while (candidate <= todayDate && safetyLoop < 120) {
-    candidate = stepNext(candidate);
-    safetyLoop++;
+    // 2. 如果当月目标日期在今天之后，说明本月还没有到执行日，取本月目标日 (例如今天是 25 号，修改为 28 号执行)
+    if (candidateThisMonth > todayIso) {
+      return candidateThisMonth;
+    }
+
+    // 3. 如果当月目标日期就是今天，且今天尚未执行过，则今日即为执行日
+    if (candidateThisMonth === todayIso) {
+      if (task.lastExecutedDate !== todayIso) {
+        return candidateThisMonth;
+      }
+      return candidateNextMonth;
+    }
+
+    // 4. 如果当月目标日期已在今天之前 (例如今天是 25 号，修改为 5 号或 20 号执行)，说明本月已过，取次月
+    return candidateNextMonth;
   }
 
-  const y = candidate.getFullYear();
-  const m = String(candidate.getMonth() + 1).padStart(2, '0');
-  const d = String(candidate.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  if (freq === 'DAILY') {
+    if (forceAdvance || task.lastExecutedDate === todayIso) {
+      const tomorrow = new Date(now.getTime() + 86400000);
+      return `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+    }
+    return todayIso;
+  }
+
+  if (freq === 'WEEKLY') {
+    if (forceAdvance || task.lastExecutedDate === todayIso) {
+      const nextWeek = new Date(now.getTime() + 7 * 86400000);
+      return `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
+    }
+    if (task.nextDueDate && task.nextDueDate >= todayIso) {
+      return task.nextDueDate;
+    }
+    const nextWeek = new Date(now.getTime() + 7 * 86400000);
+    return `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
+  }
+
+  if (freq === 'YEARLY') {
+    const candidateThisYear = `${y}-01-01`;
+    if (forceAdvance || candidateThisYear <= todayIso) {
+      return `${y + 1}-01-01`;
+    }
+    return candidateThisYear;
+  }
+
+  return todayIso;
 };
 
 export const executeRecurringTask = (
@@ -1455,7 +1501,7 @@ export const executeRecurringTask = (
 
   // 如果当前周期已存在对应流水，直接将下次执行日期推进到下一期，不再重复扣款入账
   if (isDuplicate) {
-    const nextDate = calculateNextDueDate(task, todayStr);
+    const nextDate = calculateNextDueDate(task, todayStr, true);
     const updatedTasks = tasks.map((t) =>
       t.id === taskId
         ? { ...t, lastExecutedDate: todayStr, nextDueDate: nextDate, updatedAt: now.toISOString() }
@@ -1496,7 +1542,7 @@ export const executeRecurringTask = (
     recurringTaskCycle: cycleTag,
   });
 
-  const nextDate = calculateNextDueDate(task, todayStr);
+  const nextDate = calculateNextDueDate(task, todayStr, true);
   const updatedTasks = tasks.map((t) =>
     t.id === taskId
       ? { ...t, lastExecutedDate: todayStr, nextDueDate: nextDate, updatedAt: now.toISOString() }

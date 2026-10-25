@@ -252,7 +252,8 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
     setFormCustomRate(t.exchangeRate ? t.exchangeRate.toString() : '');
     setShowRateCustomizer(false);
     setFormFrequency(t.frequency);
-    setFormDayOfMonth(t.dayOfMonth || 1);
+    const inferredDay = t.dayOfMonth || (t.nextDueDate ? parseInt(t.nextDueDate.split('-')[2], 10) : 1);
+    setFormDayOfMonth(inferredDay || 1);
     setFormAccountId(t.accountId);
     setFormCategory(t.category);
     setFormTag(t.tag || '固定支出');
@@ -262,6 +263,15 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
     setFormAutoExecute(t.autoExecute);
     setFormEnabled(t.enabled);
   };
+
+  const previewNextDueDate = useMemo(() => {
+    const dummyTask: Partial<RecurringTask> = {
+      frequency: formFrequency,
+      dayOfMonth: formDayOfMonth,
+      lastExecutedDate: editingTask?.lastExecutedDate,
+    };
+    return calculateNextDueDate(dummyTask as RecurringTask);
+  }, [formFrequency, formDayOfMonth, editingTask?.lastExecutedDate]);
 
   const startCreate = () => {
     setEditingTask(null);
@@ -321,20 +331,23 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
     };
 
     if (editingTask) {
-      const nextDate = editingTask.nextDueDate || calculateNextDueDate(editingTask);
-      onSaveTask({
+      const mergedTask: RecurringTask = {
         ...editingTask,
         ...baseTask,
-        nextDueDate: nextDate,
         updatedAt: new Date().toISOString(),
-      } as RecurringTask);
+      } as RecurringTask;
+
+      // 实时根据修改后的每月执行日/频率重新计算下次预计执行日期，确保修改即刻生效
+      mergedTask.nextDueDate = calculateNextDueDate(mergedTask);
+
+      onSaveTask(mergedTask);
     } else {
       const newTask: RecurringTask = {
         id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         userId: currentUser.id,
         ...baseTask,
-        nextDueDate: todayStr,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       } as RecurringTask;
       newTask.nextDueDate = calculateNextDueDate(newTask);
       onSaveTask(newTask);
@@ -817,9 +830,15 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
                 {/* Day of Month */}
                 {formFrequency === 'MONTHLY' && (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      每月执行日
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        每月执行日
+                      </label>
+                      <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
+                        <CalendarClock className="w-3 h-3" />
+                        <span>预计下次：{previewNextDueDate}</span>
+                      </span>
+                    </div>
                     <select
                       value={formDayOfMonth}
                       onChange={(e) => setFormDayOfMonth(parseInt(e.target.value, 10))}

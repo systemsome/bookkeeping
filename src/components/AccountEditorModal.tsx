@@ -61,6 +61,23 @@ import { AccountCardFace } from './AccountCardFace';
 import { BrandLogo, CardNetworkBadge } from './BrandLogo';
 import { matchLogoHubBank } from '../lib/logohubData';
 
+// 常用高频卡面关键词与神卡俗称映射（辅以关键词更改卡面）
+const POPULAR_CARD_KEYWORDS = [
+  { label: '经典白', keyword: '经典白', desc: '招行经典白金信用卡' },
+  { label: '大山白', keyword: '大山白', desc: '建行尊享白金卡' },
+  { label: '白麒麟', keyword: '白麒麟', desc: '交行白金信用卡' },
+  { label: '工行大白菜', keyword: '牡丹白金', desc: '工行牡丹白金卡' },
+  { label: '百夫长黑金', keyword: '百夫长黑金', desc: '殿堂级运通黑金' },
+  { label: '运通绿卡', keyword: '运通绿卡', desc: '百夫长经典绿卡' },
+  { label: '招行青年卡', keyword: '青年卡', desc: '招行 Young 青年卡' },
+  { label: '广发多利', keyword: '多利', desc: '广发多利返现卡' },
+  { label: 'Apple Card', keyword: 'Apple Card', desc: '苹果钛金属极简' },
+  { label: '全币种卡', keyword: '全币种', desc: '多币种国际旅行卡' },
+  { label: '八达通', keyword: '八达通', desc: '香港八达通交通卡' },
+  { label: '和风波浪', keyword: '青海波', desc: '东方传统美学卡面' },
+  { label: '二次元萌宠', keyword: '二次元', desc: '动漫插画治愈卡面' },
+];
+
 interface AccountEditorModalProps {
   initialAccount?: FinancialAccount | null;
   defaultCategory?: AccountCategory;
@@ -91,7 +108,11 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     initialAccount?.accountClass || 'CLASS_1'
   );
   const [holderName, setHolderName] = useState(initialAccount?.holderName || '');
-  const [cardTier, setCardTier] = useState(initialAccount?.cardTier || '');
+  // 卡片等级以默认为主 (默认标准普卡)
+  const [cardTier, setCardTier] = useState(
+    initialAccount?.cardTier ||
+      (category === 'CREDIT_CARD' || category === 'DEBIT_CARD' ? '普卡' : '')
+  );
   const [cardSkin, setCardSkin] = useState(initialAccount?.cardSkin || '');
   const [cardBgColor, setCardBgColor] = useState(initialAccount?.cardBgColor || '');
   const [cardPattern, setCardPattern] = useState(initialAccount?.cardPattern || 'radial-sheen');
@@ -373,6 +394,23 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       'suica': ['suica', '西瓜卡'],
       '西瓜卡': ['suica', '西瓜卡'],
       'icoca': ['icoca'],
+      // 常见神卡与卡面特色关键词映射
+      '经典白': ['经典白', '经典白金', '招商银行经典白金信用卡', '招行经典白'],
+      '大山白': ['大山白', '尊享白金', '中国建设银行尊享白金信用卡', '大山'],
+      '白麒麟': ['白麒麟', '交通银行白金信用卡', '交行白金'],
+      '黑白菜': ['黑白菜', '大白菜', '牡丹白金', '牡丹白金信用卡', '工行白金'],
+      '大白菜': ['黑白菜', '大白菜', '牡丹白金', '牡丹白金信用卡', '工行白金'],
+      '青年卡': ['young', '青年卡', '招行young', 'young卡'],
+      'young': ['young', '青年卡', '招行young', 'young卡'],
+      '多利': ['多利', '广发多利', '美团'],
+      '全币种': ['全币种', '全币', 'global', 'travel', '环球'],
+      'apple': ['apple', 'apple card', 'titanium', '苹果'],
+      '苹果': ['apple', 'apple card', 'titanium', '苹果'],
+      '黑金': ['黑金', 'centurion', '百夫长黑金', 'noir', '黑卡', '无限'],
+      '百夫长黑金': ['百夫长黑金', '黑金', 'centurion', '黑卡'],
+      '绿卡': ['绿卡', 'green', '运通绿卡', '百夫长绿卡'],
+      '和风': ['和风', '青海波', '七宝', '市松', '枯山水', '波浪', '矢絣'],
+      '二次元': ['二次元', '动漫', '萌宠', '插画', '猫', 'stella'],
     };
 
     const searchTerms = [q];
@@ -620,6 +658,61 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     setTimeout(() => setAutoGenMsg(''), 3500);
   };
 
+  // 🎯 以填写关键词更改卡面为辅
+  const handleApplyKeywordCardFace = (keywordToApply?: string) => {
+    const q = (keywordToApply !== undefined ? keywordToApply : faceSearchQuery).trim();
+    if (!q) {
+      setAutoGenMsg('💡 请在卡面搜索框输入关键词（如「经典白」「大山白」「黑金」「招行青年卡」）或点击下方标签');
+      setTimeout(() => setAutoGenMsg(''), 3000);
+      return;
+    }
+
+    if (keywordToApply && keywordToApply !== faceSearchQuery) {
+      setFaceSearchQuery(keywordToApply);
+    }
+
+    // 1. Check local filtered face cards
+    if (filteredFaceCards.length > 0) {
+      const top = filteredFaceCards[0];
+      setCardPresetId(top.id);
+      setCardImageUrl(top.imageUrl);
+      if (!bankName || bankName === '银行账户' || bankName === '中国银行') {
+        setBankName(top.bankName);
+      }
+      setCardNetwork(top.cardNetwork);
+      if (top.cardTier) {
+        setCardTier(top.cardTier);
+      }
+      if (top.dominantColor) {
+        setCardBgColor(top.dominantColor);
+      }
+      setAutoGenMsg(`✨ 已根据关键词「${q}」更换卡面为「${top.name}」(${top.bankName})`);
+      setTimeout(() => setAutoGenMsg(''), 3500);
+      return;
+    }
+
+    // 2. Fallback to matchBestCardentifyCard
+    const matched = matchBestCardentifyCard(q, bankName, category, cardTier, cardNetwork);
+    if (matched) {
+      const presetId = String(matched.id).startsWith('card')
+        ? String(matched.id)
+        : `cardentify-${matched.id}`;
+      setCardPresetId(presetId);
+      setCardImageUrl(matched.imageUrl);
+      if (matched.issuerName && (!bankName || bankName === '银行账户')) {
+        setBankName(matched.issuerName);
+      }
+      setAutoGenMsg(`✨ 已根据关键词「${q}」智能匹配并更换为「${matched.name}」`);
+      setTimeout(() => setAutoGenMsg(''), 3500);
+      return;
+    }
+
+    // 3. If no matching local cards found, directly invoke the Gallery!
+    setIsCardentifyGalleryOpen(true);
+    setAutoGenMsg(`🔍 正在卡面艺廊中全量检索「${q}」...`);
+    setTimeout(() => setAutoGenMsg(''), 3500);
+  };
+
   // Apply a brand preset directly with context awareness and tier-based cardface selection
   const handleSelectBrandPreset = (brand: BankBrandInfo, explicitLogoUrl?: string) => {
     // 🏦 调用 https://logohub.afengblog.com/ 数据库数据获取官方矢量徽标URL并永久写入
@@ -660,8 +753,9 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
     // Bank entity selected (e.g. 招商银行, 工商银行, 建设银行, 农业银行, 交通银行, 宁波银行...)
     if (category === 'CREDIT_CARD') {
       const bName = brand.shortName;
-      const curTier = cardTier || '白金卡';
-      const accName = `${bName}${curTier.includes('白金') ? '经典白金信用卡' : '信用卡'}`;
+      // 卡片等级以默认为主 (默认标准普卡)
+      const curTier = cardTier || '普卡';
+      const accName = `${bName}${curTier.includes('普卡') || curTier.includes('标准') ? '标准信用卡' : curTier + '信用卡'}`;
       setBankName(bName);
       setName(accName);
       setColor(brand.primaryColor);
@@ -691,10 +785,10 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       return;
     }
 
-    // Default to debit card / general account
+    // Default to debit card / general account: 卡片等级以默认为主
     setCategory('DEBIT_CARD');
     const bName = brand.shortName;
-    const curTier = cardTier || brand.defaultTier;
+    const curTier = cardTier || '普卡';
     const accName = brand.name;
     setBankName(bName);
     setName(accName);
@@ -1069,12 +1163,15 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    卡片等级
-                  </label>
+                  <div className="flex items-center gap-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      卡片等级
+                    </label>
+                    <span className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.2 rounded font-semibold border border-amber-200/60">默认为主</span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => applyCardTierAndFace(cardTier || '白金卡')}
+                    onClick={() => applyCardTierAndFace(cardTier || '普卡')}
                     className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-0.5"
                     title="根据填写的等级自动重新匹配对应卡面"
                   >
@@ -1094,7 +1191,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                       applyCardTierAndFace(cardTier.trim());
                     }
                   }}
-                  placeholder="如 经典白金 / 金卡"
+                  placeholder="如 普卡 (默认) / 金卡 / 白金卡"
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none font-medium"
                 />
               </div>
@@ -1125,7 +1222,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                     if (category === 'CREDIT_CARD') {
                       const ladders = CARD_NETWORK_TIERS[newNet] || CARD_NETWORK_TIERS.UNIONPAY;
                       const hasTier = ladders.some((l) => cardTier && (cardTier === l.value || l.value.includes(cardTier) || cardTier.includes(l.value)));
-                      const targetTier = hasTier ? cardTier : (ladders.length > 0 ? ladders[Math.min(2, ladders.length - 1)].value : '普卡');
+                      const targetTier = hasTier ? cardTier : (ladders.length > 0 ? ladders[0].value : '普卡');
                       applyCardTierAndFace(targetTier, undefined, undefined, category, newNet);
                     }
                   }}
@@ -1182,18 +1279,20 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                   </div>
                 </div>
 
-                {/* 维度二：客户资产与卡片权益级别（简洁化） */}
+                {/* 维度二：客户资产与卡片权益级别（卡片等级以默认为主） */}
                 <div className="p-3 rounded-2xl bg-indigo-50/60 border border-indigo-100/80 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>储蓄卡权益级别</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">点击自动匹配质感卡面</span>
+                      <span className="text-xs font-bold text-slate-800">储蓄卡权益级别</span>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-indigo-100/80 text-indigo-700">默认为主</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">默认标准普卡 · 可随时一键切换</span>
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {DEBIT_CARD_TIERS.map((tierItem) => {
+                      const isDefault = tierItem.id === 'STANDARD';
                       const isCurrent =
                         cardTier === tierItem.value ||
                         (tierItem.id === 'PLATINUM' && cardTier.includes('白金')) ||
@@ -1207,7 +1306,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           key={tierItem.id}
                           type="button"
                           onClick={() => applyCardTierAndFace(tierItem.value, undefined, undefined, 'DEBIT_CARD', cardNetwork)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1 ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${
                             isCurrent
                               ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-500/20 font-bold'
                               : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/50'
@@ -1215,6 +1314,11 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           title={tierItem.subText}
                         >
                           <span>{tierItem.label.split(' ')[0]}</span>
+                          {isDefault && (
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isCurrent ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                              默认
+                            </span>
+                          )}
                           {isCurrent && <Check className="w-3 h-3 text-white" />}
                         </button>
                       );
@@ -1223,13 +1327,14 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 </div>
               </div>
             ) : isCredit ? (
-              /* 💳 信用卡卡组织与权益级别阶梯（简洁化 & 卡组织多选修复） */
+              /* 💳 信用卡卡组织与权益级别阶梯（卡片等级以默认为主） */
               <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-50/60 via-slate-50 to-indigo-50/60 border border-rose-200/70 space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between flex-wrap gap-1">
-                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-rose-600" />
-                    <span>信用卡组织与权益级别</span>
-                  </span>
+                    <span className="text-xs font-bold text-slate-800">信用卡组织与权益级别</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-rose-100/80 text-rose-700">默认为主</span>
+                  </div>
                   <span className="text-[10px] text-slate-500 font-medium">
                     当前组织: <strong className="text-rose-700">{cardNetwork === 'VISA' ? 'VISA (维萨)' : cardNetwork === 'MASTERCARD' ? '万事达卡' : cardNetwork === 'AMEX' ? '美国运通' : cardNetwork === 'JCB' ? 'JCB' : '中国银联'}</strong>
                   </span>
@@ -1254,7 +1359,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           setCardNetwork(newNet);
                           const ladders = CARD_NETWORK_TIERS[newNet] || CARD_NETWORK_TIERS.UNIONPAY;
                           const hasTier = ladders.some((l) => cardTier && (cardTier === l.value || l.value.includes(cardTier) || cardTier.includes(l.value)));
-                          const targetTier = hasTier ? cardTier : (ladders.length > 0 ? ladders[Math.min(2, ladders.length - 1)].value : '普卡');
+                          const targetTier = hasTier ? cardTier : (ladders.length > 0 ? ladders[0].value : '普卡');
                           applyCardTierAndFace(targetTier, undefined, undefined, 'CREDIT_CARD', newNet);
                         }}
                         className={`py-1 px-1 rounded-lg text-[11px] font-bold transition-all text-center truncate ${
@@ -1272,6 +1377,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 {/* 对应卡组织的阶梯级别快捷按钮 */}
                 <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                   {(CARD_NETWORK_TIERS[cardNetwork] || CARD_NETWORK_TIERS.UNIONPAY).map((tierItem, idx, arr) => {
+                    const isDefault = tierItem.ladderOrder === 1;
                     const isCurrent =
                       cardTier === tierItem.value ||
                       (tierItem.id.includes('INFINITE') && (cardTier.includes('无限') || cardTier.includes('infinite'))) ||
@@ -1291,7 +1397,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                         <button
                           type="button"
                           onClick={() => applyCardTierAndFace(tierItem.value, undefined, undefined, 'CREDIT_CARD', cardNetwork)}
-                          className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1 ${
+                          className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${
                             isCurrent
                               ? 'bg-rose-600 text-white border-rose-600 shadow-xs font-bold ring-2 ring-rose-500/20'
                               : 'bg-white text-slate-700 border-slate-200/90 hover:border-rose-300 hover:bg-rose-50/60'
@@ -1299,6 +1405,11 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           title={`${tierItem.label} · ${tierItem.subText || ''}`}
                         >
                           <span>{tierItem.label.split(' ')[0]}</span>
+                          {isDefault && (
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isCurrent ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                              默认
+                            </span>
+                          )}
                           {isCurrent && <Check className="w-3 h-3 text-white" />}
                         </button>
                         {idx < arr.length - 1 && (
@@ -1310,29 +1421,37 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 </div>
               </div>
             ) : (
-              /* 通用卡片等级（简洁化） */
+              /* 通用卡片等级（卡片等级以默认为主） */
               <div className="p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100/80 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-1">
-                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>卡片等级</span>
-                  </span>
+                    <span className="text-xs font-bold text-slate-800">卡片等级</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-indigo-100/80 text-indigo-700">默认为主</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">默认标准普卡 · 可随时一键切换</span>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {COMMON_CARD_TIERS.map((tierItem) => {
+                    const isDefault = tierItem.id === 'STANDARD';
                     const isCurrent = cardTier === tierItem.value || cardTier.includes(tierItem.value);
                     return (
                       <button
                         key={tierItem.id}
                         type="button"
                         onClick={() => applyCardTierAndFace(tierItem.value, undefined, undefined, category, cardNetwork)}
-                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1 ${
+                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${
                           isCurrent
                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-bold ring-2 ring-indigo-500/20'
                             : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/60'
                         }`}
                       >
                         <span>{tierItem.label.split(' ')[0]}</span>
+                        {isDefault && (
+                          <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isCurrent ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                            默认
+                          </span>
+                        )}
                         {isCurrent && <Check className="w-3 h-3 text-white" />}
                       </button>
                     );
@@ -1552,7 +1671,10 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Palette className="w-3.5 h-3.5 text-purple-600" />
-                    <span>CardArt & Cardentify 高清卡面艺廊 ({totalGalleryCardsCount.toLocaleString()} 款)</span>
+                    <span>以填写关键词更改卡面为辅 · 调用卡面艺廊</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      等级默认为主
+                    </span>
                   </label>
 
                   {/* Quick Auto Generation Action Buttons */}
@@ -1560,145 +1682,187 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsCardentifyGalleryOpen(true)}
-                      className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-rose-600 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white text-[11px] font-bold flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
-                      title={`打开 CardArt (cardart.cc) & Cardentify (cards.no2.ac) 双库高清卡面艺廊 (${totalGalleryCardsCount.toLocaleString()} 款)`}
+                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 via-rose-600 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white text-[11px] font-bold flex items-center gap-1.5 transition-all active:scale-95 shadow-xs ring-1 ring-white/20"
+                      title={`调用卡面艺廊在线海量卡库 (${totalGalleryCardsCount.toLocaleString()} 款)`}
                     >
-                      <span>🎨 打开卡面艺廊 ({totalGalleryCardsCount.toLocaleString()} 款)</span>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🎨 调用卡面艺廊 ({totalGalleryCardsCount.toLocaleString()} 款)</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        const matched = matchBestCardentifyCard(name, bankName, category);
-                        if (matched) {
-                          setCardImageUrl(matched.imageUrl);
-                          if (!bankName) setBankName(matched.issuerName);
-                          let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
-                          const bUp = (matched.brand || '').toUpperCase();
-                          if (bUp.includes('VISA')) net = 'VISA';
-                          else if (bUp.includes('MASTER')) net = 'MASTERCARD';
-                          else if (bUp.includes('AMEX')) net = 'AMEX';
-                          else if (bUp.includes('JCB')) net = 'JCB';
-                          setCardNetwork(net);
-                          setCardTier(matched.name.includes('白金') ? '白金卡' : matched.name.includes('金卡') ? '金卡' : '贵宾卡');
-                          setAutoGenMsg(`🍎 已智能匹配 Cardentify 原版卡面: 「${matched.name}」`);
-                        } else {
-                          const p = matchBestCardentifyPreset(name, bankName, category);
-                          setCardPresetId(p.id);
-                          if (p.cardImageUrl) setCardImageUrl(p.cardImageUrl);
-                          setCardBgColor(p.cardStyle.background);
-                          setAutoGenMsg(`🍎 已匹配 Cardentify 主题卡面: 「${p.name}」`);
-                        }
-                        setTimeout(() => setAutoGenMsg(''), 3500);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold border border-indigo-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                      title="根据当前填写的银行或卡名自动匹配官方卡面"
+                      onClick={() => handleApplyKeywordCardFace(faceSearchQuery || name || bankName)}
+                      className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold border border-indigo-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      title="根据当前填写的关键词或银行自动匹配官方卡面"
                     >
-                      <Sparkles className="w-3 h-3 text-indigo-600" />
-                      <span>✨ 智能匹配</span>
+                      <Wand2 className="w-3 h-3 text-indigo-600" />
+                      <span>✨ 关键词匹配</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetToDefaultSkin}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 text-[11px] font-medium border border-slate-200 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      title="清除自定义卡面，恢复默认等级卡面"
+                    >
+                      <RotateCcw className="w-3 h-3 text-slate-500" />
+                      <span>↺ 恢复默认</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleAutoGenerateBackground}
-                      className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-semibold border border-purple-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-semibold border border-purple-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
                       title="根据填写的卡片名称或所属银行，智能计算高质感专属底色"
                     >
-                      <Wand2 className="w-3 h-3 text-purple-600" />
+                      <Palette className="w-3 h-3 text-purple-600" />
                       <span>✨ 智能底色</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRandomBackground}
-                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold border border-amber-200/80 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                      title="从奢华黑金、皇家蓝、翡翠绿、香槟金等顶级卡面中随机换色"
-                    >
-                      <Dices className="w-3 h-3 text-amber-600" />
-                      <span>🎲 灵感换色</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Upgraded HD Card Faces Selector with Local Cache Fuzzy Search */}
+                {/* Upgraded HD Card Faces Selector with Auxiliary Keyword Input & Gallery Invocation */}
                 <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/50 via-slate-50 to-indigo-50/50 border border-indigo-100 space-y-3">
                   {/* Selector Header */}
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-base">🍎</span>
-                      <span>CardArt & Cardentify 官方/原创卡面选择器</span>
+                      <span className="text-xs font-bold text-slate-800">填写关键词更改卡面 (辅助自定义)</span>
                       <span className="px-1.5 py-0.5 rounded-md bg-indigo-100/70 text-indigo-700 text-[10px] font-semibold font-mono">
                         {totalGalleryCardsCount.toLocaleString()} 款已同步
                       </span>
-                    </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setIsCardentifyGalleryOpen(true)}
-                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5"
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs transition-all active:scale-95"
                     >
-                      <span>打开全屏艺廊 &gt;</span>
+                      <span>调用卡面艺廊 &gt;</span>
                     </button>
                   </div>
 
-                  {/* Fuzzy Search Input Box */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={faceSearchQuery}
-                      onChange={(e) => setFaceSearchQuery(e.target.value)}
-                      placeholder="模糊搜索银行 (如 招行/工行/建行)、卡组织 (银联/VISA/运通) 或卡名..."
-                      className="w-full pl-8 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all"
-                    />
-                    {faceSearchQuery && (
+                  {/* Auxiliary Keyword Search & Instant Apply Input Box */}
+                  <div className="space-y-1.5">
+                    <div className="relative flex items-center gap-1.5">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={faceSearchQuery}
+                          onChange={(e) => setFaceSearchQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleApplyKeywordCardFace(faceSearchQuery);
+                            }
+                          }}
+                          placeholder="填写卡面关键词 (如「经典白」「大山白」「白麒麟」「黑金」「招行青年卡」)..."
+                          className="w-full pl-8 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all"
+                        />
+                        {faceSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setFaceSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                            title="清除关键词"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setFaceSearchQuery('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                        title="清除搜索"
+                        onClick={() => handleApplyKeywordCardFace(faceSearchQuery)}
+                        className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-2xs active:scale-95 flex items-center gap-1 shrink-0"
+                        title="立即应用匹配关键词的卡面"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>更换卡面</span>
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setIsCardentifyGalleryOpen(true)}
+                        className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white text-xs font-bold transition-all shadow-2xs active:scale-95 flex items-center gap-1 shrink-0"
+                        title="使用当前关键词调用卡面艺廊在线浏览"
+                      >
+                        <Palette className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">调用</span><span>艺廊</span>
+                      </button>
+                    </div>
+
+                    {/* Popular Keyword Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] font-semibold text-slate-400 shrink-0 flex items-center gap-0.5">
+                        <Sparkles className="w-2.5 h-2.5 text-amber-500" />
+                        <span>常用神卡/关键词:</span>
+                      </span>
+                      {POPULAR_CARD_KEYWORDS.map((k) => (
+                        <button
+                          key={k.keyword}
+                          type="button"
+                          onClick={() => {
+                            setFaceSearchQuery(k.keyword);
+                            handleApplyKeywordCardFace(k.keyword);
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all ${
+                            faceSearchQuery === k.keyword
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white hover:bg-indigo-50 border-slate-200 text-slate-700 hover:border-indigo-300'
+                          }`}
+                          title={k.desc}
+                        >
+                          {k.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Source Toggle Tabs & Fast Bank Filter Pills */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      <span className="text-[10px] font-semibold text-slate-400 shrink-0">来源:</span>
-                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={() => setFaceSourceFilter('ALL')}
-                          className={`px-2 py-0.5 rounded-md font-medium transition-all ${
-                            faceSourceFilter === 'ALL'
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          全部双库
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFaceSourceFilter('CARDENTIFY')}
-                          className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                            faceSourceFilter === 'CARDENTIFY'
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          <span>🍎 Cardentify 官方</span>
-                          <span className="text-[9px] opacity-75 font-mono">({allCardentifyCards.length})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFaceSourceFilter('CARDART')}
-                          className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                            faceSourceFilter === 'CARDART'
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          <span>🎨 CardArt 原创</span>
-                          <span className="text-[9px] opacity-75 font-mono">({allCardArtCards.length})</span>
-                        </button>
+                  <div className="space-y-2 pt-1 border-t border-slate-200/60">
+                    <div className="flex items-center justify-between flex-wrap gap-2 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-slate-400 shrink-0">来源:</span>
+                        <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setFaceSourceFilter('ALL')}
+                            className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                              faceSourceFilter === 'ALL'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            全部双库
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFaceSourceFilter('CARDENTIFY')}
+                            className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+                              faceSourceFilter === 'CARDENTIFY'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <span>🍎 Cardentify 官方</span>
+                            <span className="text-[9px] opacity-75 font-mono">({allCardentifyCards.length})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFaceSourceFilter('CARDART')}
+                            className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+                              faceSourceFilter === 'CARDART'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <span>🎨 CardArt 原创</span>
+                            <span className="text-[9px] opacity-75 font-mono">({allCardArtCards.length})</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400">当前卡面:</span>
+                        <span className="text-[10px] font-semibold text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200 max-w-[120px] truncate">
+                          {cardPresetId || (cardImageUrl ? '自定义网络卡面' : '系统默认')}
+                        </span>
                       </div>
                     </div>
 
@@ -1743,20 +1907,29 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-[11px] text-slate-600 pt-0.5">
                         <span className="font-semibold text-slate-700 flex items-center gap-1">
-                          <span>🔍 模糊匹配结果: 找到</span>
+                          <span>🔍 关键词匹配结果: 找到</span>
                           <span className="text-indigo-600 font-bold font-mono">{filteredFaceCards.length}</span>
                           <span>款已同步高清卡面</span>
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFaceSearchQuery('');
-                            setSelectedFaceBankTag('ALL');
-                          }}
-                          className="text-xs text-indigo-600 hover:underline"
-                        >
-                          重置筛选
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsCardentifyGalleryOpen(true)}
+                            className="text-xs text-indigo-600 hover:underline font-bold"
+                          >
+                            调用卡面艺廊在线搜 &gt;
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFaceSearchQuery('');
+                              setSelectedFaceBankTag('ALL');
+                            }}
+                            className="text-xs text-slate-400 hover:underline"
+                          >
+                            重置
+                          </button>
+                        </div>
                       </div>
 
                       {filteredFaceCards.length > 0 ? (
@@ -1819,15 +1992,16 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           })}
                         </div>
                       ) : (
-                        <div className="p-4 text-center rounded-xl bg-white/80 border border-slate-200 space-y-1.5">
-                          <p className="text-xs text-slate-600 font-medium">未搜到与当前关键词匹配的本地缓存卡面</p>
-                          <p className="text-[11px] text-slate-400">您可以尝试精简关键词，或直接打开全量卡面艺廊进行在线检索。</p>
+                        <div className="p-4 text-center rounded-xl bg-white/80 border border-slate-200 space-y-2">
+                          <p className="text-xs text-slate-700 font-semibold">未在本地快速缓存中找到「{faceSearchQuery}」对应卡面</p>
+                          <p className="text-[11px] text-slate-500">CardArt & Cardentify 卡面艺廊拥有海量高清原图，点击下方直接调用艺廊检索：</p>
                           <button
                             type="button"
                             onClick={() => setIsCardentifyGalleryOpen(true)}
-                            className="mt-1 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-rose-600 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white text-xs font-bold shadow-sm transition-all active:scale-95"
                           >
-                            🎨 打开全屏卡面艺廊
+                            <Palette className="w-3.5 h-3.5" />
+                            <span>🎨 调用卡面艺廊在线检索「{faceSearchQuery}」</span>
                           </button>
                         </div>
                       )}
@@ -1839,6 +2013,13 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                           <span>✨ 精选推荐官方原版卡面</span>
                           <span className="text-slate-400 font-normal">(直接点击套用)</span>
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsCardentifyGalleryOpen(true)}
+                          className="text-[11px] font-semibold text-indigo-600 hover:underline flex items-center gap-0.5"
+                        >
+                          <span>浏览更多卡面 &gt;</span>
+                        </button>
                       </div>
 
                       <div className="flex items-center gap-2 overflow-x-auto pb-1.5 modal-custom-scrollbar">
@@ -1902,9 +2083,18 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
                         })}
                       </div>
 
-                      <div className="text-[10px] text-slate-400 bg-slate-100/70 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
-                        <span>💡</span>
-                        <span>支持在上方搜索框直接模糊输入任意银行名、卡组织或关键词，实时搜索本地缓存的所有已同步卡面。</span>
+                      <div className="text-[10px] text-slate-500 bg-slate-100/70 px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1">
+                          <span>💡</span>
+                          <span>等级默认为主，可在上方输入关键词（如「大山白」「运通绿卡」）辅助更改卡面，或直接调用卡面艺廊在线挑选。</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsCardentifyGalleryOpen(true)}
+                          className="font-bold text-indigo-600 hover:underline shrink-0"
+                        >
+                          调用艺廊
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2313,6 +2503,7 @@ export const AccountEditorModal: React.FC<AccountEditorModalProps> = ({
       isOpen={isCardentifyGalleryOpen}
       onClose={() => setIsCardentifyGalleryOpen(false)}
       currentImageUrl={cardImageUrl}
+      initialKeyword={faceSearchQuery}
       defaultBankQuery={bankName || name}
       defaultTier={cardTier}
       onSelectCard={(card) => {
