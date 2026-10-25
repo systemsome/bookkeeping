@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   getCurrentUser,
   setCurrentUserId,
@@ -31,6 +31,7 @@ import {
   getRecurringTasks,
   saveRecurringTasks,
   executeRecurringTask,
+  cleanDuplicateRecurringTransactions,
   getTrashTransactions,
   emptyTrash,
   restoreFromTrash,
@@ -199,6 +200,7 @@ export default function App() {
   // Real-time Cloud Sync Status (连接中、已同步、同步失败、离线模式)
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('synced');
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const autoExecutedMapRef = useRef<Map<string, string>>(new Map());
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -221,30 +223,37 @@ export default function App() {
     setRecurringTasks(recs);
     setTrashTransactions(trash);
 
-    // 自动扫描到期周期账单并自动入账 (针对开启 autoExecute 的规则)
+    // 自动扫描到期周期账单并自动入账 (针对开启 autoExecute 的规则，添加严格单日单次会话防重保护)
     const todayStr = new Date().toISOString().split('T')[0];
     let executedCount = 0;
     let currAccs = accs;
     let currTxs = txs;
     let currTasks = recs;
 
-    recs.forEach((task) => {
-      if (task.enabled && task.autoExecute && task.nextDueDate <= todayStr) {
-        const res = executeRecurringTask(uid, task.id);
-        if (res.success && res.transaction && res.accounts && res.updatedTasks) {
-          executedCount++;
-          currAccs = res.accounts;
-          currTxs = [res.transaction, ...currTxs];
-          currTasks = res.updatedTasks;
+    if (autoExecutedMapRef.current.get(uid) !== todayStr) {
+      recs.forEach((task) => {
+        if (task.enabled && task.autoExecute && task.nextDueDate <= todayStr) {
+          const res = executeRecurringTask(uid, task.id);
+          if (res.success && res.updatedTasks) {
+            currTasks = res.updatedTasks;
+            if (res.transaction && !res.alreadyExecuted) {
+              executedCount++;
+              if (res.accounts) currAccs = res.accounts;
+              currTxs = [res.transaction, ...currTxs];
+            }
+          }
         }
-      }
-    });
+      });
+      autoExecutedMapRef.current.set(uid, todayStr);
 
-    if (executedCount > 0) {
-      setAccounts(currAccs);
-      setTransactions(sortTransactions(currTxs));
-      setRecurringTasks(currTasks);
-      showToast(`🔄 已自动执行入账 ${executedCount} 笔到期周期固定账单`);
+      if (executedCount > 0) {
+        setAccounts(currAccs);
+        setTransactions(sortTransactions(currTxs));
+        setRecurringTasks(currTasks);
+        showToast(`🔄 已自动执行入账 ${executedCount} 笔到期周期固定账单`);
+      } else if (currTasks !== recs) {
+        setRecurringTasks(currTasks);
+      }
     }
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -742,15 +751,21 @@ export default function App() {
   const handleExecuteRecurringTask = (taskId: string) => {
     if (!currentUser) return;
     const res = executeRecurringTask(currentUser.id, taskId);
-    if (res.success && res.transaction && res.accounts && res.updatedTasks) {
-      setAccounts(res.accounts);
-      setTransactions((prev) => sortTransactions([res.transaction!, ...prev]));
-      setRecurringTasks(res.updatedTasks);
-      const isCurForeign = res.transaction.currency && res.transaction.currency !== 'CNY';
-      const amtDisplay = isCurForeign
-        ? `${res.transaction.originalAmount !== undefined ? res.transaction.originalAmount : ''} ${res.transaction.currency} (折合 ¥${res.transaction.amount})`
-        : `¥${res.transaction.amount}`;
-      showToast(`⚡ 已成功入账「${res.transaction.description}」${amtDisplay}`);
+    if (res.success) {
+      if (res.updatedTasks) setRecurringTasks(res.updatedTasks);
+      if (res.alreadyExecuted) {
+        showToast('ℹ️ 该周期账单已于本期记入过流水，已为您自动顺延至下一执行周期');
+        return;
+      }
+      if (res.transaction && res.accounts && res.updatedTasks) {
+        setAccounts(res.accounts);
+        setTransactions((prev) => sortTransactions([res.transaction!, ...prev]));
+        const isCurForeign = res.transaction.currency && res.transaction.currency !== 'CNY';
+        const amtDisplay = isCurForeign
+          ? `${res.transaction.originalAmount !== undefined ? res.transaction.originalAmount : ''} ${res.transaction.currency} (折合 ¥${res.transaction.amount})`
+          : `¥${res.transaction.amount}`;
+        showToast(`⚡ 已成功入账「${res.transaction.description}」${amtDisplay}`);
+      }
     }
   };
 
@@ -758,6 +773,7 @@ export default function App() {
     if (!currentUser) return;
     const todayStr = new Date().toISOString().split('T')[0];
     let executedCount = 0;
+    let skippedCount = 0;
     let currAccs = accounts;
     let currTxs = transactions;
     let currTasks = recurringTasks;
@@ -765,22 +781,43 @@ export default function App() {
     recurringTasks.forEach((task) => {
       if (task.enabled && task.nextDueDate <= todayStr) {
         const res = executeRecurringTask(currentUser.id, task.id);
-        if (res.success && res.transaction && res.accounts && res.updatedTasks) {
-          executedCount++;
-          currAccs = res.accounts;
-          currTxs = [res.transaction, ...currTxs];
+        if (res.success && res.updatedTasks) {
           currTasks = res.updatedTasks;
+          if (res.transaction && !res.alreadyExecuted) {
+            executedCount++;
+            if (res.accounts) currAccs = res.accounts;
+            currTxs = [res.transaction, ...currTxs];
+          } else if (res.alreadyExecuted) {
+            skippedCount++;
+          }
         }
       }
     });
 
-    if (executedCount > 0) {
+    if (executedCount > 0 || skippedCount > 0) {
       setAccounts(currAccs);
       setTransactions(sortTransactions(currTxs));
       setRecurringTasks(currTasks);
-      showToast(`⚡ 已成功批量执行入账 ${executedCount} 笔到期账单`);
+      if (executedCount > 0) {
+        showToast(`⚡ 已成功批量执行入账 ${executedCount} 笔到期账单${skippedCount > 0 ? `（${skippedCount} 笔已在账本中，已顺延下期）` : ''}`);
+      } else {
+        showToast('ℹ️ 所选到期账单此前已完成记账，已自动顺延至下一执行周期');
+      }
     } else {
       showToast('当前没有待入账的到期周期账单');
+    }
+  };
+
+  // 智能清理因历史重复触发而生成的重复周期账单
+  const handleCleanDuplicateRecurring = () => {
+    if (!currentUser) return;
+    const res = cleanDuplicateRecurringTransactions(currentUser.id);
+    if (res.cleanedCount > 0) {
+      setAccounts(res.accounts);
+      setTransactions(sortTransactions(res.transactions));
+      showToast(`🧹 已智能清理 ${res.cleanedCount} 笔历史重复周期账单并自动恢复账户资产`);
+    } else {
+      showToast('✨ 检查完毕，未发现重复的周期账单流水');
     }
   };
 
@@ -1473,6 +1510,7 @@ export default function App() {
           onDeleteTask={handleDeleteRecurringTask}
           onExecuteTask={handleExecuteRecurringTask}
           onExecuteAllDue={handleExecuteAllDueRecurring}
+          onCleanDuplicates={handleCleanDuplicateRecurring}
         />
       )}
 

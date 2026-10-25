@@ -758,10 +758,33 @@ export const fetchLatestDataFromServer = async (
       const localProjs = getProjects(userId);
       const localRec = getRecurringTasks(userId);
 
-      // 安全双向无损合并周期任务，防止空数组冲刷掉用户刚创建的周期规则
+      // 安全智能双向无损合并周期任务，优先保留已推进的下次到期日(nextDueDate)和最新更新时间
+      // 防止服务端较旧的 nextDueDate 覆盖本地已执行完成的最新状态而导致循环重复添加
       const mergedRecMap = new Map<string, RecurringTask>();
       localRec.forEach((t) => mergedRecMap.set(t.id, t));
-      serverRec.forEach((t) => mergedRecMap.set(t.id, t));
+
+      serverRec.forEach((st) => {
+        const lt = mergedRecMap.get(st.id);
+        if (!lt) {
+          mergedRecMap.set(st.id, st);
+        } else {
+          // 比较下次执行日期：推进到更晚日期的记录代表已完成执行，绝不能倒退回过去或今日
+          const localDue = lt.nextDueDate || '';
+          const serverDue = st.nextDueDate || '';
+          const localUpdatedTime = lt.updatedAt || '';
+          const serverUpdatedTime = st.updatedAt || '';
+
+          if (localDue > serverDue) {
+            mergedRecMap.set(st.id, lt);
+          } else if (serverDue > localDue) {
+            mergedRecMap.set(st.id, st);
+          } else if (serverUpdatedTime > localUpdatedTime) {
+            mergedRecMap.set(st.id, st);
+          } else {
+            mergedRecMap.set(st.id, lt);
+          }
+        }
+      });
       const resolvedRec = mergedRecMap.size > 0 ? Array.from(mergedRecMap.values()) : serverRec;
 
       // 核心判断逻辑：
@@ -1338,33 +1361,54 @@ export const saveQuickTemplates = (userId: string, templates: QuickTemplate[]) =
 // 🔄 周期性任务计算与一键/自动入账 (Recurring Execution)
 // ==========================================
 export const calculateNextDueDate = (task: RecurringTask, fromDateStr?: string): string => {
-  const base = fromDateStr ? new Date(fromDateStr) : new Date();
-  if (isNaN(base.getTime())) return new Date().toISOString().split('T')[0];
+  const todayIso = new Date().toISOString().split('T')[0];
+  const baseStr = fromDateStr || task.nextDueDate || todayIso;
+  const baseDate = new Date(baseStr);
+  const validBase = isNaN(baseDate.getTime()) ? new Date() : baseDate;
 
-  const next = new Date(base.getTime());
-  if (task.frequency === 'DAILY') {
-    next.setDate(next.getDate() + 1);
-  } else if (task.frequency === 'WEEKLY') {
-    next.setDate(next.getDate() + 7);
-  } else if (task.frequency === 'MONTHLY') {
-    const targetDay = task.dayOfMonth || base.getDate();
-    next.setMonth(next.getMonth() + 1);
-    const maxDays = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-    next.setDate(Math.min(targetDay, maxDays));
-  } else if (task.frequency === 'YEARLY') {
-    next.setFullYear(next.getFullYear() + 1);
+  const stepNext = (d: Date): Date => {
+    const next = new Date(d.getTime());
+    if (task.frequency === 'DAILY') {
+      next.setDate(next.getDate() + 1);
+    } else if (task.frequency === 'WEEKLY') {
+      next.setDate(next.getDate() + 7);
+    } else if (task.frequency === 'MONTHLY') {
+      const targetDay = task.dayOfMonth || 1;
+      next.setMonth(next.getMonth() + 1);
+      const maxDays = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      next.setDate(Math.min(targetDay, maxDays));
+    } else if (task.frequency === 'YEARLY') {
+      next.setFullYear(next.getFullYear() + 1);
+    }
+    return next;
+  };
+
+  let candidate = stepNext(validBase);
+  // 确保推进后的下次执行日期严格大于今日(todayStr)，防止在今日或过去日期中循环重试
+  const todayDate = new Date(todayIso);
+  let safetyLoop = 0;
+  while (candidate <= todayDate && safetyLoop < 120) {
+    candidate = stepNext(candidate);
+    safetyLoop++;
   }
 
-  const y = next.getFullYear();
-  const m = String(next.getMonth() + 1).padStart(2, '0');
-  const d = String(next.getDate()).padStart(2, '0');
+  const y = candidate.getFullYear();
+  const m = String(candidate.getMonth() + 1).padStart(2, '0');
+  const d = String(candidate.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 };
 
 export const executeRecurringTask = (
   userId: string,
-  taskId: string
-): { success: boolean; transaction?: Transaction; accounts?: FinancialAccount[]; updatedTasks?: RecurringTask[] } => {
+  taskId: string,
+  force: boolean = false
+): {
+  success: boolean;
+  transaction?: Transaction;
+  accounts?: FinancialAccount[];
+  updatedTasks?: RecurringTask[];
+  alreadyExecuted?: boolean;
+} => {
   const tasks = getRecurringTasks(userId);
   const task = tasks.find((t) => t.id === taskId);
   if (!task) return { success: false };
@@ -1372,8 +1416,67 @@ export const executeRecurringTask = (
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const currentMonthStr = todayStr.substring(0, 7); // e.g. "2026-10"
+  const currentYearStr = todayStr.substring(0, 4);
 
-  // 创建流水
+  // 1. 严格幂等性检查与防重复添加过滤
+  const existingTxs = getTransactions(userId);
+  const isDuplicate = !force && existingTxs.some((tx) => {
+    // 优先通过关联的 recurringTaskId 进行精准识别
+    if (tx.recurringTaskId === task.id) {
+      if (task.frequency === 'DAILY') return tx.date === todayStr;
+      if (task.frequency === 'MONTHLY') return tx.date.startsWith(currentMonthStr) || tx.date === task.nextDueDate;
+      if (task.frequency === 'YEARLY') return tx.date.startsWith(currentYearStr) || tx.date === task.nextDueDate;
+      if (task.frequency === 'WEEKLY') {
+        const diffDays = Math.abs((new Date(todayStr).getTime() - new Date(tx.date).getTime()) / 86400000);
+        return diffDays < 6 || tx.date === task.nextDueDate;
+      }
+    }
+
+    // 针对旧历史未打标签的记录，通过核心交易特征做智能去重识别
+    const matchDesc = (tx.description || '').trim() === (task.description || task.name || '').trim();
+    const matchAcc = tx.accountId === task.accountId;
+    const matchAmount = Math.abs(tx.amount - task.amount) < 0.001;
+    const matchTag = tx.tag === (task.tag || '周期固定') || tx.tag === '周期固定';
+    const matchType = tx.type === task.type;
+
+    if (matchDesc && matchAcc && matchAmount && (matchTag || matchType)) {
+      if (task.frequency === 'DAILY') return tx.date === todayStr;
+      if (task.frequency === 'MONTHLY') return tx.date.startsWith(currentMonthStr) || tx.date === task.nextDueDate;
+      if (task.frequency === 'YEARLY') return tx.date.startsWith(currentYearStr) || tx.date === task.nextDueDate;
+      if (task.frequency === 'WEEKLY') {
+        const diffDays = Math.abs((new Date(todayStr).getTime() - new Date(tx.date).getTime()) / 86400000);
+        return diffDays < 6 || tx.date === task.nextDueDate;
+      }
+    }
+
+    return false;
+  });
+
+  // 如果当前周期已存在对应流水，直接将下次执行日期推进到下一期，不再重复扣款入账
+  if (isDuplicate) {
+    const nextDate = calculateNextDueDate(task, todayStr);
+    const updatedTasks = tasks.map((t) =>
+      t.id === taskId
+        ? { ...t, lastExecutedDate: todayStr, nextDueDate: nextDate, updatedAt: now.toISOString() }
+        : t
+    );
+    saveRecurringTasks(userId, updatedTasks);
+
+    const currentAccs = getAccounts(userId);
+    const currentProjs = getProjects(userId);
+    syncDataToServer(userId, currentAccs, existingTxs, currentProjs, getCurrentUser() || undefined, updatedTasks).catch(() => {});
+
+    return {
+      success: true,
+      alreadyExecuted: true,
+      accounts: currentAccs,
+      updatedTasks,
+    };
+  }
+
+  // 2. 创建真实流水并扣减/增加账户资产
+  const cycleTag = task.frequency === 'MONTHLY' ? currentMonthStr : task.frequency === 'YEARLY' ? currentYearStr : todayStr;
   const { accounts: updatedAccounts, transaction } = addTransaction(userId, {
     type: task.type,
     amount: task.amount,
@@ -1389,6 +1492,8 @@ export const executeRecurringTask = (
     description: task.description || task.name,
     merchant: task.merchant,
     projectId: task.projectId,
+    recurringTaskId: task.id,
+    recurringTaskCycle: cycleTag,
   });
 
   const nextDate = calculateNextDueDate(task, todayStr);
@@ -1399,7 +1504,76 @@ export const executeRecurringTask = (
   );
 
   saveRecurringTasks(userId, updatedTasks);
-  return { success: true, transaction, accounts: updatedAccounts, updatedTasks };
+
+  // 3. 立即同步到服务端，防止并发拉取时拿到过期任务时间导致再次触发
+  const latestTxs = getTransactions(userId);
+  const currentProjs = getProjects(userId);
+  syncDataToServer(userId, updatedAccounts, latestTxs, currentProjs, getCurrentUser() || undefined, updatedTasks).catch(() => {});
+
+  return { success: true, transaction, accounts: updatedAccounts, updatedTasks, alreadyExecuted: false };
+};
+
+/**
+ * 智能清理因历史重复触发而产生的冗余重复周期账单
+ * 针对相同任务/相同内容在同一周期(同日/同月)内重复生成的流水，仅保留第一笔，将其余重复流水批量安全删除并回滚账户余额
+ */
+export const cleanDuplicateRecurringTransactions = (
+  userId: string
+): {
+  cleanedCount: number;
+  transactions: Transaction[];
+  accounts: FinancialAccount[];
+} => {
+  const transactions = getTransactions(userId);
+  const accounts = getAccounts(userId);
+  const tasks = getRecurringTasks(userId);
+  const taskMap = new Map(tasks.map((t) => [t.id, t]));
+
+  const duplicateTxIds: string[] = [];
+  const seenCycleKeys = new Set<string>();
+
+  // 按创建时间升序排列，保留最早生成的那一笔真实合法凭证
+  const sorted = [...transactions].sort((a, b) => (a.createdAt || a.date).localeCompare(b.createdAt || b.date));
+
+  sorted.forEach((tx) => {
+    let isRecurring = false;
+    let cycleKey = '';
+
+    if (tx.recurringTaskId) {
+      isRecurring = true;
+      const task = taskMap.get(tx.recurringTaskId);
+      const freq = task?.frequency || 'MONTHLY';
+      const period = freq === 'MONTHLY' ? tx.date.slice(0, 7) : freq === 'YEARLY' ? tx.date.slice(0, 4) : tx.date;
+      cycleKey = `rec_id_${tx.recurringTaskId}_${period}`;
+    } else if (tx.tag === '周期固定') {
+      isRecurring = true;
+      const period = tx.date.slice(0, 7);
+      cycleKey = `rec_tag_${tx.description?.trim()}_${tx.accountId}_${tx.amount}_${period}`;
+    }
+
+    if (isRecurring && cycleKey) {
+      if (seenCycleKeys.has(cycleKey)) {
+        duplicateTxIds.push(tx.id);
+        return;
+      }
+      seenCycleKeys.add(cycleKey);
+    }
+  });
+
+  if (duplicateTxIds.length === 0) {
+    return { cleanedCount: 0, transactions, accounts };
+  }
+
+  // 批量删除多余的重复流水并原路回滚资产账户余额
+  const { transactions: finalTxs, accounts: finalAccs } = deleteTransactionsBatch(userId, duplicateTxIds);
+  const projs = getProjects(userId);
+  syncDataToServer(userId, finalAccs, finalTxs, projs, getCurrentUser() || undefined, tasks).catch(() => {});
+
+  return {
+    cleanedCount: duplicateTxIds.length,
+    transactions: finalTxs,
+    accounts: finalAccs,
+  };
 };
 
 export const batchUpdateTransactions = (

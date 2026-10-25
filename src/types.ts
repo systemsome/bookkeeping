@@ -132,6 +132,10 @@ export interface Transaction {
   reimbursementTxId?: string; // 关联的报销款到账流水 ID
   reimbursedDate?: string; // 报销到账日期
 
+  // 周期性任务关联 (Recurring Task Link)
+  recurringTaskId?: string; // 关联的周期固定任务 ID
+  recurringTaskCycle?: string; // 关联的执行周期标识 (如 2026-10)
+
   // 平账冲红 (Red-ink Reversal & Refund Offset) 专用字段
   isRefund?: boolean; // 是否为冲红退款单 (红字冲销)
   refundedTxId?: string; // 冲红凭证关联的原支出账单 ID

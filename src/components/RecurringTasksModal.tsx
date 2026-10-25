@@ -55,6 +55,7 @@ interface RecurringTasksModalProps {
   onDeleteTask: (taskId: string) => void;
   onExecuteTask: (taskId: string) => void;
   onExecuteAllDue: () => void;
+  onCleanDuplicates?: () => void;
 }
 
 export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
@@ -69,6 +70,7 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
   onDeleteTask,
   onExecuteTask,
   onExecuteAllDue,
+  onCleanDuplicates,
 }) => {
   const [filterType, setFilterType] = useState<'ALL' | 'EXPENSE' | 'INCOME'>('ALL');
   const [editingTask, setEditingTask] = useState<RecurringTask | null>(null);
@@ -374,6 +376,17 @@ export const RecurringTasksModal: React.FC<RecurringTasksModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {!isCreatingNew && onCleanDuplicates && (
+              <button
+                type="button"
+                onClick={onCleanDuplicates}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200 dark:border-slate-700 active:scale-95 transition-all"
+                title="智能排查并清除因重复添加导致的重复历史流水，并原路恢复账户余额"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>清理重复账单</span>
+              </button>
+            )}
             {!isCreatingNew && (
               <button
                 onClick={startCreate}

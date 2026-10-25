@@ -48,6 +48,7 @@ import {
   ArchiveRestore,
   Briefcase,
   Split,
+  MoreHorizontal,
 } from 'lucide-react';
 import { Transaction, FinancialAccount, TransactionType, LedgerProject, UserProfile } from '../types';
 import {
@@ -241,6 +242,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receiptSingleTxId, setReceiptSingleTxId] = useState<string | null>(null);
+  const [mobileActionTx, setMobileActionTx] = useState<Transaction | null>(null);
 
   // Account map for quick lookup
   const accountMap = useMemo(() => {
@@ -906,13 +908,21 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         }`}
       >
         <div
-          onClick={isBatchMode ? () => toggleTxSelection(tx.id) : undefined}
-          className={`px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-3 group ${
+          onClick={
+            isBatchMode
+              ? () => toggleTxSelection(tx.id)
+              : () => {
+                  if (typeof window !== 'undefined' && window.innerWidth < 640) {
+                    setMobileActionTx(tx);
+                  }
+                }
+          }
+          className={`px-3.5 sm:px-5 py-3 sm:py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-2.5 sm:gap-4 group cursor-pointer sm:cursor-default ${
             isBatchMode ? 'cursor-pointer select-none' : ''
           }`}
         >
         {/* Left: Checkbox (Feature 1) & Icon & Description & Metadata */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
           {/* Feature 1: Multi-select Checkbox */}
           {isBatchMode && (
             <button
@@ -933,7 +943,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           )}
 
           <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 ${
               isExpense
                 ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400'
                 : isIncome
@@ -945,7 +955,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           >
             <CategoryIcon
               nameOrIcon={tx.category}
-              className="w-4 h-4"
+              className="w-4 h-4 sm:w-4.5 sm:h-4.5"
               defaultIcon={
                 isExpense
                   ? ArrowDownRight
@@ -958,9 +968,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             />
           </div>
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white truncate max-w-[130px] xs:max-w-[200px] sm:max-w-none">
                 {tx.description || tx.category}
               </span>
               <button
@@ -969,7 +979,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   e.stopPropagation();
                   setSelectedCategory(tx.category || 'ALL');
                 }}
-                className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                className="px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer shrink-0"
                 title={`点击筛选「${tx.category}」分类`}
               >
                 {tx.category}
@@ -981,27 +991,27 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     e.stopPropagation();
                     setSelectedProjectId(tx.projectId || tx.projectName || 'ALL');
                   }}
-                  className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 hover:bg-indigo-100 transition-colors flex items-center gap-0.5 cursor-pointer"
+                  className="px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 hover:bg-indigo-100 transition-colors flex items-center gap-0.5 cursor-pointer shrink-0 truncate max-w-[110px]"
                   title={`点击筛选「${tx.projectName}」项目明细`}
                 >
                   📁 {tx.projectName}
                 </button>
               )}
               {tx.tag && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100/80 dark:bg-slate-800/80 text-slate-400">
+                <span className="hidden xs:inline px-1.5 py-0.2 rounded text-[10px] bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 shrink-0">
                   #{tx.tag}
                 </span>
               )}
               {tx.isReimbursable && (
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1 ${
+                  className={`px-1.5 py-0.2 rounded text-[10px] font-bold border inline-flex items-center gap-0.5 shrink-0 ${
                     tx.reimbursementStatus === 'REIMBURSED'
                       ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                       : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800'
                   }`}
                 >
-                  <Briefcase className="w-3 h-3" />
-                  <span>{tx.reimbursementStatus === 'REIMBURSED' ? '已报销到账' : '待报销垫付'}</span>
+                  <Briefcase className="w-2.5 h-2.5" />
+                  <span>{tx.reimbursementStatus === 'REIMBURSED' ? '已报销' : '待报销'}</span>
                 </span>
               )}
               {hasSplits && (
@@ -1012,7 +1022,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     e.stopPropagation();
                     toggleSplitExpand(tx.id);
                   }}
-                  className={`px-2.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                  className={`px-1.5 py-0.2 sm:px-2.5 sm:py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold border inline-flex items-center gap-1 transition-all shadow-2xs cursor-pointer shrink-0 ${
                     isSplitExpanded
                       ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500 shadow-sm'
                       : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
@@ -1020,43 +1030,43 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   title={isSplitExpanded ? '点击收起已拆分子项明细' : '点击展开查看已拆分明细'}
                   aria-expanded={isSplitExpanded}
                 >
-                  <Split className="w-3.5 h-3.5" />
-                  <span>已拆分 {tx.splitItems!.length} 项</span>
+                  <Split className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <span>拆分 {tx.splitItems!.length} 项</span>
                 </button>
               )}
               {tx.isRefund && (
-                <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800">
-                  平账冲红凭证
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800 shrink-0">
+                  冲红
                 </span>
               )}
               {tx.refundedAmount && tx.refundedAmount > 0 ? (
-                <span className="px-2 py-0.5 rounded text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
-                  已冲红退款 ¥{tx.refundedAmount.toFixed(2)}
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800 shrink-0">
+                  已冲退 ¥{tx.refundedAmount.toFixed(0)}
                 </span>
               ) : null}
               {tx.merchant && (
-                <span className="text-[10px] text-slate-400">
+                <span className="hidden sm:inline text-[10px] text-slate-400 truncate max-w-[120px]">
                   商户: {tx.merchant}
                 </span>
               )}
             </div>
 
             {/* Date, Time & Account Path */}
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1 flex-wrap font-mono">
+            <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] text-slate-400 mt-1 flex-wrap font-mono">
               <span className="font-medium text-slate-600 dark:text-slate-300">
                 {tx.date}
               </span>
               {tx.time && (
                 <span className="flex items-center gap-0.5 text-slate-500 dark:text-slate-400">
-                  <Clock className="w-3 h-3 text-slate-400" />
+                  <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />
                   {tx.time}
                 </span>
               )}
               <span>·</span>
-              <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+              <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
                 <span>{acc?.name || '账户'}</span>
                 {acc?.cardNumberLast4 && (
-                  <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                  <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono text-[9px] sm:text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
                     *{acc.cardNumberLast4}
                   </span>
                 )}
@@ -1064,10 +1074,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               {targetAcc && (
                 <>
                   <span>➔</span>
-                  <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+                  <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
                     <span>{targetAcc.name}</span>
                     {targetAcc.cardNumberLast4 && (
-                      <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                      <span className="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-mono text-[9px] sm:text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
                         *{targetAcc.cardNumberLast4}
                       </span>
                     )}
@@ -1075,17 +1085,16 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 </>
               )}
               {tx.counterparty && (
-                <>
-                  <span>·</span>
-                  <span>对方: {tx.counterparty}</span>
-                </>
+                <span className="hidden sm:inline">
+                  · 对方: {tx.counterparty}
+                </span>
               )}
             </div>
           </div>
         </div>
 
         {/* Right: Amount, Foreign Currency & Actions */}
-        <div className="text-right flex items-center gap-3 sm:gap-5 flex-shrink-0">
+        <div className="text-right flex items-center gap-2 sm:gap-5 flex-shrink-0">
           <div>
             <div
               className={`text-sm sm:text-base font-bold font-mono ${
@@ -1105,20 +1114,20 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
             {/* Net expenditure after red-ink refund offset */}
             {isExpense && tx.refundedAmount && tx.refundedAmount > 0 && (
-              <div className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+              <div className="text-[9px] sm:text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                 净支: {formatCurrency(Math.max(0, tx.amount - tx.refundedAmount), privacyMode)}
               </div>
             )}
 
             {isForeign && curInfo && (
-              <div className="text-[10px] text-blue-700 dark:text-blue-300 font-mono">
+              <div className="text-[9px] sm:text-[10px] text-blue-700 dark:text-blue-300 font-mono">
                 原币: {curInfo.symbol}{tx.originalAmount || tx.amount}
               </div>
             )}
           </div>
 
-          {/* Quick Action buttons */}
-          <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+          {/* Quick Action buttons (大屏桌面端悬浮呈现，手机端由抽屉菜单承接以保持极简) */}
+          <div className="hidden sm:flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
             {/* Split Expand/Collapse Action Button */}
             {hasSplits && (
               <button
@@ -1220,6 +1229,20 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               )}
             </button>
           </div>
+
+          {/* Mobile More Button (移动端操作触发按钮) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMobileActionTx(tx);
+            }}
+            className="sm:hidden p-1.5 -mr-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+            title="更多操作"
+            aria-label="更多操作"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -1366,7 +1389,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner & Metric Summary (与账本项目 / 信用卡专区顶部样式完全统一) */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm relative">
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 sm:p-6 lg:p-8 shadow-sm relative">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200/70 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold">
@@ -1527,52 +1550,52 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         </div>
 
-        {/* Aggregate Stats Across All Transactions (与账本项目 / 信用卡专区统一的5列统计) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">流水总数</span>
-            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+        {/* Aggregate Stats Across All Transactions (移动端2列自适应精简排版，大屏5列统一呈现) */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4 mt-5 sm:mt-6 pt-5 sm:pt-6 border-t border-slate-100 dark:border-slate-800">
+          <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">流水总数</span>
+            <div className="text-lg sm:text-2xl font-bold font-mono text-slate-900 dark:text-white mt-0.5 sm:mt-1">
               {(transactions || []).length}
             </div>
-            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-              支出 {overallLedgerStats.expenseCount} 笔 · 收入 {overallLedgerStats.incomeCount} 笔
+            <div className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 mt-0.5 sm:mt-1 truncate">
+              支 {overallLedgerStats.expenseCount} 笔 · 收 {overallLedgerStats.incomeCount} 笔
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
-            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">总收入</span>
-            <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+          <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50">
+            <span className="text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-400 font-medium">总收入</span>
+            <div className="text-lg sm:text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-0.5 sm:mt-1">
               +{formatCurrency(overallLedgerStats.totalIncome, privacyMode)}
             </div>
-            <div className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1">
-              工资收入与各类报销收款
+            <div className="text-[10px] sm:text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-0.5 sm:mt-1 truncate">
+              工资收入与报销收款
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-100/80 dark:border-rose-900/40">
-            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">退款冲红</span>
-            <div className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+          <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-100/80 dark:border-rose-900/40">
+            <span className="text-[11px] sm:text-xs text-rose-700 dark:text-rose-400 font-medium">退款冲红</span>
+            <div className="text-lg sm:text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5 sm:mt-1">
               +{formatCurrency(overallLedgerStats.totalRefund, privacyMode)}
             </div>
-            <div className="text-xs text-rose-500/80 dark:text-rose-400/80 mt-1">
+            <div className="text-[10px] sm:text-xs text-rose-500/80 dark:text-rose-400/80 mt-0.5 sm:mt-1 truncate">
               已退款原路冲红抵消
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50">
-            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">实际支出</span>
-            <div className="text-2xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
+          <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50">
+            <span className="text-[11px] sm:text-xs text-rose-700 dark:text-rose-400 font-medium">实际支出</span>
+            <div className="text-lg sm:text-2xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-0.5 sm:mt-1">
               -{formatCurrency(overallLedgerStats.netExpense, privacyMode)}
             </div>
-            <div className="text-xs text-rose-600/80 dark:text-rose-500/80 mt-1">
-              剔除退款冲红后的净支出
+            <div className="text-[10px] sm:text-xs text-rose-600/80 dark:text-rose-500/80 mt-0.5 sm:mt-1 truncate">
+              剔除退款后的净支出
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 sm:col-span-2 lg:col-span-1">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">净结余</span>
+          <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 col-span-2 lg:col-span-1">
+            <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">净结余</span>
             <div
-              className={`text-2xl font-bold font-mono mt-1 ${
+              className={`text-lg sm:text-2xl font-bold font-mono mt-0.5 sm:mt-1 ${
                 overallLedgerStats.netBalance >= 0
                   ? 'text-emerald-700 dark:text-emerald-400'
                   : 'text-rose-600 dark:text-rose-400'
@@ -1581,7 +1604,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               {overallLedgerStats.netBalance >= 0 ? '+' : ''}
               {formatCurrency(overallLedgerStats.netBalance, privacyMode)}
             </div>
-            <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            <div className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 mt-0.5 sm:mt-1 truncate">
               {overallLedgerStats.netBalance >= 0 ? '当期收支结余健康' : '支出大于收入'}
             </div>
           </div>
@@ -1922,11 +1945,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
         )}
       </div>
 
-      {/* 3. Unified Filters & Search Toolbar (含高级多维筛选增强) */}
-      <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2.5">
+      {/* 3. Unified Filters & Search Toolbar (移动端2列并排自适应排列，大屏7列通栏展开) */}
+      <div className="p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-2.5">
           {/* Search */}
-          <div className="relative sm:col-span-2 lg:col-span-2">
+          <div className="relative col-span-2 sm:col-span-2 lg:col-span-2">
             <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
             <input
               id="ledger-search-input"
@@ -1939,12 +1962,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
 
           {/* Type Filter */}
-          <div>
+          <div className="col-span-1">
             <select
               id="ledger-filter-type"
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
+              className="w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400 truncate"
             >
               <option value="ALL">全部交易类型</option>
               <option value="EXPENSE">支出消费</option>
@@ -1962,12 +1985,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
 
           {/* Project Filter */}
-          <div>
+          <div className="col-span-1">
             <select
               id="ledger-filter-project"
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-indigo-400 font-medium"
+              className="w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-indigo-400 font-medium truncate"
             >
               <option value="ALL">全部项目 ({projects.length})</option>
               {projects.map((p) => (
@@ -1980,12 +2003,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
 
           {/* Account Filter */}
-          <div>
+          <div className="col-span-1">
             <select
               id="ledger-filter-account"
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400 font-medium"
+              className="w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400 font-medium truncate"
             >
               <option value="ALL">全部关联账户 ({accounts.length})</option>
               {accounts.map((a) => (
@@ -1997,12 +2020,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
 
           {/* Month Filter */}
-          <div>
+          <div className="col-span-1">
             <select
               id="ledger-filter-month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
+              className="w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400 truncate"
             >
               <option value="ALL">全部历史月份</option>
               {availableMonths.map((m) => (
@@ -2014,12 +2037,12 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
 
           {/* Currency Filter */}
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <select
               id="ledger-filter-currency"
               value={selectedCurrency}
               onChange={(e) => setSelectedCurrency(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400"
+              className="w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm focus:outline-none focus:border-slate-400 truncate"
             >
               <option value="ALL">全部币种</option>
               <option value="FOREIGN_ONLY">🌐 仅外币交易</option>
@@ -2271,9 +2294,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
       {/* 4. Sequential Chronological Transactions List (账本明细 - 支持按天聚合时间轴与连续平铺双视图，支持批量多选) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden transition-all">
-        {/* Section Header: 账本明细卡片头部 */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900">
-          <div className="flex items-center gap-3 flex-wrap">
+        {/* Section Header: 账本明细卡片头部 (移动端精简边距与控件流式对齐) */}
+        <div className="p-3.5 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
             <div className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/60">
               <ReceiptText className="w-4 h-4" />
             </div>
@@ -2281,14 +2304,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <span className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-mono tracking-tight">
                 账本明细
               </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold font-mono border border-slate-200/60 dark:border-slate-700">
+              <span className="text-xs px-2 sm:px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold font-mono border border-slate-200/60 dark:border-slate-700">
                 共 {filteredTransactions.length} 笔
               </span>
             </div>
 
             {selectedDateFilter && (
               <span className="text-xs px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-medium border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                <span>📅 已选日期: {selectedDateFilter}</span>
+                <span>📅 已选: {selectedDateFilter}</span>
                 <button
                   onClick={() => setSelectedDateFilter(null)}
                   className="text-emerald-700 dark:text-emerald-400 hover:text-rose-600 font-bold ml-0.5"
@@ -2301,7 +2324,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
             {selectedCategory !== 'ALL' && (
               <span className="text-xs px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-medium border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                <span>🏷️ 已选分类: {selectedCategory}</span>
+                <span>🏷️ 已选: {selectedCategory}</span>
                 <button
                   onClick={() => setSelectedCategory('ALL')}
                   className="text-indigo-700 dark:text-indigo-400 hover:text-rose-600 font-bold ml-0.5"
@@ -2313,7 +2336,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-400 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-mono text-slate-400 flex-wrap justify-between sm:justify-end w-full sm:w-auto">
             {/* Feature 4: View Mode Switcher (按天分组 vs 连续列表) */}
             <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700">
               <button
@@ -2556,43 +2579,43 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {groupedTransactions.map((group) => (
                   <div key={group.date} className="relative">
-                    {/* Day Group Header Bar */}
-                    <div className="px-4 sm:px-5 py-2.5 bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    {/* Day Group Header Bar (移动端自适应紧凑单行对齐) */}
+                    <div className="px-3.5 sm:px-5 py-2 sm:py-2.5 bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         <span className="text-xs sm:text-sm font-bold font-mono text-slate-800 dark:text-slate-100">
                           {group.date}
                         </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                        <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                           {group.weekday}
                         </span>
                         {group.isToday && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                             今天
                           </span>
                         )}
                         {group.isYesterday && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
                             昨天
                           </span>
                         )}
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          ({group.transactions.length} 笔)
+                        <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                          ({group.transactions.length}笔)
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3 text-xs font-mono">
+                      <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono ml-auto sm:ml-0">
                         {group.totalExpense > 0 && (
-                          <span className="text-rose-600 dark:text-rose-400">
+                          <span className="text-rose-600 dark:text-rose-400 font-medium">
                             支: -{formatCurrency(group.totalExpense, privacyMode)}
                           </span>
                         )}
                         {group.totalIncome > 0 && (
-                          <span className="text-emerald-700 dark:text-emerald-400">
+                          <span className="text-emerald-700 dark:text-emerald-400 font-medium">
                             收: +{formatCurrency(group.totalIncome, privacyMode)}
                           </span>
                         )}
-                        <span className={`text-[11px] font-semibold ${group.net >= 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
-                          净: {group.net >= 0 ? '+' : ''}{formatCurrency(group.net, privacyMode)}
+                        <span className={`text-[10px] sm:text-[11px] font-semibold ${group.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>
+                          结: {group.net >= 0 ? '+' : ''}{formatCurrency(group.net, privacyMode)}
                         </span>
                       </div>
                     </div>
@@ -2966,6 +2989,224 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           initialSingleTxId={receiptSingleTxId}
           initialProjectId={selectedProjectId !== 'ALL' && selectedProjectId !== 'NONE' ? selectedProjectId : null}
         />
+      )}
+
+      {/* Mobile Transaction Action Drawer / Bottom Sheet (移动端专用大触控区优雅操作抽屉) */}
+      {mobileActionTx && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setMobileActionTx(null)}
+        >
+          <div
+            className="w-full sm:max-w-md bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4 animate-in slide-in-from-bottom duration-200 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Drag handle indicator for mobile */}
+            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto sm:hidden -mt-1 mb-2" />
+
+            {/* Transaction Overview */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                    mobileActionTx.type === 'EXPENSE'
+                      ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400'
+                      : mobileActionTx.type === 'INCOME'
+                      ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400'
+                      : mobileActionTx.type === 'REPAYMENT'
+                      ? 'bg-purple-100 dark:bg-purple-950/80 text-purple-600 dark:text-purple-400'
+                      : 'bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400'
+                  }`}
+                >
+                  <CategoryIcon nameOrIcon={mobileActionTx.category} className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight truncate">
+                    {mobileActionTx.description || mobileActionTx.category}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono mt-0.5 truncate">
+                    <span>{mobileActionTx.date}</span>
+                    {mobileActionTx.time && <span>{mobileActionTx.time}</span>}
+                    <span>·</span>
+                    <span>{accountMap.get(mobileActionTx.accountId)?.name || '账户'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+                <div
+                  className={`text-xl font-black font-mono ${
+                    mobileActionTx.type === 'EXPENSE'
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : mobileActionTx.type === 'INCOME'
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-blue-600 dark:text-blue-400'
+                  }`}
+                >
+                  {mobileActionTx.type === 'EXPENSE'
+                    ? `-${formatCurrency(mobileActionTx.amount, privacyMode)}`
+                    : mobileActionTx.type === 'INCOME'
+                    ? `+${formatCurrency(mobileActionTx.amount, privacyMode)}`
+                    : formatCurrency(mobileActionTx.amount, privacyMode)}
+                </div>
+                {mobileActionTx.projectName && (
+                  <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 block truncate max-w-[120px]">
+                    📁 {mobileActionTx.projectName}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Details Chips */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px]">分类</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{mobileActionTx.category}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px]">交易账户</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block">
+                  {accountMap.get(mobileActionTx.accountId)?.name || '未指定'}
+                </span>
+              </div>
+              {mobileActionTx.merchant && (
+                <div>
+                  <span className="text-slate-400 block text-[10px]">商户名称</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block">{mobileActionTx.merchant}</span>
+                </div>
+              )}
+              {mobileActionTx.tag && (
+                <div>
+                  <span className="text-slate-400 block text-[10px]">标签</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">#{mobileActionTx.tag}</span>
+                </div>
+              )}
+              {mobileActionTx.refundedAmount && mobileActionTx.refundedAmount > 0 ? (
+                <div>
+                  <span className="text-slate-400 block text-[10px]">已冲红退款</span>
+                  <span className="font-semibold text-amber-600 dark:text-amber-400 font-mono">
+                    ¥{mobileActionTx.refundedAmount.toFixed(2)}
+                  </span>
+                </div>
+              ) : null}
+              {mobileActionTx.splitItems && mobileActionTx.splitItems.length > 0 ? (
+                <div>
+                  <span className="text-slate-400 block text-[10px]">拆分明细</span>
+                  <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                    已拆分 {mobileActionTx.splitItems.length} 项
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Action Grid (Large Touch Targets for Mobile) */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const tx = mobileActionTx;
+                  setMobileActionTx(null);
+                  onEditTransaction(tx);
+                }}
+                className="py-3 px-3.5 rounded-2xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all"
+              >
+                <Pencil className="w-4 h-4 text-emerald-400" />
+                <span>编辑账单</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const tx = mobileActionTx;
+                  setMobileActionTx(null);
+                  setDuplicateTargetTx(tx);
+                }}
+                className="py-3 px-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-2 shadow-2xs active:scale-95 transition-all"
+              >
+                <Copy className="w-4 h-4 text-emerald-600" />
+                <span>再记一笔</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const txId = mobileActionTx.id;
+                  setMobileActionTx(null);
+                  setReceiptSingleTxId(txId);
+                  setIsReceiptModalOpen(true);
+                }}
+                className="py-3 px-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-700 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 flex items-center justify-center gap-2 shadow-2xs active:scale-95 transition-all"
+              >
+                <Receipt className="w-4 h-4 text-amber-600" />
+                <span>消费小票</span>
+              </button>
+
+              {mobileActionTx.type === 'EXPENSE' && onRefundTransaction && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const tx = mobileActionTx;
+                    setMobileActionTx(null);
+                    onRefundTransaction(tx);
+                  }}
+                  className="py-3 px-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-900/60 flex items-center justify-center gap-2 shadow-2xs active:scale-95 transition-all"
+                >
+                  <RotateCcw className="w-4 h-4 text-rose-600" />
+                  <span>平账冲红</span>
+                </button>
+              )}
+
+              {mobileActionTx.splitItems && mobileActionTx.splitItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleSplitExpand(mobileActionTx.id);
+                    setMobileActionTx(null);
+                  }}
+                  className="py-3 px-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-xs border border-indigo-200 dark:border-indigo-800 flex items-center justify-center gap-2 shadow-2xs active:scale-95 transition-all"
+                >
+                  <Split className="w-4 h-4 text-indigo-600" />
+                  <span>
+                    {expandedSplitTxIds.has(mobileActionTx.id) ? '收起拆分' : '查看拆分'}
+                  </span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const txId = mobileActionTx.id;
+                  setMobileActionTx(null);
+                  if (confirmDeleteId === txId) {
+                    onDeleteTransaction(txId);
+                    setConfirmDeleteId(null);
+                  } else {
+                    setConfirmDeleteId(txId);
+                    setTimeout(() => {
+                      setConfirmDeleteId((cur) => (cur === txId ? null : cur));
+                    }, 4000);
+                  }
+                }}
+                className={`py-3 px-3.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                  confirmDeleteId === mobileActionTx.id
+                    ? 'bg-rose-600 text-white col-span-2'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700'
+                }`}
+              >
+                <Trash2 className="w-4 h-4 text-rose-500" />
+                <span>{confirmDeleteId === mobileActionTx.id ? '再次点击确认删除' : '删除记录'}</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileActionTx(null)}
+              className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100/60 dark:bg-slate-800/60"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
