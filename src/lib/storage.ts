@@ -1,13 +1,24 @@
-import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats, RecurringTask, QuickTemplate, DeletedTransaction } from '../types';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS, DEFAULT_QUICK_TEMPLATES } from './constants';
+import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats, RecurringTask, QuickTemplate, DeletedTransaction, ExpenseCategory, IncomeCategory } from '../types';
+import {
+  INITIAL_DEMO_ACCOUNTS,
+  INITIAL_DEMO_TRANSACTIONS,
+  INITIAL_DEMO_PROJECTS,
+  INITIAL_DEMO_RECURRING_TASKS,
+  DEFAULT_QUICK_TEMPLATES,
+  EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
+  DEFAULT_PRESET_TAGS,
+} from './constants';
 import { matchBestCardentifyPreset, matchBestCardentifyCard } from './cardentifyPresets';
 import { matchLogoHubBank } from './logohubData';
 import { sortTransactions } from './formatters';
 import { mergeAccounts, mergeTransactions, mergeProjects } from './backup';
 import { getStoredCloudflareConfig, saveCloudflareConfig, syncWithCloudflare } from './cloudflareSync';
 import { getStoredWebDavConfig, saveWebDavConfig, uploadToWebDav } from './webdav';
+import { getCustomCategoryIconMappings, saveAllCustomCategoryIconMappings } from '../components/CategoryIcon';
 
-const STORAGE_KEYS = {
+
+export const STORAGE_KEYS = {
   USERS: 'asset_manager_users_v1',
   CURRENT_USER_ID: 'asset_manager_curr_uid_v1',
   ACCOUNTS_PREFIX: 'asset_manager_accs_',
@@ -16,10 +27,300 @@ const STORAGE_KEYS = {
   RECURRING_TASKS_PREFIX: 'asset_manager_recurring_tasks_',
   TRASH_PREFIX: 'asset_manager_trash_txs_',
   TEMPLATES_PREFIX: 'asset_manager_quick_templates_',
+  // 统一用户 ID 命名空间下的记账类别、账户类别 (AccountCategory) 及分类标签
+  ACCOUNT_CATEGORIES_PREFIX: 'asset_manager_account_cats_',
+  EXPENSE_CATEGORIES_PREFIX: 'asset_manager_expense_cats_',
+  INCOME_CATEGORIES_PREFIX: 'asset_manager_income_cats_',
+  CATEGORY_ICONS_PREFIX: 'asset_manager_cat_icons_',
+  CUSTOM_TAGS_PREFIX: 'asset_manager_custom_tags_',
   IS_LOCKED: 'asset_manager_is_locked_v1',
   LAST_ACTIVITY: 'asset_manager_last_act_v1',
   DEVICE_ID: 'asset_manager_device_id_v1',
   LAST_UPDATED_PREFIX: 'asset_manager_last_upd_',
+};
+
+// ==========================================
+// 🏷️ 记账类别 (AccountCategory / 支出 / 收入 / 标签) 统一用户命名空间持久化
+// ==========================================
+
+export const normalizeExpenseCategories = (parsed: any[]): ExpenseCategory[] => {
+  if (!Array.isArray(parsed) || parsed.length === 0) return [...EXPENSE_CATEGORIES];
+  if (typeof parsed[0] === 'string') {
+    return parsed.map((name: string, i: number) => ({
+      id: `custom-exp-${i}-${name}`,
+      name: name === '数码数码' ? '数码科技' : name,
+      icon: name === '数码数码' ? 'Laptop' : name,
+      color: '#f43f5e',
+    }));
+  }
+  return parsed.map((cat: ExpenseCategory) => {
+    if (cat.name === '数码数码') {
+      return { ...cat, name: '数码科技', icon: 'Laptop' };
+    }
+    return cat;
+  });
+};
+
+export const normalizeIncomeCategories = (parsed: any[]): IncomeCategory[] => {
+  if (!Array.isArray(parsed) || parsed.length === 0) return [...INCOME_CATEGORIES];
+  if (typeof parsed[0] === 'string') {
+    return parsed.map((name: string, i: number) => ({
+      id: `custom-inc-${i}-${name}`,
+      name,
+      icon: name,
+      color: '#10b981',
+    }));
+  }
+  return parsed;
+};
+
+/**
+ * 获取与用户 ID 绑定的支出类别配置 (自动多重回退与向前平滑迁移)
+ */
+export const getStoredExpenseCategories = (userId?: string): ExpenseCategory[] => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    // 1. 优先读取统一命名空间: asset_manager_expense_cats_${userId}
+    if (uid) {
+      const unifiedRaw = localStorage.getItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`);
+      if (unifiedRaw) {
+        const parsed = JSON.parse(unifiedRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseCategories(parsed);
+      }
+      // 2. 兼容历史遗留带用户 ID 的键
+      const legacyUserRaw = localStorage.getItem(`asset_vault_custom_user_categories_expense_v4_${uid}`);
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const normalized = normalizeExpenseCategories(parsed);
+          localStorage.setItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`, JSON.stringify(normalized));
+          return normalized;
+        }
+      }
+    }
+    // 3. 兼容未带 uid 的旧全局键并在有 uid 时自动迁移
+    const globalRaw =
+      localStorage.getItem('asset_vault_custom_user_categories_expense_v4') ||
+      localStorage.getItem('asset_vault_custom_user_categories_expense_v3');
+    if (globalRaw) {
+      const parsed = JSON.parse(globalRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const normalized = normalizeExpenseCategories(parsed);
+        if (uid) {
+          localStorage.setItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`, JSON.stringify(normalized));
+        }
+        return normalized;
+      }
+    }
+    return [...EXPENSE_CATEGORIES];
+  } catch {
+    return [...EXPENSE_CATEGORIES];
+  }
+};
+
+/**
+ * 持久化保存支出类别配置到用户统一命名空间
+ */
+export const saveStoredExpenseCategories = (categories: ExpenseCategory[], userId?: string): void => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    const serialized = JSON.stringify(categories);
+    if (uid) {
+      localStorage.setItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`, serialized);
+      localStorage.setItem(`asset_vault_custom_user_categories_expense_v4_${uid}`, serialized);
+    }
+    localStorage.setItem('asset_vault_custom_user_categories_expense_v4', serialized);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('asset_vault_categories_changed', { detail: { type: 'EXPENSE', userId: uid } })
+      );
+    }
+  } catch (e) {
+    console.warn('Failed to save expense categories:', e);
+  }
+};
+
+/**
+ * 获取与用户 ID 绑定的收入类别配置
+ */
+export const getStoredIncomeCategories = (userId?: string): IncomeCategory[] => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    if (uid) {
+      const unifiedRaw = localStorage.getItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`);
+      if (unifiedRaw) {
+        const parsed = JSON.parse(unifiedRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) return normalizeIncomeCategories(parsed);
+      }
+      const legacyUserRaw = localStorage.getItem(`asset_vault_custom_user_categories_income_v4_${uid}`);
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const normalized = normalizeIncomeCategories(parsed);
+          localStorage.setItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`, JSON.stringify(normalized));
+          return normalized;
+        }
+      }
+    }
+    const globalRaw =
+      localStorage.getItem('asset_vault_custom_user_categories_income_v4') ||
+      localStorage.getItem('asset_vault_custom_user_categories_income_v3');
+    if (globalRaw) {
+      const parsed = JSON.parse(globalRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const normalized = normalizeIncomeCategories(parsed);
+        if (uid) {
+          localStorage.setItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`, JSON.stringify(normalized));
+        }
+        return normalized;
+      }
+    }
+    return [...INCOME_CATEGORIES];
+  } catch {
+    return [...INCOME_CATEGORIES];
+  }
+};
+
+/**
+ * 持久化保存收入类别配置到用户统一命名空间
+ */
+export const saveStoredIncomeCategories = (categories: IncomeCategory[], userId?: string): void => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    const serialized = JSON.stringify(categories);
+    if (uid) {
+      localStorage.setItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`, serialized);
+      localStorage.setItem(`asset_vault_custom_user_categories_income_v4_${uid}`, serialized);
+    }
+    localStorage.setItem('asset_vault_custom_user_categories_income_v4', serialized);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('asset_vault_categories_changed', { detail: { type: 'INCOME', userId: uid } })
+      );
+    }
+  } catch (e) {
+    console.warn('Failed to save income categories:', e);
+  }
+};
+
+/**
+ * 获取与用户 ID 绑定的记账类别 / 账户类别 (AccountCategory) 配置
+ */
+export const getStoredAccountCategories = (userId?: string): Record<string, any> | null => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    if (uid) {
+      const unifiedRaw = localStorage.getItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${uid}`);
+      if (unifiedRaw) return JSON.parse(unifiedRaw);
+
+      const legacyUserRaw = localStorage.getItem(`asset_vault_custom_account_categories_${uid}`);
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        localStorage.setItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${uid}`, JSON.stringify(parsed));
+        return parsed;
+      }
+    }
+    const globalRaw = localStorage.getItem('asset_vault_custom_account_categories');
+    if (globalRaw) {
+      const parsed = JSON.parse(globalRaw);
+      if (uid) {
+        localStorage.setItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${uid}`, JSON.stringify(parsed));
+      }
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 持久化保存记账类别 / 账户类别 (AccountCategory) 配置到用户统一命名空间
+ */
+export const saveStoredAccountCategories = (config: Record<string, any>, userId?: string): void => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    const serialized = JSON.stringify(config || {});
+    if (uid) {
+      localStorage.setItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${uid}`, serialized);
+      localStorage.setItem(`asset_vault_custom_account_categories_${uid}`, serialized);
+    }
+    localStorage.setItem('asset_vault_custom_account_categories', serialized);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('asset_vault_categories_changed', { detail: { type: 'ACCOUNT_CATEGORIES', userId: uid } })
+      );
+    }
+  } catch (e) {
+    console.warn('Failed to save account categories config:', e);
+  }
+};
+
+/**
+ * 获取与用户 ID 绑定的自定义标签
+ */
+export const getStoredCustomTags = (userId?: string): string[] => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    if (uid) {
+      const unifiedRaw = localStorage.getItem(`${STORAGE_KEYS.CUSTOM_TAGS_PREFIX}${uid}`);
+      if (unifiedRaw) {
+        const parsed = JSON.parse(unifiedRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return Array.from(new Set([...DEFAULT_PRESET_TAGS, ...parsed]));
+        }
+      }
+      const legacyUserRaw = localStorage.getItem(`asset_vault_custom_user_tags_${uid}`);
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const merged = Array.from(new Set([...DEFAULT_PRESET_TAGS, ...parsed]));
+          localStorage.setItem(`${STORAGE_KEYS.CUSTOM_TAGS_PREFIX}${uid}`, JSON.stringify(merged));
+          return merged;
+        }
+      }
+    }
+    const globalRaw = localStorage.getItem('asset_vault_custom_user_tags');
+    if (globalRaw) {
+      const parsed = JSON.parse(globalRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const merged = Array.from(new Set([...DEFAULT_PRESET_TAGS, ...parsed]));
+        if (uid) {
+          localStorage.setItem(`${STORAGE_KEYS.CUSTOM_TAGS_PREFIX}${uid}`, JSON.stringify(merged));
+        }
+        return merged;
+      }
+    }
+    return [...DEFAULT_PRESET_TAGS];
+  } catch {
+    return [...DEFAULT_PRESET_TAGS];
+  }
+};
+
+/**
+ * 持久化保存自定义标签到用户统一命名空间
+ */
+export const saveStoredCustomTags = (tags: string[], userId?: string): void => {
+  const uid = userId || getCurrentUserId() || '';
+  try {
+    const serialized = JSON.stringify(tags);
+    if (uid) {
+      localStorage.setItem(`${STORAGE_KEYS.CUSTOM_TAGS_PREFIX}${uid}`, serialized);
+      localStorage.setItem(`asset_vault_custom_user_tags_${uid}`, serialized);
+    }
+    localStorage.setItem('asset_vault_custom_user_tags', serialized);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('asset_vault_categories_changed', { detail: { type: 'CUSTOM_TAGS', userId: uid } })
+      );
+    }
+  } catch (e) {
+    console.warn('Failed to save custom tags:', e);
+  }
 };
 
 export const setLocalLastUpdated = (userId: string, timestamp?: string): string => {
@@ -105,6 +406,79 @@ export const getCurrentUser = (): UserProfile | null => {
   return users.find((u) => u.id === uid) || null;
 };
 
+/**
+ * Auto-Discovery Guard:
+ * Scans transactions and automatically adds any missing custom categories to user-stored categories.
+ * This ensures historical transactions or transactions synced from other origins never downgrade to "其他".
+ */
+export const autoDiscoverCategoriesFromTransactions = (transactions: Transaction[], userId: string) => {
+  if (!transactions || !transactions.length || !userId) return;
+  try {
+    const expenseCats = getStoredExpenseCategories(userId);
+    const existingExpenseNames = new Set(expenseCats.map((c) => c.name.trim()));
+    let hasNewExpense = false;
+
+    const incomeCats = getStoredIncomeCategories(userId);
+    const existingIncomeNames = new Set(incomeCats.map((c) => c.name.trim()));
+    let hasNewIncome = false;
+
+    transactions.forEach((tx) => {
+      // 1. Expense categories
+      if (tx.type === 'EXPENSE' || tx.type === 'REFUND') {
+        const catName = tx.category?.trim();
+        if (catName && catName !== '其他' && catName !== '其他杂项' && !existingExpenseNames.has(catName)) {
+          expenseCats.push({
+            id: `custom-exp-discovered-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: catName,
+            icon: catName,
+            color: '#6366f1',
+          });
+          existingExpenseNames.add(catName);
+          hasNewExpense = true;
+        }
+
+        // Split items
+        if (Array.isArray(tx.splitItems)) {
+          tx.splitItems.forEach((sp) => {
+            const spCat = sp.category?.trim();
+            if (spCat && spCat !== '其他' && spCat !== '其他杂项' && !existingExpenseNames.has(spCat)) {
+              expenseCats.push({
+                id: `custom-exp-discovered-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                name: spCat,
+                icon: spCat,
+                color: '#6366f1',
+              });
+              existingExpenseNames.add(spCat);
+              hasNewExpense = true;
+            }
+          });
+        }
+      } else if (tx.type === 'INCOME') {
+        const catName = tx.category?.trim();
+        if (catName && catName !== '其他' && catName !== '其他收入' && !existingIncomeNames.has(catName)) {
+          incomeCats.push({
+            id: `custom-inc-discovered-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: catName,
+            icon: catName,
+            color: '#10b981',
+          });
+          existingIncomeNames.add(catName);
+          hasNewIncome = true;
+        }
+      }
+    });
+
+    if (hasNewExpense) {
+      saveStoredExpenseCategories(expenseCats, userId);
+    }
+    if (hasNewIncome) {
+      saveStoredIncomeCategories(incomeCats, userId);
+    }
+  } catch (err) {
+    console.warn('Auto-discovery categories error:', err);
+  }
+};
+
 // Debounce timer for auto-syncing with server and cloud storage
 let syncTimeout: any = null;
 export const triggerAutoServerSync = (userId: string, immediate = true) => {
@@ -116,6 +490,12 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
     const transactions = getTransactions(userId);
     const projects = getProjects(userId);
     const recurringTasks = getRecurringTasks(userId);
+    const expenseCategories = getStoredExpenseCategories(userId);
+    const incomeCategories = getStoredIncomeCategories(userId);
+    const accountCategories = getStoredAccountCategories(userId);
+    const categoryIconMappings = getCustomCategoryIconMappings(userId);
+    const customTags = getStoredCustomTags(userId);
+    const quickTemplates = getQuickTemplates(userId);
     const user: UserProfile = getCurrentUser() || getStoredUsers().find((u) => u.id === userId) || {
       id: userId,
       username: 'user',
@@ -128,10 +508,24 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
 
     // 1. 同步至 Express / NAS 服务端持久化文件存储 (0ms立即推送到云端)
     try {
-      await syncDataToServer(userId, accounts, transactions, projects, user, recurringTasks);
+      await syncDataToServer(
+        userId,
+        accounts,
+        transactions,
+        projects,
+        user,
+        recurringTasks,
+        expenseCategories,
+        incomeCategories,
+        categoryIconMappings,
+        customTags,
+        quickTemplates,
+        accountCategories
+      );
     } catch (e) {
       console.warn('Server sync attempt:', e);
     }
+
 
     // 2. 如果开启了 Cloudflare 自动同步，静默推送到云端 D1
     try {
@@ -205,9 +599,28 @@ export const executeFullCloudSync = async (
     const transactions = fetchRes.success && fetchRes.transactions ? fetchRes.transactions : getTransactions(userId);
     const projects = fetchRes.success && fetchRes.projects ? fetchRes.projects : getProjects(userId);
     const recurringTasks = fetchRes.success && fetchRes.recurringTasks ? fetchRes.recurringTasks : getRecurringTasks(userId);
+    const expenseCategories = getStoredExpenseCategories(userId);
+    const incomeCategories = getStoredIncomeCategories(userId);
+    const accountCategories = getStoredAccountCategories(userId);
+    const categoryIconMappings = getCustomCategoryIconMappings(userId);
+    const customTags = getStoredCustomTags(userId);
+    const quickTemplates = getQuickTemplates(userId);
 
     // 2. 将合并后的全量数据持久化推送至服务端/NAS
-    const serverRes = await syncDataToServer(userId, accounts, transactions, projects, user, recurringTasks);
+    const serverRes = await syncDataToServer(
+      userId,
+      accounts,
+      transactions,
+      projects,
+      user,
+      recurringTasks,
+      expenseCategories,
+      incomeCategories,
+      categoryIconMappings,
+      customTags,
+      quickTemplates,
+      accountCategories
+    );
 
     const nowIso = new Date().toISOString();
 
@@ -638,11 +1051,40 @@ export const loginUserOnline = async (
     const accounts: FinancialAccount[] = data.accounts || [];
     const transactions: Transaction[] = data.transactions || [];
     const projects: LedgerProject[] = data.projects || [];
+    const recurringTasks: RecurringTask[] = data.recurringTasks || [];
+    const expenseCategories: ExpenseCategory[] = data.expenseCategories || [];
+    const incomeCategories: IncomeCategory[] = data.incomeCategories || [];
+    const accountCategories = data.accountCategories || null;
+    const categoryIconMappings: Record<string, string> = data.categoryIconMappings || {};
+    const customTags: string[] = data.customTags || [];
+    const quickTemplates: QuickTemplate[] = data.quickTemplates || [];
 
     // Cache to localStorage
     localStorage.setItem(`${STORAGE_KEYS.ACCOUNTS_PREFIX}${user.id}`, JSON.stringify(accounts));
     localStorage.setItem(`${STORAGE_KEYS.TRANSACTIONS_PREFIX}${user.id}`, JSON.stringify(transactions));
     localStorage.setItem(`${STORAGE_KEYS.PROJECTS_PREFIX}${user.id}`, JSON.stringify(projects));
+    if (recurringTasks.length > 0) {
+      localStorage.setItem(`${STORAGE_KEYS.RECURRING_TASKS_PREFIX}${user.id}`, JSON.stringify(recurringTasks));
+    }
+    if (expenseCategories.length > 0) {
+      saveStoredExpenseCategories(expenseCategories, user.id);
+    }
+    if (incomeCategories.length > 0) {
+      saveStoredIncomeCategories(incomeCategories, user.id);
+    }
+    if (accountCategories) {
+      saveStoredAccountCategories(accountCategories, user.id);
+    }
+    if (categoryIconMappings && Object.keys(categoryIconMappings).length > 0) {
+      saveAllCustomCategoryIconMappings(categoryIconMappings, user.id);
+    }
+    if (customTags.length > 0) {
+      saveStoredCustomTags(customTags, user.id);
+    }
+    if (quickTemplates.length > 0) {
+      saveQuickTemplates(user.id, quickTemplates);
+    }
+    autoDiscoverCategoriesFromTransactions(transactions, user.id);
     setCurrentUserId(user.id);
 
     return {
@@ -693,7 +1135,13 @@ export const syncDataToServer = async (
   transactions: Transaction[],
   projects: LedgerProject[] = [],
   user?: UserProfile,
-  recurringTasks?: RecurringTask[]
+  recurringTasks?: RecurringTask[],
+  expenseCategories?: ExpenseCategory[],
+  incomeCategories?: IncomeCategory[],
+  categoryIconMappings?: Record<string, string>,
+  customTags?: string[],
+  quickTemplates?: QuickTemplate[],
+  accountCategories?: Record<string, any> | null
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const res = await fetch('/api/sync', {
@@ -707,6 +1155,12 @@ export const syncDataToServer = async (
         transactions,
         projects,
         recurringTasks: Array.isArray(recurringTasks) ? recurringTasks : getRecurringTasks(userId),
+        expenseCategories: Array.isArray(expenseCategories) ? expenseCategories : getStoredExpenseCategories(userId),
+        incomeCategories: Array.isArray(incomeCategories) ? incomeCategories : getStoredIncomeCategories(userId),
+        accountCategories: accountCategories || getStoredAccountCategories(userId),
+        categoryIconMappings: categoryIconMappings || getCustomCategoryIconMappings(userId),
+        customTags: Array.isArray(customTags) ? customTags : getStoredCustomTags(userId),
+        quickTemplates: Array.isArray(quickTemplates) ? quickTemplates : getQuickTemplates(userId),
       }),
     });
     const data = await res.json();
@@ -786,6 +1240,29 @@ export const fetchLatestDataFromServer = async (
         }
       });
       const resolvedRec = mergedRecMap.size > 0 ? Array.from(mergedRecMap.values()) : serverRec;
+
+      // 1. 同步服务端下发的自定义支出/收入分类、分类图标映射、标签、快捷模板、账户类别配置到本地
+      if (Array.isArray(data.expenseCategories) && data.expenseCategories.length > 0) {
+        saveStoredExpenseCategories(data.expenseCategories, userId);
+      }
+      if (Array.isArray(data.incomeCategories) && data.incomeCategories.length > 0) {
+        saveStoredIncomeCategories(data.incomeCategories, userId);
+      }
+      if (data.accountCategories && typeof data.accountCategories === 'object') {
+        saveStoredAccountCategories(data.accountCategories, userId);
+      }
+      if (data.categoryIconMappings && Object.keys(data.categoryIconMappings).length > 0) {
+        saveAllCustomCategoryIconMappings(data.categoryIconMappings, userId);
+      }
+      if (Array.isArray(data.customTags) && data.customTags.length > 0) {
+        saveStoredCustomTags(data.customTags, userId);
+      }
+      if (Array.isArray(data.quickTemplates) && data.quickTemplates.length > 0) {
+        saveQuickTemplates(userId, data.quickTemplates);
+      }
+
+      // 2. 自动探测并补全新旧流水中的所有自定义分类，确保在任何端都不降级为“其他”
+      autoDiscoverCategoriesFromTransactions([...serverTxs, ...localTxs], userId);
 
       // 核心判断逻辑：
       // 1. 如果当前端口/域名的本地缓存为空（例如在 localhost 记账后切换到自定义域名，新源首开），直接拉取服务端的最新全量数据
@@ -1655,4 +2132,15 @@ export const resetToDemoData = (userId: string) => {
   saveProjects(userId, INITIAL_DEMO_PROJECTS);
   saveRecurringTasks(userId, INITIAL_DEMO_RECURRING_TASKS);
 };
+
+// Listen for category/tag changes and trigger immediate auto-sync
+if (typeof window !== 'undefined') {
+  window.addEventListener('asset_vault_categories_changed', (e: any) => {
+    const uid = e?.detail?.userId || getCurrentUserId();
+    if (uid) {
+      triggerAutoServerSync(uid, true);
+    }
+  });
+}
+
 

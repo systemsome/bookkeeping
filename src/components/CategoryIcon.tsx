@@ -231,39 +231,81 @@ export const PRESET_CATEGORY_ICON_MAP: Record<string, string> = {
   '归还借款': 'Receipt',
 };
 
-// 3. User Custom Category Icon Mapping Persistence in localStorage
+// 3. User Custom Category Icon Mapping Persistence in localStorage (Unified User ID Namespace)
 const CUSTOM_CATEGORY_ICON_STORAGE_KEY = 'asset_vault_category_icon_mapping_v2';
+const UNIFIED_CATEGORY_ICON_PREFIX = 'asset_manager_cat_icons_';
 
-export function getCustomCategoryIconMappings(): Record<string, string> {
+export function getCustomCategoryIconMappings(userId?: string): Record<string, string> {
   try {
-    const raw = localStorage.getItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const uid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : '') || '';
+    if (uid) {
+      const unifiedKey = `${UNIFIED_CATEGORY_ICON_PREFIX}${uid}`;
+      const unifiedRaw = localStorage.getItem(unifiedKey);
+      if (unifiedRaw) return JSON.parse(unifiedRaw);
+
+      const legacyUserKey = `${CUSTOM_CATEGORY_ICON_STORAGE_KEY}_${uid}`;
+      const legacyUserRaw = localStorage.getItem(legacyUserKey);
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        localStorage.setItem(unifiedKey, JSON.stringify(parsed));
+        return parsed;
+      }
+    }
+    const globalRaw = localStorage.getItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY);
+    if (globalRaw) {
+      const parsed = JSON.parse(globalRaw);
+      if (uid) {
+        localStorage.setItem(`${UNIFIED_CATEGORY_ICON_PREFIX}${uid}`, JSON.stringify(parsed));
+      }
+      return parsed;
+    }
+    return {};
   } catch {
     return {};
   }
 }
 
-export function setCustomCategoryIcon(categoryName: string, iconId: string): void {
+export function saveAllCustomCategoryIconMappings(mappings: Record<string, string>, userId?: string): void {
+  try {
+    const uid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : '') || '';
+    const serialized = JSON.stringify(mappings || {});
+    if (uid) {
+      localStorage.setItem(`${UNIFIED_CATEGORY_ICON_PREFIX}${uid}`, serialized);
+      localStorage.setItem(`${CUSTOM_CATEGORY_ICON_STORAGE_KEY}_${uid}`, serialized);
+    }
+    localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, serialized);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('asset_vault_categories_changed', { detail: { type: 'CATEGORY_ICONS', userId: uid } })
+      );
+    }
+  } catch (e) {
+    console.warn('Failed to save category icon mappings:', e);
+  }
+}
+
+export function setCustomCategoryIcon(categoryName: string, iconId: string, userId?: string): void {
   if (!categoryName) return;
   try {
-    const current = getCustomCategoryIconMappings();
+    const current = getCustomCategoryIconMappings(userId);
     current[categoryName.trim()] = iconId;
-    localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, JSON.stringify(current));
+    saveAllCustomCategoryIconMappings(current, userId);
   } catch (e) {
     console.warn('Failed to save category icon mapping:', e);
   }
 }
 
-export function removeCustomCategoryIcon(categoryName: string): void {
+export function removeCustomCategoryIcon(categoryName: string, userId?: string): void {
   if (!categoryName) return;
   try {
-    const current = getCustomCategoryIconMappings();
+    const current = getCustomCategoryIconMappings(userId);
     delete current[categoryName.trim()];
-    localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, JSON.stringify(current));
+    saveAllCustomCategoryIconMappings(current, userId);
   } catch (e) {
     console.warn('Failed to remove category icon mapping:', e);
   }
 }
+
 
 // 4. Categorized & Filterable Popular Icons Palette
 export const POPULAR_CATEGORY_ICONS: CategoryIconDef[] = [

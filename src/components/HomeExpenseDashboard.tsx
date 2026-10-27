@@ -18,7 +18,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { Transaction, FinancialAccount, FinancialSummary, UserProfile } from '../types';
-import { EXPENSE_CATEGORIES } from '../lib/constants';
+import { EXPENSE_CATEGORIES, getStoredExpenseCategories } from '../lib/constants';
 import { formatCurrency } from '../lib/formatters';
 import { getCurrencyInfo } from '../lib/forexRates';
 import { CategoryIcon } from './CategoryIcon';
@@ -52,9 +52,25 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   onNavigateToTransactions,
   onOpenRecurringTasks,
 }) => {
+  // Dynamic categories with user-scoping and real-time event updates
+  const [expenseCategories, setExpenseCategories] = useState(() =>
+    getStoredExpenseCategories(currentUser?.id)
+  );
+
+  React.useEffect(() => {
+    setExpenseCategories(getStoredExpenseCategories(currentUser?.id));
+    const handleCategoriesChanged = () => {
+      setExpenseCategories(getStoredExpenseCategories(currentUser?.id));
+    };
+    window.addEventListener('asset_vault_categories_changed', handleCategoriesChanged);
+    return () => window.removeEventListener('asset_vault_categories_changed', handleCategoriesChanged);
+  }, [currentUser?.id]);
+
   // Inline Quick Add State
   const [quickAmount, setQuickAmount] = useState('');
-  const [quickCategory, setQuickCategory] = useState(EXPENSE_CATEGORIES[0]?.name || '餐饮美食');
+  const [quickCategory, setQuickCategory] = useState(
+    () => getStoredExpenseCategories(currentUser?.id)[0]?.name || '餐饮美食'
+  );
   const [quickAccountId, setQuickAccountId] = useState(accounts?.[0]?.id || '');
   const [quickDescription, setQuickDescription] = useState('');
   const [isQuickSuccess, setIsQuickSuccess] = useState(false);
@@ -450,7 +466,7 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
               onChange={(e) => setQuickCategory(e.target.value)}
               className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 focus:bg-white text-slate-800"
             >
-              {EXPENSE_CATEGORIES.map((c) => (
+              {expenseCategories.map((c) => (
                 <option key={c.id} value={c.name}>
                   {c.name}
                 </option>

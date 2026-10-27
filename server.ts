@@ -129,6 +129,12 @@ function loadPersistedStores() {
             transactions: Array.isArray(val?.transactions) ? val.transactions : [],
             projects: Array.isArray(val?.projects) ? val.projects : [],
             recurringTasks: Array.isArray(val?.recurringTasks) ? val.recurringTasks : [],
+            expenseCategories: Array.isArray(val?.expenseCategories) ? val.expenseCategories : undefined,
+            incomeCategories: Array.isArray(val?.incomeCategories) ? val.incomeCategories : undefined,
+            accountCategories: typeof val?.accountCategories === 'object' ? val.accountCategories : undefined,
+            categoryIconMappings: typeof val?.categoryIconMappings === 'object' ? val.categoryIconMappings : undefined,
+            customTags: Array.isArray(val?.customTags) ? val.customTags : undefined,
+            quickTemplates: Array.isArray(val?.quickTemplates) ? val.quickTemplates : undefined,
             lastUpdated: val?.lastUpdated || new Date().toISOString(),
           };
           localSyncStore.set(uid, ledger);
@@ -596,6 +602,13 @@ async function startServer() {
       accounts: syncData.accounts || [],
       transactions: syncData.transactions || [],
       projects: syncData.projects || [],
+      recurringTasks: syncData.recurringTasks || [],
+      expenseCategories: syncData.expenseCategories || [],
+      incomeCategories: syncData.incomeCategories || [],
+      accountCategories: syncData.accountCategories || null,
+      categoryIconMappings: syncData.categoryIconMappings || {},
+      customTags: syncData.customTags || [],
+      quickTemplates: syncData.quickTemplates || [],
       message: '登录成功，已同步云端账本数据',
     });
   });
@@ -738,6 +751,12 @@ async function startServer() {
         transactions: Array.isArray(data.transactions) ? data.transactions : [],
         projects: Array.isArray(data.projects) ? data.projects : [],
         recurringTasks: Array.isArray(data.recurringTasks) ? data.recurringTasks : [],
+        expenseCategories: Array.isArray(data.expenseCategories) ? data.expenseCategories : [],
+        incomeCategories: Array.isArray(data.incomeCategories) ? data.incomeCategories : [],
+        accountCategories: data.accountCategories || null,
+        categoryIconMappings: data.categoryIconMappings || {},
+        customTags: Array.isArray(data.customTags) ? data.customTags : [],
+        quickTemplates: Array.isArray(data.quickTemplates) ? data.quickTemplates : [],
         lastUpdated: data.lastUpdated,
       });
     }
@@ -747,13 +766,33 @@ async function startServer() {
       transactions: [],
       projects: [],
       recurringTasks: [],
+      expenseCategories: [],
+      incomeCategories: [],
+      accountCategories: null,
+      categoryIconMappings: {},
+      customTags: [],
+      quickTemplates: [],
       message: 'No synced data yet',
     });
   });
 
   // Sync Post
   app.post('/api/sync', (req, res) => {
-    const { userId, user, accounts, transactions, projects, recurringTasks, senderDeviceId } = req.body || {};
+    const {
+      userId,
+      user,
+      accounts,
+      transactions,
+      projects,
+      recurringTasks,
+      expenseCategories,
+      incomeCategories,
+      accountCategories,
+      categoryIconMappings,
+      customTags,
+      quickTemplates,
+      senderDeviceId,
+    } = req.body || {};
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
@@ -777,6 +816,24 @@ async function startServer() {
       transactions: Array.isArray(transactions) ? transactions : (existing.transactions || []),
       projects: Array.isArray(projects) ? projects : (existing.projects || []),
       recurringTasks: Array.isArray(recurringTasks) ? recurringTasks : (existing.recurringTasks || []),
+      expenseCategories: Array.isArray(expenseCategories) && expenseCategories.length > 0
+        ? expenseCategories
+        : (existing.expenseCategories || []),
+      incomeCategories: Array.isArray(incomeCategories) && incomeCategories.length > 0
+        ? incomeCategories
+        : (existing.incomeCategories || []),
+      accountCategories: accountCategories && typeof accountCategories === 'object'
+        ? accountCategories
+        : (existing.accountCategories || null),
+      categoryIconMappings: categoryIconMappings && typeof categoryIconMappings === 'object'
+        ? categoryIconMappings
+        : (existing.categoryIconMappings || {}),
+      customTags: Array.isArray(customTags) && customTags.length > 0
+        ? customTags
+        : (existing.customTags || []),
+      quickTemplates: Array.isArray(quickTemplates) && quickTemplates.length > 0
+        ? quickTemplates
+        : (existing.quickTemplates || []),
       lastUpdated: nowIso,
     };
 
@@ -801,6 +858,8 @@ async function startServer() {
       accounts: payload.accounts,
       transactions: payload.transactions,
       projects: payload.projects,
+      expenseCategories: payload.expenseCategories,
+      incomeCategories: payload.incomeCategories,
       updatedAt: nowIso,
     });
   });

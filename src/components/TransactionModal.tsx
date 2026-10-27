@@ -31,7 +31,7 @@ import {
   BookmarkPlus,
 } from 'lucide-react';
 import { FinancialAccount, TransactionType, Transaction, ExpenseCategory, IncomeCategory, LedgerProject, SplitItem, QuickTemplate } from '../types';
-import { getQuickTemplates, saveQuickTemplates } from '../lib/storage';
+import { getQuickTemplates, saveQuickTemplates, getCurrentUserId } from '../lib/storage';
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
@@ -39,6 +39,8 @@ import {
   saveStoredExpenseCategories,
   getStoredIncomeCategories,
   saveStoredIncomeCategories,
+  getStoredCustomTags,
+  saveStoredCustomTags,
 } from '../lib/constants';
 import {
   SUPPORTED_CURRENCIES,
@@ -178,28 +180,32 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       (accounts.length > 1 ? accounts[1].id : '')
   );
 
+  const currentUserId = getCurrentUserId() || undefined;
+
   // Fully Customizable Categories State
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() =>
-    getStoredExpenseCategories()
+    getStoredExpenseCategories(currentUserId)
   );
   const [incomeCategories, setIncomeCategories] = useState<IncomeCategory[]>(() =>
-    getStoredIncomeCategories()
+    getStoredIncomeCategories(currentUserId)
   );
   const [isManagingCategories, setIsManagingCategories] = useState<boolean>(false);
 
   // Custom Tags State
-  const [availableTags, setAvailableTags] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(CUSTOM_TAGS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return Array.from(new Set([...DEFAULT_PRESET_TAGS, ...parsed]));
-      }
-    } catch {
-      // fallback
-    }
-    return DEFAULT_PRESET_TAGS;
-  });
+  const [availableTags, setAvailableTags] = useState<string[]>(() =>
+    getStoredCustomTags(currentUserId)
+  );
+
+  // Real-time synchronization of categories and tags when changed elsewhere or synced from cloud
+  useEffect(() => {
+    const handleCatsChanged = () => {
+      setExpenseCategories(getStoredExpenseCategories(currentUserId));
+      setIncomeCategories(getStoredIncomeCategories(currentUserId));
+      setAvailableTags(getStoredCustomTags(currentUserId));
+    };
+    window.addEventListener('asset_vault_categories_changed', handleCatsChanged);
+    return () => window.removeEventListener('asset_vault_categories_changed', handleCatsChanged);
+  }, [currentUserId]);
 
   // Selected Category & Tag
   const [category, setCategory] = useState<string>(
@@ -227,7 +233,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [newTagName, setNewTagName] = useState<string>('');
 
   // ⚡ 快捷模板与预设 (Quick Presets)
-  const [quickTemplates, setQuickTemplates] = useState<QuickTemplate[]>(() => getQuickTemplates('default'));
+  const [quickTemplates, setQuickTemplates] = useState<QuickTemplate[]>(() =>
+    getQuickTemplates(currentUserId || 'default')
+  );
   const [templateToast, setTemplateToast] = useState<string | null>(null);
 
   // 💼 垫付待报销 (Reimbursement Tracking)
@@ -407,8 +415,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     if (!trimmed) return;
 
     const chosenIconId = predictedIcon || 'Folder';
-    // Persist exact icon selection to global category icon mapper
-    setCustomCategoryIcon(trimmed, chosenIconId);
+    // Persist exact icon selection to global and user category icon mapper
+    setCustomCategoryIcon(trimmed, chosenIconId, currentUserId);
 
     if (type === 'EXPENSE') {
       const exists = expenseCategories.some((c) => c.name === trimmed);
@@ -427,7 +435,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         updated = [...expenseCategories, newCat];
       }
       setExpenseCategories(updated);
-      saveStoredExpenseCategories(updated);
+      saveStoredExpenseCategories(updated, currentUserId);
     } else if (type === 'INCOME') {
       const exists = incomeCategories.some((c) => c.name === trimmed);
       let updated: IncomeCategory[];
@@ -445,7 +453,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         updated = [...incomeCategories, newCat];
       }
       setIncomeCategories(updated);
-      saveStoredIncomeCategories(updated);
+      saveStoredIncomeCategories(updated, currentUserId);
     }
 
     setCategory(trimmed);
@@ -469,8 +477,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
       const updated = expenseCategories.filter((c) => c.name !== catNameToDelete);
       setExpenseCategories(updated);
-      saveStoredExpenseCategories(updated);
-      removeCustomCategoryIcon(catNameToDelete);
+      saveStoredExpenseCategories(updated, currentUserId);
+      removeCustomCategoryIcon(catNameToDelete, currentUserId);
       if (category === catNameToDelete) {
         setCategory(updated[0]?.name || '餐饮美食');
       }
@@ -481,8 +489,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
       const updated = incomeCategories.filter((c) => c.name !== catNameToDelete);
       setIncomeCategories(updated);
-      saveStoredIncomeCategories(updated);
-      removeCustomCategoryIcon(catNameToDelete);
+      saveStoredIncomeCategories(updated, currentUserId);
+      removeCustomCategoryIcon(catNameToDelete, currentUserId);
       if (category === catNameToDelete) {
         setCategory(updated[0]?.name || '工资薪酬');
       }
@@ -493,11 +501,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const handleResetCategoriesToDefault = (targetType: 'EXPENSE' | 'INCOME') => {
     if (targetType === 'EXPENSE') {
       setExpenseCategories([...EXPENSE_CATEGORIES]);
-      saveStoredExpenseCategories([...EXPENSE_CATEGORIES]);
+      saveStoredExpenseCategories([...EXPENSE_CATEGORIES], currentUserId);
       setCategory(EXPENSE_CATEGORIES[0].name);
     } else {
       setIncomeCategories([...INCOME_CATEGORIES]);
-      saveStoredIncomeCategories([...INCOME_CATEGORIES]);
+      saveStoredIncomeCategories([...INCOME_CATEGORIES], currentUserId);
       setCategory(INCOME_CATEGORIES[0].name);
     }
     setIsManagingCategories(false);
@@ -510,7 +518,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
     const next = Array.from(new Set([...availableTags, trimmed]));
     setAvailableTags(next);
-    localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(next));
+    saveStoredCustomTags(next, currentUserId);
     setTag(trimmed);
     setNewTagName('');
     setIsAddingCustomTag(false);
@@ -521,7 +529,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     e.stopPropagation();
     const next = availableTags.filter((t) => t !== tagToDelete);
     setAvailableTags(next);
-    localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(next));
+    saveStoredCustomTags(next, currentUserId);
     if (tag === tagToDelete) {
       setTag(DEFAULT_PRESET_TAGS[0] || '日常必要');
     }
@@ -604,7 +612,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     };
     const updated = [newTpl, ...quickTemplates];
     setQuickTemplates(updated);
-    saveQuickTemplates('default', updated);
+    saveQuickTemplates(currentUserId || 'default', updated);
     setTemplateToast(`✨ 已成功存为快捷模板「${tplName}」`);
     setTimeout(() => setTemplateToast(null), 3000);
   };
@@ -613,7 +621,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     e.stopPropagation();
     const updated = quickTemplates.filter((t) => t.id !== tplId);
     setQuickTemplates(updated);
-    saveQuickTemplates('default', updated);
+    saveQuickTemplates(currentUserId || 'default', updated);
   };
 
   const toggleSplitMode = () => {
