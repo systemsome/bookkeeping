@@ -161,21 +161,91 @@ export const INCOME_CATEGORIES: IncomeCategory[] = [
 
 export const STORAGE_KEY_USER_EXPENSE_CATS = 'asset_vault_custom_user_categories_expense_v4';
 export const STORAGE_KEY_USER_INCOME_CATS = 'asset_vault_custom_user_categories_income_v4';
-export const CUSTOM_TAGS_STORAGE_KEY = 'asset_vault_custom_user_tags';
-export const DEFAULT_PRESET_TAGS = ['日常必要', '改善娱乐', '境外海淘', '旅游出行', '固定支出', '家庭公共', '投资学习'];
 
-// Re-export unified user-scoped storage persistence functions from storage.ts
-export {
-  STORAGE_KEYS,
-  getStoredExpenseCategories,
-  saveStoredExpenseCategories,
-  getStoredIncomeCategories,
-  saveStoredIncomeCategories,
-  getStoredAccountCategories,
-  saveStoredAccountCategories,
-  getStoredCustomTags,
-  saveStoredCustomTags,
-} from './storage';
+export function getStoredExpenseCategories(userId?: string): ExpenseCategory[] {
+  try {
+    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
+    const userSpecific = typeof localStorage !== 'undefined' ? localStorage.getItem(`asset_manager_exp_cats_${rawUid}`) : null;
+    if (userSpecific) {
+      const parsed = JSON.parse(userSpecific);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    const raw = typeof localStorage !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_USER_EXPENSE_CATS) || localStorage.getItem('asset_vault_custom_user_categories_expense_v3')) : null;
+    if (!raw) return [...EXPENSE_CATEGORIES];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      if (typeof parsed[0] === 'string') {
+        return parsed.map((name: string, i: number) => ({
+          id: `custom-exp-${i}-${name}`,
+          name: name === '数码数码' ? '数码科技' : name,
+          icon: name === '数码数码' ? 'Laptop' : name,
+          color: '#f43f5e',
+        }));
+      }
+      return parsed.map((cat: ExpenseCategory) => {
+        if (cat.name === '数码数码') {
+          return { ...cat, name: '数码科技', icon: 'Laptop' };
+        }
+        return cat;
+      });
+    }
+    return [...EXPENSE_CATEGORIES];
+  } catch {
+    return [...EXPENSE_CATEGORIES];
+  }
+}
+
+export function saveStoredExpenseCategories(categories: ExpenseCategory[], userId?: string): void {
+  try {
+    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(`asset_manager_exp_cats_${rawUid}`, JSON.stringify(categories));
+      localStorage.setItem(STORAGE_KEY_USER_EXPENSE_CATS, JSON.stringify(categories));
+    }
+  } catch (e) {
+    console.warn('Failed to save expense categories:', e);
+  }
+}
+
+export function getStoredIncomeCategories(userId?: string): IncomeCategory[] {
+  try {
+    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
+    const userSpecific = typeof localStorage !== 'undefined' ? localStorage.getItem(`asset_manager_inc_cats_${rawUid}`) : null;
+    if (userSpecific) {
+      const parsed = JSON.parse(userSpecific);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    const raw = typeof localStorage !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_USER_INCOME_CATS) || localStorage.getItem('asset_vault_custom_user_categories_income_v3')) : null;
+    if (!raw) return [...INCOME_CATEGORIES];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      if (typeof parsed[0] === 'string') {
+        return parsed.map((name: string, i: number) => ({
+          id: `custom-inc-${i}-${name}`,
+          name,
+          icon: name,
+          color: '#10b981',
+        }));
+      }
+      return parsed;
+    }
+    return [...INCOME_CATEGORIES];
+  } catch {
+    return [...INCOME_CATEGORIES];
+  }
+}
+
+export function saveStoredIncomeCategories(categories: IncomeCategory[], userId?: string): void {
+  try {
+    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(`asset_manager_inc_cats_${rawUid}`, JSON.stringify(categories));
+      localStorage.setItem(STORAGE_KEY_USER_INCOME_CATS, JSON.stringify(categories));
+    }
+  } catch (e) {
+    console.warn('Failed to save income categories:', e);
+  }
+}
 
 export const INITIAL_DEMO_ACCOUNTS: FinancialAccount[] = [
   {

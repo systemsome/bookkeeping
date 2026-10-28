@@ -1,4 +1,4 @@
-import { UserProfile, FinancialAccount, Transaction, LedgerProject, WebDavConfig, BackupPackage, TransactionType } from '../types';
+import { UserProfile, FinancialAccount, Transaction, LedgerProject, RecurringTask, ExpenseCategory, IncomeCategory, WebDavConfig, BackupPackage, TransactionType } from '../types';
 
 export const APP_BACKUP_VERSION = '1.0.0';
 
@@ -10,7 +10,11 @@ export const exportDataToJsonFile = (
   accounts: FinancialAccount[],
   transactions: Transaction[],
   projects: LedgerProject[] = [],
-  webDavConfig?: WebDavConfig
+  webDavConfig?: WebDavConfig,
+  recurringTasks?: RecurringTask[],
+  expenseCategories?: ExpenseCategory[],
+  incomeCategories?: IncomeCategory[],
+  categoryIcons?: Record<string, string>
 ): void => {
   const backup: BackupPackage = {
     version: APP_BACKUP_VERSION,
@@ -20,6 +24,10 @@ export const exportDataToJsonFile = (
     accounts: accounts || [],
     transactions: transactions || [],
     projects: projects || [],
+    recurringTasks: recurringTasks || [],
+    expenseCategories: expenseCategories || [],
+    incomeCategories: incomeCategories || [],
+    categoryIcons: categoryIcons || {},
     webDavConfig: webDavConfig
       ? {
           enabled: webDavConfig.enabled,

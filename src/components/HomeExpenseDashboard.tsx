@@ -18,7 +18,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { Transaction, FinancialAccount, FinancialSummary, UserProfile } from '../types';
-import { EXPENSE_CATEGORIES, getStoredExpenseCategories } from '../lib/constants';
+import { getStoredExpenseCategories } from '../lib/storage';
 import { formatCurrency } from '../lib/formatters';
 import { getCurrencyInfo } from '../lib/forexRates';
 import { CategoryIcon } from './CategoryIcon';
@@ -52,25 +52,11 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   onNavigateToTransactions,
   onOpenRecurringTasks,
 }) => {
-  // Dynamic categories with user-scoping and real-time event updates
-  const [expenseCategories, setExpenseCategories] = useState(() =>
-    getStoredExpenseCategories(currentUser?.id)
-  );
-
-  React.useEffect(() => {
-    setExpenseCategories(getStoredExpenseCategories(currentUser?.id));
-    const handleCategoriesChanged = () => {
-      setExpenseCategories(getStoredExpenseCategories(currentUser?.id));
-    };
-    window.addEventListener('asset_vault_categories_changed', handleCategoriesChanged);
-    return () => window.removeEventListener('asset_vault_categories_changed', handleCategoriesChanged);
-  }, [currentUser?.id]);
+  const expenseCategories = React.useMemo(() => getStoredExpenseCategories(currentUser?.id), [currentUser?.id]);
 
   // Inline Quick Add State
   const [quickAmount, setQuickAmount] = useState('');
-  const [quickCategory, setQuickCategory] = useState(
-    () => getStoredExpenseCategories(currentUser?.id)[0]?.name || '餐饮美食'
-  );
+  const [quickCategory, setQuickCategory] = useState(expenseCategories[0]?.name || '餐饮美食');
   const [quickAccountId, setQuickAccountId] = useState(accounts?.[0]?.id || '');
   const [quickDescription, setQuickDescription] = useState('');
   const [isQuickSuccess, setIsQuickSuccess] = useState(false);

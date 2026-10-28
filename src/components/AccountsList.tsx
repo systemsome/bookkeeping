@@ -34,18 +34,16 @@ import {
   ChevronsUpDown,
   MoreHorizontal,
   RefreshCw,
-  Palette,
   Pin,
 } from 'lucide-react';
 import { FinancialAccount, AccountCategory, AssetGroup, LedgerProject, UserProfile } from '../types';
 import { ACCOUNT_CATEGORY_CONFIG } from '../lib/constants';
 import { AccountCardFace } from './AccountCardFace';
 import { formatCurrency } from '../lib/formatters';
-import { getRandomCardBackground } from '../lib/brandHelper';
-import { matchBestCardentifyPreset, matchBestCardentifyCard, getTotalGalleryCardsCount } from '../lib/cardentifyPresets';
+import { matchBestCardentifyPreset, matchBestCardentifyCard } from '../lib/cardentifyPresets';
 import { CardentifyGalleryModal } from './CardentifyGalleryModal';
-import { syncDualLibrariesOnline, fetchDualGalleryStats } from '../lib/gallerySync';
 import { fetchLiveGoldRate, getCachedGoldRate, GoldMarketRate } from '../lib/goldRates';
+import { getRandomCardBackground } from '../lib/brandHelper';
 
 interface AccountsListProps {
   accounts: FinancialAccount[];
@@ -170,7 +168,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   // Collapsed Category Sections State (默认全部展开展示卡面，支持用户手动折叠/展开)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [cardentifyGalleryAccount, setCardentifyGalleryAccount] = useState<FinancialAccount | null>(null);
-  const [isGalleryOpenGeneral, setIsGalleryOpenGeneral] = useState<boolean>(false);
   const [deletingTableAccountId, setDeletingTableAccountId] = useState<string | null>(null);
 
   // 清除自定义卡面图片，恢复默认官方设计
@@ -178,50 +175,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
     onDirectUpdateAccount(accountId, { cardImageUrl: '', cardPresetId: undefined });
     showToast('✨ 已清除该卡片套用的艺术卡面，恢复为官方默认质感底色');
   };
-
-  // 双库卡面总数实时与后台数据源双向同步
-  const [totalGalleryCards, setTotalGalleryCards] = useState<number>(5069);
-
-  useEffect(() => {
-    const handleGalleryUpdate = (e?: any) => {
-      if (e?.detail?.total) {
-        setTotalGalleryCards(e.detail.total);
-      } else {
-        fetchDualGalleryStats()
-          .then((stats) => {
-            if (stats.totalCount) setTotalGalleryCards(stats.totalCount);
-          })
-          .catch(() => {});
-      }
-    };
-    window.addEventListener('gallery-updated', handleGalleryUpdate);
-    window.addEventListener('cardart-updated', handleGalleryUpdate);
-    window.addEventListener('cardentify-updated', handleGalleryUpdate);
-
-    fetchDualGalleryStats()
-      .then((stats) => {
-        if (stats.totalCount) setTotalGalleryCards(stats.totalCount);
-      })
-      .catch(() => {});
-
-    // Initial background sync check
-    syncDualLibrariesOnline(false).catch(() => {});
-
-    return () => {
-      window.removeEventListener('gallery-updated', handleGalleryUpdate);
-      window.removeEventListener('cardart-updated', handleGalleryUpdate);
-      window.removeEventListener('cardentify-updated', handleGalleryUpdate);
-    };
-  }, []);
-
-  // Update whenever general gallery modal opens/closes
-  useEffect(() => {
-    fetchDualGalleryStats()
-      .then((stats) => {
-        if (stats.totalCount) setTotalGalleryCards(stats.totalCount);
-      })
-      .catch(() => {});
-  }, [isGalleryOpenGeneral]);
 
 
 
@@ -674,22 +627,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               </span>
             </button>
 
-            {/* 6. CardArt 卡面艺廊 (纯图标展示，与导航栏右侧图标风格统一，鼠标悬停显示文字) */}
-            <button
-              id="btn-open-cardart-gallery"
-              type="button"
-              onClick={() => setIsGalleryOpenGeneral(true)}
-              className="relative p-2 rounded-xl bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center active:scale-95 group"
-              title={`CardArt 卡面艺廊 (${totalGalleryCards.toLocaleString()} 款)`}
-              aria-label="CardArt 卡面艺廊"
-            >
-              <Palette className="w-4 h-4 text-rose-500 transition-transform group-hover:scale-110" />
-              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 shadow-md border border-slate-700/50">
-                CardArt 卡面艺廊 ({totalGalleryCards.toLocaleString()}款)
-              </span>
-            </button>
-
-            {/* 6. Primary Add Account Button */}
+            {/* Primary Add Account Button */}
             <button
               id="btn-add-account-main"
               onClick={() => onAddAccount('DEBIT_CARD')}
@@ -1574,38 +1512,6 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             });
             showToast(`🎨 已为「${cardentifyGalleryAccount.name}」套用「${card.name}」高清卡面`);
             setCardentifyGalleryAccount(null);
-          }}
-        />
-      )}
-
-      {/* CardArt & Cardentify Card Face Gallery Modal for general browsing or quick account creation */}
-      {isGalleryOpenGeneral && (
-        <CardentifyGalleryModal
-          isOpen={isGalleryOpenGeneral}
-          onClose={() => setIsGalleryOpenGeneral(false)}
-          defaultBankQuery=""
-          onSelectCard={(card) => {
-            const isCredit = card.type === 'Credit';
-            let net: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' = 'UNIONPAY';
-            const brandUp = (card.brand || '').toUpperCase();
-            if (brandUp.includes('VISA')) net = 'VISA';
-            else if (brandUp.includes('MASTER')) net = 'MASTERCARD';
-            else if (brandUp.includes('AMEX')) net = 'AMEX';
-            else if (brandUp.includes('JCB')) net = 'JCB';
-            const presetId = String(card.id).startsWith('card') ? String(card.id) : `cardentify-${card.id}`;
-
-            onAddAccount(isCredit ? 'CREDIT_CARD' : 'DEBIT_CARD', {
-              name: card.name,
-              bankName: card.issuerName,
-              cardImageUrl: card.imageUrl,
-              cardPresetId: presetId,
-              cardNetwork: net,
-              cardTier: card.name.includes('白金') ? '白金卡' : card.name.includes('金卡') ? '金卡' : '标准卡',
-              category: isCredit ? 'CREDIT_CARD' : 'DEBIT_CARD',
-              color: card.dominantColor || '#2563eb',
-            } as any);
-            showToast(`🎨 已选择「${card.name}」卡面，请补充额度与余额后保存`);
-            setIsGalleryOpenGeneral(false);
           }}
         />
       )}
