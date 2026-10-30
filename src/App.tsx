@@ -1395,7 +1395,6 @@ export default function App() {
         <TransactionModal
           accounts={accounts || []}
           projects={projects || []}
-          currentUser={currentUser}
           initialType={txModalDefaultType}
           initialAccountId={txModalAccountId}
           initialProjectId={txModalProjectId}

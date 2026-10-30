@@ -231,53 +231,35 @@ export const PRESET_CATEGORY_ICON_MAP: Record<string, string> = {
   '归还借款': 'Receipt',
 };
 
-// 3. User Custom Category Icon Mapping Persistence in localStorage (User-Scoped)
+// 3. User Custom Category Icon Mapping Persistence in localStorage
 const CUSTOM_CATEGORY_ICON_STORAGE_KEY = 'asset_vault_category_icon_mapping_v2';
 
-export function getCustomCategoryIconMappings(userId?: string): Record<string, string> {
+export function getCustomCategoryIconMappings(): Record<string, string> {
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    if (typeof localStorage !== 'undefined') {
-      const userSpecific = localStorage.getItem(`asset_manager_cat_icons_${rawUid}`);
-      if (userSpecific) return JSON.parse(userSpecific);
-      const raw = localStorage.getItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        localStorage.setItem(`asset_manager_cat_icons_${rawUid}`, raw);
-        return parsed;
-      }
-    }
+    const raw = localStorage.getItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
-  return {};
 }
 
-export function setCustomCategoryIcon(categoryName: string, iconId: string, userId?: string): void {
+export function setCustomCategoryIcon(categoryName: string, iconId: string): void {
   if (!categoryName) return;
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    const current = getCustomCategoryIconMappings(rawUid);
+    const current = getCustomCategoryIconMappings();
     current[categoryName.trim()] = iconId;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(`asset_manager_cat_icons_${rawUid}`, JSON.stringify(current));
-      localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, JSON.stringify(current));
-    }
+    localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, JSON.stringify(current));
   } catch (e) {
     console.warn('Failed to save category icon mapping:', e);
   }
 }
 
-export function removeCustomCategoryIcon(categoryName: string, userId?: string): void {
+export function removeCustomCategoryIcon(categoryName: string): void {
   if (!categoryName) return;
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    const current = getCustomCategoryIconMappings(rawUid);
+    const current = getCustomCategoryIconMappings();
     delete current[categoryName.trim()];
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(`asset_manager_cat_icons_${rawUid}`, JSON.stringify(current));
-      localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, JSON.stringify(current));
-    }
+    localStorage.setItem(CUSTOM_CATEGORY_ICON_STORAGE_KEY, JSON.stringify(current));
   } catch (e) {
     console.warn('Failed to remove category icon mapping:', e);
   }

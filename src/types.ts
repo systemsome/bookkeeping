@@ -237,10 +237,6 @@ export interface BackupPackage {
   transactions: Transaction[];
   projects?: LedgerProject[];
   recurringTasks?: RecurringTask[];
-  expenseCategories?: ExpenseCategory[];
-  incomeCategories?: IncomeCategory[];
-  categoryIcons?: Record<string, string>;
-  accountCategories?: Record<AccountCategory, any>;
   webDavConfig?: Partial<WebDavConfig>;
 }
 

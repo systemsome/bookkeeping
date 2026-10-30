@@ -162,15 +162,9 @@ export const INCOME_CATEGORIES: IncomeCategory[] = [
 export const STORAGE_KEY_USER_EXPENSE_CATS = 'asset_vault_custom_user_categories_expense_v4';
 export const STORAGE_KEY_USER_INCOME_CATS = 'asset_vault_custom_user_categories_income_v4';
 
-export function getStoredExpenseCategories(userId?: string): ExpenseCategory[] {
+export function getStoredExpenseCategories(): ExpenseCategory[] {
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    const userSpecific = typeof localStorage !== 'undefined' ? localStorage.getItem(`asset_manager_exp_cats_${rawUid}`) : null;
-    if (userSpecific) {
-      const parsed = JSON.parse(userSpecific);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-    const raw = typeof localStorage !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_USER_EXPENSE_CATS) || localStorage.getItem('asset_vault_custom_user_categories_expense_v3')) : null;
+    const raw = localStorage.getItem(STORAGE_KEY_USER_EXPENSE_CATS) || localStorage.getItem('asset_vault_custom_user_categories_expense_v3');
     if (!raw) return [...EXPENSE_CATEGORIES];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
@@ -195,27 +189,17 @@ export function getStoredExpenseCategories(userId?: string): ExpenseCategory[] {
   }
 }
 
-export function saveStoredExpenseCategories(categories: ExpenseCategory[], userId?: string): void {
+export function saveStoredExpenseCategories(categories: ExpenseCategory[]): void {
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(`asset_manager_exp_cats_${rawUid}`, JSON.stringify(categories));
-      localStorage.setItem(STORAGE_KEY_USER_EXPENSE_CATS, JSON.stringify(categories));
-    }
+    localStorage.setItem(STORAGE_KEY_USER_EXPENSE_CATS, JSON.stringify(categories));
   } catch (e) {
     console.warn('Failed to save expense categories:', e);
   }
 }
 
-export function getStoredIncomeCategories(userId?: string): IncomeCategory[] {
+export function getStoredIncomeCategories(): IncomeCategory[] {
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    const userSpecific = typeof localStorage !== 'undefined' ? localStorage.getItem(`asset_manager_inc_cats_${rawUid}`) : null;
-    if (userSpecific) {
-      const parsed = JSON.parse(userSpecific);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-    const raw = typeof localStorage !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_USER_INCOME_CATS) || localStorage.getItem('asset_vault_custom_user_categories_income_v3')) : null;
+    const raw = localStorage.getItem(STORAGE_KEY_USER_INCOME_CATS) || localStorage.getItem('asset_vault_custom_user_categories_income_v3');
     if (!raw) return [...INCOME_CATEGORIES];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
@@ -235,13 +219,9 @@ export function getStoredIncomeCategories(userId?: string): IncomeCategory[] {
   }
 }
 
-export function saveStoredIncomeCategories(categories: IncomeCategory[], userId?: string): void {
+export function saveStoredIncomeCategories(categories: IncomeCategory[]): void {
   try {
-    const rawUid = userId || (typeof localStorage !== 'undefined' ? localStorage.getItem('asset_manager_curr_uid_v1') : null) || 'demo-user-888';
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(`asset_manager_inc_cats_${rawUid}`, JSON.stringify(categories));
-      localStorage.setItem(STORAGE_KEY_USER_INCOME_CATS, JSON.stringify(categories));
-    }
+    localStorage.setItem(STORAGE_KEY_USER_INCOME_CATS, JSON.stringify(categories));
   } catch (e) {
     console.warn('Failed to save income categories:', e);
   }

@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './src/lib/constants';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS } from './src/lib/constants';
 import { expandSearchTerms } from './src/lib/brandHelper';
 
 // Data directory for persistent storage (especially in Docker / NAS mounts)
@@ -129,10 +129,6 @@ function loadPersistedStores() {
             transactions: Array.isArray(val?.transactions) ? val.transactions : [],
             projects: Array.isArray(val?.projects) ? val.projects : [],
             recurringTasks: Array.isArray(val?.recurringTasks) ? val.recurringTasks : [],
-            expenseCategories: Array.isArray(val?.expenseCategories) ? val.expenseCategories : undefined,
-            incomeCategories: Array.isArray(val?.incomeCategories) ? val.incomeCategories : undefined,
-            categoryIcons: val?.categoryIcons || undefined,
-            accountCategories: val?.accountCategories || undefined,
             lastUpdated: val?.lastUpdated || new Date().toISOString(),
           };
           localSyncStore.set(uid, ledger);
@@ -157,9 +153,6 @@ function loadPersistedStores() {
         transactions: INITIAL_DEMO_TRANSACTIONS,
         projects: INITIAL_DEMO_PROJECTS,
         recurringTasks: INITIAL_DEMO_RECURRING_TASKS,
-        expenseCategories: EXPENSE_CATEGORIES,
-        incomeCategories: INCOME_CATEGORIES,
-        categoryIcons: {},
         lastUpdated: new Date().toISOString(),
       };
       localSyncStore.set('demo-user-888', defaultLedger);
@@ -522,9 +515,6 @@ async function startServer() {
       accounts: initialAccounts,
       transactions: initialTransactions,
       projects: initialProjects,
-      expenseCategories: EXPENSE_CATEGORIES,
-      incomeCategories: INCOME_CATEGORIES,
-      categoryIcons: {},
       lastUpdated: new Date().toISOString(),
     };
 
@@ -539,9 +529,6 @@ async function startServer() {
       accounts: initialAccounts,
       transactions: initialTransactions,
       projects: initialProjects,
-      expenseCategories: EXPENSE_CATEGORIES,
-      incomeCategories: INCOME_CATEGORIES,
-      categoryIcons: {},
       message: initialAccounts.length > 0
         ? `注册成功，已同步保留现有 ${initialAccounts.length} 个账户数据`
         : '注册成功并已安全持久化到服务端',
@@ -591,9 +578,6 @@ async function startServer() {
         accounts: INITIAL_DEMO_ACCOUNTS,
         transactions: INITIAL_DEMO_TRANSACTIONS,
         projects: INITIAL_DEMO_PROJECTS,
-        expenseCategories: EXPENSE_CATEGORIES,
-        incomeCategories: INCOME_CATEGORIES,
-        categoryIcons: {},
         lastUpdated: new Date().toISOString(),
       };
       localSyncStore.set(user.id, syncData);
@@ -601,15 +585,7 @@ async function startServer() {
     }
 
     if (!syncData) {
-      syncData = {
-        user,
-        accounts: [],
-        transactions: [],
-        projects: [],
-        expenseCategories: EXPENSE_CATEGORIES,
-        incomeCategories: INCOME_CATEGORIES,
-        categoryIcons: {},
-      };
+      syncData = { user, accounts: [], transactions: [], projects: [] };
     }
 
     savePersistedStores();
@@ -620,11 +596,6 @@ async function startServer() {
       accounts: syncData.accounts || [],
       transactions: syncData.transactions || [],
       projects: syncData.projects || [],
-      recurringTasks: syncData.recurringTasks || [],
-      expenseCategories: syncData.expenseCategories || EXPENSE_CATEGORIES,
-      incomeCategories: syncData.incomeCategories || INCOME_CATEGORIES,
-      categoryIcons: syncData.categoryIcons || {},
-      accountCategories: syncData.accountCategories || null,
       message: '登录成功，已同步云端账本数据',
     });
   });
@@ -767,10 +738,6 @@ async function startServer() {
         transactions: Array.isArray(data.transactions) ? data.transactions : [],
         projects: Array.isArray(data.projects) ? data.projects : [],
         recurringTasks: Array.isArray(data.recurringTasks) ? data.recurringTasks : [],
-        expenseCategories: Array.isArray(data.expenseCategories) ? data.expenseCategories : (data.user?.id === 'demo-user-888' ? EXPENSE_CATEGORIES : []),
-        incomeCategories: Array.isArray(data.incomeCategories) ? data.incomeCategories : (data.user?.id === 'demo-user-888' ? INCOME_CATEGORIES : []),
-        categoryIcons: data.categoryIcons || {},
-        accountCategories: data.accountCategories || null,
         lastUpdated: data.lastUpdated,
       });
     }
@@ -780,29 +747,13 @@ async function startServer() {
       transactions: [],
       projects: [],
       recurringTasks: [],
-      expenseCategories: [],
-      incomeCategories: [],
-      categoryIcons: {},
-      accountCategories: null,
       message: 'No synced data yet',
     });
   });
 
   // Sync Post
   app.post('/api/sync', (req, res) => {
-    const {
-      userId,
-      user,
-      accounts,
-      transactions,
-      projects,
-      recurringTasks,
-      expenseCategories,
-      incomeCategories,
-      categoryIcons,
-      accountCategories,
-      senderDeviceId,
-    } = req.body || {};
+    const { userId, user, accounts, transactions, projects, recurringTasks, senderDeviceId } = req.body || {};
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
@@ -826,10 +777,6 @@ async function startServer() {
       transactions: Array.isArray(transactions) ? transactions : (existing.transactions || []),
       projects: Array.isArray(projects) ? projects : (existing.projects || []),
       recurringTasks: Array.isArray(recurringTasks) ? recurringTasks : (existing.recurringTasks || []),
-      expenseCategories: Array.isArray(expenseCategories) ? expenseCategories : (existing.expenseCategories || []),
-      incomeCategories: Array.isArray(incomeCategories) ? incomeCategories : (existing.incomeCategories || []),
-      categoryIcons: categoryIcons || existing.categoryIcons || {},
-      accountCategories: accountCategories || existing.accountCategories || null,
       lastUpdated: nowIso,
     };
 
@@ -854,11 +801,6 @@ async function startServer() {
       accounts: payload.accounts,
       transactions: payload.transactions,
       projects: payload.projects,
-      recurringTasks: payload.recurringTasks,
-      expenseCategories: payload.expenseCategories,
-      incomeCategories: payload.incomeCategories,
-      categoryIcons: payload.categoryIcons,
-      accountCategories: payload.accountCategories,
       updatedAt: nowIso,
     });
   });

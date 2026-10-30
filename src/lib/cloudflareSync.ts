@@ -1,4 +1,4 @@
-import { CloudflareSyncConfig, UserProfile, FinancialAccount, Transaction, LedgerProject, RecurringTask, ExpenseCategory, IncomeCategory, BackupPackage } from '../types';
+import { CloudflareSyncConfig, UserProfile, FinancialAccount, Transaction, LedgerProject, BackupPackage } from '../types';
 
 const CF_CONFIG_STORAGE_KEY = 'finance_cf_sync_config_';
 
@@ -93,11 +93,7 @@ export const syncWithCloudflare = async (
   user: UserProfile,
   accounts: FinancialAccount[],
   transactions: Transaction[],
-  projects: LedgerProject[] = [],
-  recurringTasks: RecurringTask[] = [],
-  expenseCategories: ExpenseCategory[] = [],
-  incomeCategories: IncomeCategory[] = [],
-  categoryIcons: Record<string, string> = {}
+  projects: LedgerProject[] = []
 ): Promise<{
   success: boolean;
   message: string;
@@ -114,10 +110,6 @@ export const syncWithCloudflare = async (
       accounts,
       transactions,
       projects: projects || [],
-      recurringTasks: recurringTasks || [],
-      expenseCategories: expenseCategories || [],
-      incomeCategories: incomeCategories || [],
-      categoryIcons: categoryIcons || {},
       clientTimestamp: new Date().toISOString(),
     };
 

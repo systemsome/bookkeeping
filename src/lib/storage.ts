@@ -1,5 +1,5 @@
-import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, ExpenseCategory, IncomeCategory, LedgerProject, ProjectFinancialStats, RecurringTask, QuickTemplate, DeletedTransaction } from '../types';
-import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS, DEFAULT_QUICK_TEMPLATES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, ACCOUNT_CATEGORY_CONFIG } from './constants';
+import { FinancialAccount, Transaction, UserProfile, FinancialSummary, AccountCategory, LedgerProject, ProjectFinancialStats, RecurringTask, QuickTemplate, DeletedTransaction } from '../types';
+import { INITIAL_DEMO_ACCOUNTS, INITIAL_DEMO_TRANSACTIONS, INITIAL_DEMO_PROJECTS, INITIAL_DEMO_RECURRING_TASKS, DEFAULT_QUICK_TEMPLATES } from './constants';
 import { matchBestCardentifyPreset, matchBestCardentifyCard } from './cardentifyPresets';
 import { matchLogoHubBank } from './logohubData';
 import { sortTransactions } from './formatters';
@@ -16,10 +16,6 @@ const STORAGE_KEYS = {
   RECURRING_TASKS_PREFIX: 'asset_manager_recurring_tasks_',
   TRASH_PREFIX: 'asset_manager_trash_txs_',
   TEMPLATES_PREFIX: 'asset_manager_quick_templates_',
-  EXPENSE_CATEGORIES_PREFIX: 'asset_manager_exp_cats_',
-  INCOME_CATEGORIES_PREFIX: 'asset_manager_inc_cats_',
-  CUSTOM_CATEGORY_ICONS_PREFIX: 'asset_manager_cat_icons_',
-  ACCOUNT_CATEGORIES_PREFIX: 'asset_manager_account_cats_',
   IS_LOCKED: 'asset_manager_is_locked_v1',
   LAST_ACTIVITY: 'asset_manager_last_act_v1',
   DEVICE_ID: 'asset_manager_device_id_v1',
@@ -120,11 +116,6 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
     const transactions = getTransactions(userId);
     const projects = getProjects(userId);
     const recurringTasks = getRecurringTasks(userId);
-    const expenseCategories = getStoredExpenseCategories(userId);
-    const incomeCategories = getStoredIncomeCategories(userId);
-    const categoryIcons = getCustomCategoryIconMappings(userId);
-    const accountCategories = getStoredAccountCategories(userId);
-
     const user: UserProfile = getCurrentUser() || getStoredUsers().find((u) => u.id === userId) || {
       id: userId,
       username: 'user',
@@ -137,18 +128,7 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
 
     // 1. 同步至 Express / NAS 服务端持久化文件存储 (0ms立即推送到云端)
     try {
-      await syncDataToServer(
-        userId,
-        accounts,
-        transactions,
-        projects,
-        user,
-        recurringTasks,
-        expenseCategories,
-        incomeCategories,
-        categoryIcons,
-        accountCategories
-      );
+      await syncDataToServer(userId, accounts, transactions, projects, user, recurringTasks);
     } catch (e) {
       console.warn('Server sync attempt:', e);
     }
@@ -162,11 +142,7 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
           user,
           accounts,
           transactions,
-          projects,
-          recurringTasks,
-          expenseCategories,
-          incomeCategories,
-          categoryIcons
+          projects
         );
         if (cfRes.success) {
           saveCloudflareConfig(userId, { ...cfConfig, lastSyncTime: cfRes.timestamp, status: 'synced' });
@@ -204,7 +180,7 @@ export const triggerAutoServerSync = (userId: string, immediate = true) => {
 };
 
 /**
- * 手动触发全量双向同步 (拉取服务端无损合并 + 回写本地全部资产/流水/项目/类别 + 联动 Cloudflare D1 / WebDAV)
+ * 手动触发全量双向同步 (拉取服务端无损合并 + 回写本地全部资产/流水/项目 + 联动 Cloudflare D1 / WebDAV)
  */
 export const executeFullCloudSync = async (
   userId: string
@@ -229,24 +205,9 @@ export const executeFullCloudSync = async (
     const transactions = fetchRes.success && fetchRes.transactions ? fetchRes.transactions : getTransactions(userId);
     const projects = fetchRes.success && fetchRes.projects ? fetchRes.projects : getProjects(userId);
     const recurringTasks = fetchRes.success && fetchRes.recurringTasks ? fetchRes.recurringTasks : getRecurringTasks(userId);
-    const expenseCategories = getStoredExpenseCategories(userId);
-    const incomeCategories = getStoredIncomeCategories(userId);
-    const categoryIcons = getCustomCategoryIconMappings(userId);
-    const accountCategories = getStoredAccountCategories(userId);
 
     // 2. 将合并后的全量数据持久化推送至服务端/NAS
-    const serverRes = await syncDataToServer(
-      userId,
-      accounts,
-      transactions,
-      projects,
-      user,
-      recurringTasks,
-      expenseCategories,
-      incomeCategories,
-      categoryIcons,
-      accountCategories
-    );
+    const serverRes = await syncDataToServer(userId, accounts, transactions, projects, user, recurringTasks);
 
     const nowIso = new Date().toISOString();
 
@@ -254,17 +215,7 @@ export const executeFullCloudSync = async (
     try {
       const cfConfig = getStoredCloudflareConfig(userId);
       if (cfConfig.enabled && cfConfig.apiUrl?.trim()) {
-        const cfRes = await syncWithCloudflare(
-          cfConfig,
-          user,
-          accounts,
-          transactions,
-          projects,
-          recurringTasks,
-          expenseCategories,
-          incomeCategories,
-          categoryIcons
-        );
+        const cfRes = await syncWithCloudflare(cfConfig, user, accounts, transactions, projects);
         if (cfRes.success) {
           saveCloudflareConfig(userId, { ...cfConfig, lastSyncTime: cfRes.timestamp, status: 'synced' });
         }
@@ -742,18 +693,9 @@ export const syncDataToServer = async (
   transactions: Transaction[],
   projects: LedgerProject[] = [],
   user?: UserProfile,
-  recurringTasks?: RecurringTask[],
-  expenseCategories?: ExpenseCategory[],
-  incomeCategories?: IncomeCategory[],
-  categoryIcons?: Record<string, string>,
-  accountCategories?: Record<AccountCategory, any>
+  recurringTasks?: RecurringTask[]
 ): Promise<{ success: boolean; message?: string }> => {
   try {
-    const finalExpCats = Array.isArray(expenseCategories) ? expenseCategories : getStoredExpenseCategories(userId);
-    const finalIncCats = Array.isArray(incomeCategories) ? incomeCategories : getStoredIncomeCategories(userId);
-    const finalCatIcons = categoryIcons || getCustomCategoryIconMappings(userId);
-    const finalAccCats = accountCategories || getStoredAccountCategories(userId);
-
     const res = await fetch('/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -765,10 +707,6 @@ export const syncDataToServer = async (
         transactions,
         projects,
         recurringTasks: Array.isArray(recurringTasks) ? recurringTasks : getRecurringTasks(userId),
-        expenseCategories: finalExpCats,
-        incomeCategories: finalIncCats,
-        categoryIcons: finalCatIcons,
-        accountCategories: finalAccCats,
       }),
     });
     const data = await res.json();
@@ -802,19 +740,7 @@ export const initRealtimeSyncStream = (
  */
 export const fetchLatestDataFromServer = async (
   userId: string
-): Promise<{
-  success: boolean;
-  accounts?: FinancialAccount[];
-  transactions?: Transaction[];
-  projects?: LedgerProject[];
-  recurringTasks?: RecurringTask[];
-  expenseCategories?: ExpenseCategory[];
-  incomeCategories?: IncomeCategory[];
-  categoryIcons?: Record<string, string>;
-  accountCategories?: Record<AccountCategory, any>;
-  user?: UserProfile;
-  lastUpdated?: string;
-}> => {
+): Promise<{ success: boolean; accounts?: FinancialAccount[]; transactions?: Transaction[]; projects?: LedgerProject[]; recurringTasks?: RecurringTask[]; user?: UserProfile; lastUpdated?: string }> => {
   try {
     const res = await fetch(`/api/sync?userId=${encodeURIComponent(userId)}`);
     if (!res.ok) return { success: false };
@@ -824,10 +750,6 @@ export const fetchLatestDataFromServer = async (
       const serverTxs = Array.isArray(data.transactions) ? data.transactions : [];
       const serverProjs = Array.isArray(data.projects) ? data.projects : [];
       const serverRec = Array.isArray(data.recurringTasks) ? data.recurringTasks : [];
-      const serverExpCats = Array.isArray(data.expenseCategories) ? data.expenseCategories : [];
-      const serverIncCats = Array.isArray(data.incomeCategories) ? data.incomeCategories : [];
-      const serverCatIcons = data.categoryIcons || null;
-      const serverAccCats = data.accountCategories || null;
       const serverLastUpdated = data.lastUpdated || '';
 
       const localUpdated = getLocalLastUpdated(userId);
@@ -835,27 +757,9 @@ export const fetchLatestDataFromServer = async (
       const localTxs = getTransactions(userId);
       const localProjs = getProjects(userId);
       const localRec = getRecurringTasks(userId);
-      const localExpCats = getStoredExpenseCategories(userId);
-      const localIncCats = getStoredIncomeCategories(userId);
-
-      // 持久化同步类别与图标映射：跨域名/不同部署环境登录时无缝恢复
-      if (serverExpCats.length > 0) {
-        localStorage.setItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${userId}`, JSON.stringify(serverExpCats));
-        localStorage.setItem('asset_vault_custom_user_categories_expense_v4', JSON.stringify(serverExpCats));
-      }
-      if (serverIncCats.length > 0) {
-        localStorage.setItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${userId}`, JSON.stringify(serverIncCats));
-        localStorage.setItem('asset_vault_custom_user_categories_income_v4', JSON.stringify(serverIncCats));
-      }
-      if (serverCatIcons && typeof serverCatIcons === 'object') {
-        localStorage.setItem(`${STORAGE_KEYS.CUSTOM_CATEGORY_ICONS_PREFIX}${userId}`, JSON.stringify(serverCatIcons));
-        localStorage.setItem('asset_vault_category_icon_mapping_v2', JSON.stringify(serverCatIcons));
-      }
-      if (serverAccCats && typeof serverAccCats === 'object') {
-        localStorage.setItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${userId}`, JSON.stringify(serverAccCats));
-      }
 
       // 安全智能双向无损合并周期任务，优先保留已推进的下次到期日(nextDueDate)和最新更新时间
+      // 防止服务端较旧的 nextDueDate 覆盖本地已执行完成的最新状态而导致循环重复添加
       const mergedRecMap = new Map<string, RecurringTask>();
       localRec.forEach((t) => mergedRecMap.set(t.id, t));
 
@@ -864,6 +768,7 @@ export const fetchLatestDataFromServer = async (
         if (!lt) {
           mergedRecMap.set(st.id, st);
         } else {
+          // 比较下次执行日期：推进到更晚日期的记录代表已完成执行，绝不能倒退回过去或今日
           const localDue = lt.nextDueDate || '';
           const serverDue = st.nextDueDate || '';
           const localUpdatedTime = lt.updatedAt || '';
@@ -914,29 +819,14 @@ export const fetchLatestDataFromServer = async (
           transactions: serverTxs,
           projects: serverProjs,
           recurringTasks: resolvedRec,
-          expenseCategories: serverExpCats.length > 0 ? serverExpCats : localExpCats,
-          incomeCategories: serverIncCats.length > 0 ? serverIncCats : localIncCats,
-          categoryIcons: serverCatIcons || getCustomCategoryIconMappings(userId),
-          accountCategories: serverAccCats || getStoredAccountCategories(userId),
           user: data.user,
           lastUpdated: serverLastUpdated,
         };
       }
 
       // 如果当前本地已包含更新的数据，则以当前本地为主，并确保服务端也同步拥有最新全量
-      if (localAccs.length > 0 || localTxs.length > 0 || localProjs.length > 0 || localExpCats.length > 0) {
-        syncDataToServer(
-          userId,
-          localAccs,
-          localTxs,
-          localProjs,
-          getCurrentUser() || undefined,
-          resolvedRec,
-          localExpCats,
-          localIncCats,
-          getCustomCategoryIconMappings(userId),
-          getStoredAccountCategories(userId)
-        ).catch(() => {});
+      if (localAccs.length > 0 || localTxs.length > 0 || localProjs.length > 0) {
+        syncDataToServer(userId, localAccs, localTxs, localProjs, getCurrentUser() || undefined, resolvedRec).catch(() => {});
       }
 
       return {
@@ -945,10 +835,6 @@ export const fetchLatestDataFromServer = async (
         transactions: localTxs,
         projects: localProjs,
         recurringTasks: resolvedRec,
-        expenseCategories: serverExpCats.length > 0 ? serverExpCats : localExpCats,
-        incomeCategories: serverIncCats.length > 0 ? serverIncCats : localIncCats,
-        categoryIcons: serverCatIcons || getCustomCategoryIconMappings(userId),
-        accountCategories: serverAccCats || getStoredAccountCategories(userId),
         user: data.user,
         lastUpdated: localUpdated || serverLastUpdated,
       };
@@ -1472,288 +1358,44 @@ export const saveQuickTemplates = (userId: string, templates: QuickTemplate[]) =
 };
 
 // ==========================================
-// 🏷️ 记账与收支分类持久化存储 (Unified User Categories Storage)
-// ==========================================
-export const getStoredExpenseCategories = (userId?: string): ExpenseCategory[] => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-    // Migration fallback from legacy keys
-    const legacy = localStorage.getItem('asset_vault_custom_user_categories_expense_v4') || localStorage.getItem('asset_vault_custom_user_categories_expense_v3');
-    if (legacy) {
-      const parsed = JSON.parse(legacy);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        let migrated: ExpenseCategory[];
-        if (typeof parsed[0] === 'string') {
-          migrated = parsed.map((name: string, i: number) => ({
-            id: `custom-exp-${i}-${name}`,
-            name: name === '数码数码' ? '数码科技' : name,
-            icon: name === '数码数码' ? 'Laptop' : name,
-            color: '#f43f5e',
-          }));
-        } else {
-          migrated = parsed.map((cat: ExpenseCategory) => {
-            if (cat.name === '数码数码') {
-              return { ...cat, name: '数码科技', icon: 'Laptop' };
-            }
-            return cat;
-          });
-        }
-        localStorage.setItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`, JSON.stringify(migrated));
-        return migrated;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to parse expense categories:', e);
-  }
-  return [...EXPENSE_CATEGORIES];
-};
-
-export const saveStoredExpenseCategories = (userId: string | undefined, categories: ExpenseCategory[]) => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    localStorage.setItem(`${STORAGE_KEYS.EXPENSE_CATEGORIES_PREFIX}${uid}`, JSON.stringify(categories || []));
-    // Also save legacy key for backwards compatibility
-    localStorage.setItem('asset_vault_custom_user_categories_expense_v4', JSON.stringify(categories || []));
-    setLocalLastUpdated(uid);
-  } catch (e) {
-    console.warn('Failed to save expense categories:', e);
-  }
-  triggerAutoServerSync(uid, true);
-};
-
-export const getStoredIncomeCategories = (userId?: string): IncomeCategory[] => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-    const legacy = localStorage.getItem('asset_vault_custom_user_categories_income_v4') || localStorage.getItem('asset_vault_custom_user_categories_income_v3');
-    if (legacy) {
-      const parsed = JSON.parse(legacy);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const migrated = typeof parsed[0] === 'string'
-          ? parsed.map((name: string, i: number) => ({
-              id: `custom-inc-${i}-${name}`,
-              name,
-              icon: name,
-              color: '#10b981',
-            }))
-          : parsed;
-        localStorage.setItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`, JSON.stringify(migrated));
-        return migrated;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to parse income categories:', e);
-  }
-  return [...INCOME_CATEGORIES];
-};
-
-export const saveStoredIncomeCategories = (userId: string | undefined, categories: IncomeCategory[]) => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    localStorage.setItem(`${STORAGE_KEYS.INCOME_CATEGORIES_PREFIX}${uid}`, JSON.stringify(categories || []));
-    localStorage.setItem('asset_vault_custom_user_categories_income_v4', JSON.stringify(categories || []));
-    setLocalLastUpdated(uid);
-  } catch (e) {
-    console.warn('Failed to save income categories:', e);
-  }
-  triggerAutoServerSync(uid, true);
-};
-
-export const getCustomCategoryIconMappings = (userId?: string): Record<string, string> => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEYS.CUSTOM_CATEGORY_ICONS_PREFIX}${uid}`);
-    if (raw) return JSON.parse(raw);
-    const legacy = localStorage.getItem('asset_vault_category_icon_mapping_v2');
-    if (legacy) {
-      const parsed = JSON.parse(legacy);
-      localStorage.setItem(`${STORAGE_KEYS.CUSTOM_CATEGORY_ICONS_PREFIX}${uid}`, legacy);
-      return parsed;
-    }
-  } catch {}
-  return {};
-};
-
-export const saveCustomCategoryIconMappings = (userId: string | undefined, mappings: Record<string, string>) => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    localStorage.setItem(`${STORAGE_KEYS.CUSTOM_CATEGORY_ICONS_PREFIX}${uid}`, JSON.stringify(mappings || {}));
-    localStorage.setItem('asset_vault_category_icon_mapping_v2', JSON.stringify(mappings || {}));
-    setLocalLastUpdated(uid);
-  } catch {}
-  triggerAutoServerSync(uid, true);
-};
-
-export const setCustomCategoryIcon = (categoryName: string, iconId: string, userId?: string): void => {
-  if (!categoryName) return;
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  const current = getCustomCategoryIconMappings(uid);
-  current[categoryName.trim()] = iconId;
-  saveCustomCategoryIconMappings(uid, current);
-};
-
-export const removeCustomCategoryIcon = (categoryName: string, userId?: string): void => {
-  if (!categoryName) return;
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  const current = getCustomCategoryIconMappings(uid);
-  delete current[categoryName.trim()];
-  saveCustomCategoryIconMappings(uid, current);
-};
-
-export const getStoredAccountCategories = (userId?: string): Record<AccountCategory, any> => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${uid}`);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return { ...ACCOUNT_CATEGORY_CONFIG };
-};
-
-export const saveStoredAccountCategories = (userId: string | undefined, config: Record<AccountCategory, any>) => {
-  const uid = userId || getCurrentUserId() || DEFAULT_DEMO_USER.id;
-  try {
-    localStorage.setItem(`${STORAGE_KEYS.ACCOUNT_CATEGORIES_PREFIX}${uid}`, JSON.stringify(config || {}));
-    setLocalLastUpdated(uid);
-  } catch {}
-  triggerAutoServerSync(uid, true);
-};
-
-// ==========================================
 // 🔄 周期性任务计算与一键/自动入账 (Recurring Execution)
 // ==========================================
 export const calculateNextDueDate = (task: RecurringTask, fromDateStr?: string): string => {
-  const now = new Date();
-  const todayY = now.getFullYear();
-  const todayM = now.getMonth();
-  const todayD = now.getDate();
-  const todayIso = `${todayY}-${String(todayM + 1).padStart(2, '0')}-${String(todayD).padStart(2, '0')}`;
-  const currentYearMonth = `${todayY}-${String(todayM + 1).padStart(2, '0')}`;
-  const currentYear = `${todayY}`;
+  const todayIso = new Date().toISOString().split('T')[0];
+  const baseStr = fromDateStr || task.nextDueDate || todayIso;
+  const baseDate = new Date(baseStr);
+  const validBase = isNaN(baseDate.getTime()) ? new Date() : baseDate;
 
-  const formatDate = (y: number, m: number, d: number): string => {
-    return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const stepNext = (d: Date): Date => {
+    const next = new Date(d.getTime());
+    if (task.frequency === 'DAILY') {
+      next.setDate(next.getDate() + 1);
+    } else if (task.frequency === 'WEEKLY') {
+      next.setDate(next.getDate() + 7);
+    } else if (task.frequency === 'MONTHLY') {
+      const targetDay = task.dayOfMonth || 1;
+      next.setMonth(next.getMonth() + 1);
+      const maxDays = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      next.setDate(Math.min(targetDay, maxDays));
+    } else if (task.frequency === 'YEARLY') {
+      next.setFullYear(next.getFullYear() + 1);
+    }
+    return next;
   };
 
-  if (fromDateStr) {
-    const baseDate = new Date(fromDateStr);
-    const validBase = isNaN(baseDate.getTime()) ? now : baseDate;
-
-    if (task.frequency === 'DAILY') {
-      const next = new Date(validBase);
-      next.setDate(next.getDate() + 1);
-      return formatDate(next.getFullYear(), next.getMonth(), next.getDate());
-    } else if (task.frequency === 'WEEKLY') {
-      const next = new Date(validBase);
-      next.setDate(next.getDate() + 7);
-      return formatDate(next.getFullYear(), next.getMonth(), next.getDate());
-    } else if (task.frequency === 'MONTHLY') {
-      const targetDay = Math.max(1, Math.min(31, task.dayOfMonth || 1));
-      let nextY = validBase.getFullYear();
-      let nextM = validBase.getMonth() + 1;
-      if (nextM > 11) {
-        nextY += 1;
-        nextM = 0;
-      }
-      const maxDays = new Date(nextY, nextM + 1, 0).getDate();
-      return formatDate(nextY, nextM, Math.min(targetDay, maxDays));
-    } else if (task.frequency === 'YEARLY') {
-      const targetMonth = Math.max(0, Math.min(11, (task.monthOfYear || 1) - 1));
-      const targetDay = Math.max(1, Math.min(31, task.dayOfMonth || 1));
-      const nextY = validBase.getFullYear() + 1;
-      const maxDays = new Date(nextY, targetMonth + 1, 0).getDate();
-      return formatDate(nextY, targetMonth, Math.min(targetDay, maxDays));
-    }
+  let candidate = stepNext(validBase);
+  // 确保推进后的下次执行日期严格大于今日(todayStr)，防止在今日或过去日期中循环重试
+  const todayDate = new Date(todayIso);
+  let safetyLoop = 0;
+  while (candidate <= todayDate && safetyLoop < 120) {
+    candidate = stepNext(candidate);
+    safetyLoop++;
   }
 
-  // fromDateStr 未指定时：从今日起计算下一次到期日期
-  if (task.frequency === 'DAILY') {
-    const executedToday = task.lastExecutedDate === todayIso;
-    if (executedToday) {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return formatDate(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-    }
-    return todayIso;
-  }
-
-  if (task.frequency === 'MONTHLY') {
-    const targetDay = Math.max(1, Math.min(31, task.dayOfMonth || 1));
-    const executedThisMonth = !!task.lastExecutedDate && task.lastExecutedDate.startsWith(currentYearMonth);
-
-    if (executedThisMonth) {
-      let nextY = todayY;
-      let nextM = todayM + 1;
-      if (nextM > 11) {
-        nextY += 1;
-        nextM = 0;
-      }
-      const maxDays = new Date(nextY, nextM + 1, 0).getDate();
-      return formatDate(nextY, nextM, Math.min(targetDay, maxDays));
-    }
-
-    const maxDaysThisMonth = new Date(todayY, todayM + 1, 0).getDate();
-    const candidateDayThisMonth = Math.min(targetDay, maxDaysThisMonth);
-
-    if (todayD <= candidateDayThisMonth) {
-      return formatDate(todayY, todayM, candidateDayThisMonth);
-    } else {
-      let nextY = todayY;
-      let nextM = todayM + 1;
-      if (nextM > 11) {
-        nextY += 1;
-        nextM = 0;
-      }
-      const maxDays = new Date(nextY, nextM + 1, 0).getDate();
-      return formatDate(nextY, nextM, Math.min(targetDay, maxDays));
-    }
-  }
-
-  if (task.frequency === 'WEEKLY') {
-    const targetDayOfWeek = task.dayOfWeek !== undefined ? task.dayOfWeek : 1;
-    const currentDayOfWeek = now.getDay();
-    let diffDays = targetDayOfWeek - currentDayOfWeek;
-    const executedToday = task.lastExecutedDate === todayIso;
-
-    if (diffDays < 0 || (diffDays === 0 && executedToday)) {
-      diffDays += 7;
-    }
-    const targetDate = new Date(now);
-    targetDate.setDate(targetDate.getDate() + diffDays);
-    return formatDate(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-  }
-
-  if (task.frequency === 'YEARLY') {
-    const targetMonth = Math.max(0, Math.min(11, (task.monthOfYear || 1) - 1));
-    const targetDay = Math.max(1, Math.min(31, task.dayOfMonth || 1));
-    const executedThisYear = !!task.lastExecutedDate && task.lastExecutedDate.startsWith(currentYear);
-
-    const maxDaysThisYear = new Date(todayY, targetMonth + 1, 0).getDate();
-    const thisYearCandidate = new Date(todayY, targetMonth, Math.min(targetDay, maxDaysThisYear));
-    const todayDateOnly = new Date(todayY, todayM, todayD);
-
-    if (!executedThisYear && thisYearCandidate >= todayDateOnly) {
-      return formatDate(todayY, targetMonth, Math.min(targetDay, maxDaysThisYear));
-    } else {
-      const nextY = todayY + 1;
-      const maxDaysNextYear = new Date(nextY, targetMonth + 1, 0).getDate();
-      return formatDate(nextY, targetMonth, Math.min(targetDay, maxDaysNextYear));
-    }
-  }
-
-  return todayIso;
+  const y = candidate.getFullYear();
+  const m = String(candidate.getMonth() + 1).padStart(2, '0');
+  const d = String(candidate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 export const executeRecurringTask = (
@@ -1966,7 +1608,5 @@ export const resetToDemoData = (userId: string) => {
   saveTransactions(userId, INITIAL_DEMO_TRANSACTIONS);
   saveProjects(userId, INITIAL_DEMO_PROJECTS);
   saveRecurringTasks(userId, INITIAL_DEMO_RECURRING_TASKS);
-  saveStoredExpenseCategories(userId, [...EXPENSE_CATEGORIES]);
-  saveStoredIncomeCategories(userId, [...INCOME_CATEGORIES]);
 };
 

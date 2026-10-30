@@ -69,7 +69,6 @@ interface CardentifyGalleryModalProps {
   onSelectCard?: (card: UnifiedGalleryCard | CardentifyCard) => void;
   currentImageUrl?: string;
   defaultBankQuery?: string;
-  initialKeyword?: string;
   defaultTier?: string;
   defaultNetwork?: 'UNIONPAY' | 'VISA' | 'MASTERCARD' | 'AMEX' | 'JCB' | 'NONE' | 'ALL';
 }
@@ -92,14 +91,10 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
   onSelectCard,
   currentImageUrl,
   defaultBankQuery = '',
-  initialKeyword = '',
   defaultTier = '',
   defaultNetwork = 'ALL',
 }) => {
   const [searchTerm, setSearchTerm] = useState(() => {
-    if (initialKeyword && initialKeyword.trim()) {
-      return initialKeyword.trim();
-    }
     return defaultBankQuery ? defaultBankQuery.replace(/信用卡|借记卡|账户|卡面/g, '').trim() : '';
   });
   const [activeSource, setActiveSource] = useState<SourceFilter>('ALL');
@@ -241,17 +236,13 @@ export const CardentifyGalleryModal: React.FC<CardentifyGalleryModalProps> = ({
     };
   }, []);
 
-  // Synchronize initial default bank query or explicit keyword, card tier & network
+  // Synchronize initial default bank query, card tier & network
   useEffect(() => {
-    if (isOpen) {
-      if (initialKeyword && initialKeyword.trim()) {
-        setSearchTerm(initialKeyword.trim());
-      } else if (defaultBankQuery) {
-        const sanitized = defaultBankQuery.replace(/信用卡|借记卡|账户|卡面/g, '').trim();
-        setSearchTerm(sanitized || defaultBankQuery);
-      }
+    if (defaultBankQuery && isOpen) {
+      const sanitized = defaultBankQuery.replace(/信用卡|借记卡|账户|卡面/g, '').trim();
+      setSearchTerm(sanitized || defaultBankQuery);
     }
-  }, [initialKeyword, defaultBankQuery, isOpen]);
+  }, [defaultBankQuery, isOpen]);
 
   // Proactive real-time live search query directly to cardart.cc & cards.no2.ac backend
   useEffect(() => {

@@ -516,9 +516,9 @@ export function getDefaultPresetForCategory(category: AccountCategory): Category
     case 'CREDIT_CARD':
       return {
         category: 'CREDIT_CARD',
-        name: '招商银行标准信用卡',
+        name: '招商银行经典白金信用卡',
         bankName: '招商银行',
-        cardTier: '普卡',
+        cardTier: '经典白金信用卡',
         cardSkin: 'classic-cmb',
         cardNetwork: 'UNIONPAY',
         primaryColor: '#e11d48',
@@ -531,9 +531,9 @@ export function getDefaultPresetForCategory(category: AccountCategory): Category
     case 'DEBIT_CARD':
       return {
         category: 'DEBIT_CARD',
-        name: '招商银行一卡通普卡',
+        name: '招商银行一卡通',
         bankName: '招商银行',
-        cardTier: '普卡',
+        cardTier: '金葵花一卡通',
         cardSkin: 'classic-cmb',
         cardNetwork: 'UNIONPAY',
         primaryColor: '#e11d48',

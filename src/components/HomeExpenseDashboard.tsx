@@ -18,7 +18,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { Transaction, FinancialAccount, FinancialSummary, UserProfile } from '../types';
-import { getStoredExpenseCategories } from '../lib/storage';
+import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency } from '../lib/formatters';
 import { getCurrencyInfo } from '../lib/forexRates';
 import { CategoryIcon } from './CategoryIcon';
@@ -52,11 +52,9 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
   onNavigateToTransactions,
   onOpenRecurringTasks,
 }) => {
-  const expenseCategories = React.useMemo(() => getStoredExpenseCategories(currentUser?.id), [currentUser?.id]);
-
   // Inline Quick Add State
   const [quickAmount, setQuickAmount] = useState('');
-  const [quickCategory, setQuickCategory] = useState(expenseCategories[0]?.name || '餐饮美食');
+  const [quickCategory, setQuickCategory] = useState(EXPENSE_CATEGORIES[0]?.name || '餐饮美食');
   const [quickAccountId, setQuickAccountId] = useState(accounts?.[0]?.id || '');
   const [quickDescription, setQuickDescription] = useState('');
   const [isQuickSuccess, setIsQuickSuccess] = useState(false);
@@ -452,7 +450,7 @@ export const HomeExpenseDashboard: React.FC<HomeExpenseDashboardProps> = ({
               onChange={(e) => setQuickCategory(e.target.value)}
               className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 focus:bg-white text-slate-800"
             >
-              {expenseCategories.map((c) => (
+              {EXPENSE_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.name}>
                   {c.name}
                 </option>

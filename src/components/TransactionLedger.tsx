@@ -2655,7 +2655,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <button
               onClick={() => {
-                setBatchSelectedCategory(getStoredExpenseCategories(currentUser?.id)[0]?.name || '餐饮美食');
+                setBatchSelectedCategory(getStoredExpenseCategories()[0]?.name || '餐饮美食');
                 setBatchModal('CATEGORY');
               }}
               className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-all"
@@ -2829,14 +2829,14 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm font-medium focus:outline-none focus:border-indigo-500"
               >
                 <optgroup label="支出常用分类">
-                  {getStoredExpenseCategories(currentUser?.id).map((cat) => (
+                  {getStoredExpenseCategories().map((cat) => (
                     <option key={cat.id} value={cat.name}>
                       {cat.name}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="收入来源分类">
-                  {getStoredIncomeCategories(currentUser?.id).map((cat) => (
+                  {getStoredIncomeCategories().map((cat) => (
                     <option key={cat.id} value={cat.name}>
                       {cat.name}
                     </option>
